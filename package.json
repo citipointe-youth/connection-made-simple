@@ -2,8 +2,7 @@
   "name": "connection-made-simple",
   "version": "1.0.0",
   "description": "Youth ministry connection platform — phone-first SPA backed by Express + Supabase",
-  "type": "module",
-  "scripts": {
+"scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
