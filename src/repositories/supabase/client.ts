@@ -15,7 +15,7 @@ export function getSqlClient(): SqlClient {
       max_lifetime: 60,    // never keep a connection longer than 60s
       connect_timeout: 5,  // fail fast if the DB doesn't respond within 5s (Lambda timeout is 10s)
       connection: {
-        statement_timeout: '15000',  // kill any query running > 15s (prevents indefinite hangs)
+        statement_timeout: 15000,  // kill any query running > 15s (prevents indefinite hangs)
       },
     });
   }

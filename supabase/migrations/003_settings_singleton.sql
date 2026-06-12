@@ -1,8 +1,10 @@
--- Enforce a single-row settings table by switching to a fixed primary key.
+-- Enforce a single-row settings table by switching to a fixed text primary key.
 -- Without this, concurrent cold-start requests can each insert their own
 -- settings row because gen_random_uuid() never conflicts on the PK.
 
--- Change id default so new inserts use 'global' unless overridden.
+-- Cast id from uuid → text (uuid strings cast cleanly; existing rows keep their values).
+alter table app_settings alter column id drop default;
+alter table app_settings alter column id type text using id::text;
 alter table app_settings alter column id set default 'global';
 
 -- Consolidate any existing rows: promote the first row to id='global',

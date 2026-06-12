@@ -78,13 +78,13 @@ export class SupabaseSettingsRepository implements ISettingsRepository {
     // No-op: Supabase table already exists
   }
 
-  async findById(_id: string): Promise<AppSettings | null> {
-    const rows = await this.sql`select * from app_settings limit 1`;
+  async findById(id: string): Promise<AppSettings | null> {
+    const rows = await this.sql`select * from app_settings where id = ${id}`;
     return rows[0] ? toAppSettings(rows[0]) : null;
   }
 
   async findAll(): Promise<AppSettings[]> {
-    const rows = await this.sql`select * from app_settings limit 1`;
+    const rows = await this.sql`select * from app_settings where id = ${SETTINGS_ID}`;
     return rows.map(toAppSettings);
   }
 
