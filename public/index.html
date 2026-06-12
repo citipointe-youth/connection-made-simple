@@ -378,9 +378,15 @@ const API = (() => {
   let _t = localStorage.getItem('yap_token') || null;
   const hdr = () => ({ 'Content-Type': 'application/json', ...(_t ? { Authorization: `Bearer ${_t}` } : {}) });
   async function r(method, path, body) {
-    const res = await fetch(path, { method, headers: hdr(), ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || e.error || res.statusText || 'Request failed'); }
-    return res.json();
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(new Error('Request timed out')), 20000);
+    try {
+      const res = await fetch(path, { method, headers: hdr(), signal: ac.signal, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || e.error || res.statusText || 'Request failed'); }
+      return res.json();
+    } finally {
+      clearTimeout(timer);
+    }
   }
   return {
     setToken(t) { _t = t; t ? localStorage.setItem('yap_token', t) : localStorage.removeItem('yap_token'); },
@@ -702,6 +708,15 @@ function _hAttTile(label, studs, avgWk, opts) {
 
 async function renderHome() {
   setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+  try {
+    await _renderHomeInner();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setApp(shell(`<div class="alert al-error" style="margin:16px">Home failed to load: ${msg}<br><small style="opacity:.7">(open browser console for details)</small></div>`));
+    console.error('[renderHome]', err);
+  }
+}
+async function _renderHomeInner() {
   const u = S.user;
   let stats, trends, sc = [], importHistory;
   try {
