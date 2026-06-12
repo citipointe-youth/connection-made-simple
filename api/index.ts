@@ -7,6 +7,10 @@ process.on('unhandledRejection', (reason: unknown) => {
   console.error('[CMS] unhandledRejection:', reason);
 });
 
+process.on('uncaughtException', (err: Error) => {
+  console.error('[CMS] uncaughtException:', err.message, err.stack);
+});
+
 let appPromise: ReturnType<typeof createAppInstance> | null = null;
 
 function getApp() {
