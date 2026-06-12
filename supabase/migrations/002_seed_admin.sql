@@ -8,5 +8,5 @@ values (
   'admin@youth.ministry',
   'admin',
   'active',
-  'PLACEHOLDER_REPLACE_BEFORE_USE'
+  '12a88e2faa714e8e752623dbdcd2f879:754493c6972338b7c184cd075468dafd33a76b2c4bb0dc693591fd489ad76e79'
 );

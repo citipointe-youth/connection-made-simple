@@ -379,7 +379,7 @@ const API = (() => {
   const hdr = () => ({ 'Content-Type': 'application/json', ...(_t ? { Authorization: `Bearer ${_t}` } : {}) });
   async function r(method, path, body) {
     const res = await fetch(path, { method, headers: hdr(), ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || res.statusText); }
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || e.error || res.statusText || 'Request failed'); }
     return res.json();
   }
   return {
