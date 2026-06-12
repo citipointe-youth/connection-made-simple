@@ -1,26 +1,11 @@
-import { buildContainer } from './container';
-import { buildRoutes } from './api/http/router';
-import { createApp } from './api/http/express-adapter';
-import { seedDemoData } from './seed';
+import { createAppInstance } from './app';
 import { env } from './config/env';
-import { createLogger } from './utils/logger';
 
-const logger = createLogger('server');
-
-async function main() {
-  const container = await buildContainer();
-  await seedDemoData(container.repos);
-
-  const routes = buildRoutes(container.services);
-  const app = createApp(routes, container.services.auth);
-
+createAppInstance().then((app) => {
   app.listen(env.PORT, () => {
-    logger.info(`Youth Allocation Platform running on http://localhost:${env.PORT}`);
-    logger.info(`Persistence: ${env.PERSISTENCE}`);
+    console.log(`Server running on http://localhost:${env.PORT}`);
   });
-}
-
-main().catch((err) => {
-  console.error('Fatal startup error:', err);
+}).catch((err) => {
+  console.error('Failed to start server:', err);
   process.exit(1);
 });
