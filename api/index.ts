@@ -1,3 +1,8 @@
+import { createAppInstance } from '../src/app.js';
+
+const appPromise = createAppInstance();
+
 export default async function handler(req: any, res: any): Promise<void> {
-  res.json({ ok: true, service: 'connection-made-simple' });
+  const app = await appPromise;
+  app(req, res);
 }
