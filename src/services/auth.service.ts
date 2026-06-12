@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyPassword } from '../utils/crypto';
 import type { IUserRepository } from '../repositories/interfaces/entity-repositories';
 import type { Actor, User, SafeUser } from '../core/entities/user';
@@ -6,8 +6,30 @@ import type { Grade, Quad } from '../core/types/enums';
 import { UnauthorizedError } from '../core/errors/app-error';
 import { LoginInputSchema } from '../core/validation/auth.schema';
 
-const tokenStore = new Map<string, { userId: string; expiresAt: number }>();
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+const SESSION_SECRET = process.env['SESSION_SECRET'] ?? 'cms-dev-secret-change-in-production';
+
+function signSession(userId: string, expiresAt: number): string {
+  const payload = Buffer.from(JSON.stringify({ userId, expiresAt })).toString('base64url');
+  const sig = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function parseSession(token: string): { userId: string; expiresAt: number } | null {
+  const dot = token.lastIndexOf('.');
+  if (dot === -1) return null;
+  const payload = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  try {
+    const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+    const a = Buffer.from(sig, 'base64url');
+    const b = Buffer.from(expected, 'base64url');
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+    return JSON.parse(Buffer.from(payload, 'base64url').toString()) as { userId: string; expiresAt: number };
+  } catch {
+    return null;
+  }
+}
 
 export function toActor(user: User): Actor {
   return {
@@ -44,25 +66,21 @@ export function makeAuthService(users: IUserRepository): AuthService {
       const valid = await verifyPassword(password, user.passwordHash);
       if (!valid) throw new UnauthorizedError('Invalid credentials');
 
-      const token = randomBytes(32).toString('hex');
-      tokenStore.set(token, { userId: user.id, expiresAt: Date.now() + TOKEN_TTL_MS });
+      const token = signSession(user.id, Date.now() + TOKEN_TTL_MS);
       return { token, user: toSafeUser(user) };
     },
 
     async resolveToken(token: string) {
-      const entry = tokenStore.get(token);
-      if (!entry) return null;
-      if (Date.now() > entry.expiresAt) {
-        tokenStore.delete(token);
-        return null;
-      }
-      const user = await users.findById(entry.userId);
+      const session = parseSession(token);
+      if (!session) return null;
+      if (Date.now() > session.expiresAt) return null;
+      const user = await users.findById(session.userId);
       if (!user || user.status !== 'active') return null;
       return toActor(user);
     },
 
-    async logout(token: string) {
-      tokenStore.delete(token);
+    async logout(_token: string) {
+      // Stateless tokens — logout is handled client-side by discarding the token
     },
   };
 }
