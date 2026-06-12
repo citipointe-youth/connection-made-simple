@@ -4,11 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#6366f1">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Connection">
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon.svg">
 <title>Youth Connection</title>
 <style>
 :root{
-  --accent:#6366f1;--accent-dark:#4f46e5;--accent-light:#e0e7ff;
+  --accent:#2563eb;--accent-dark:#1d4ed8;--accent-light:#dbeafe;
   --danger:#ef4444;--danger-light:#fee2e2;--warn:#f59e0b;--warn-light:#fef3c7;
   --success:#10b981;--success-light:#d1fae5;
   --ink:#111827;--ink-mid:#6b7280;--ink-faint:#9ca3af;
@@ -111,7 +115,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .risk-new{color:#4c1d95;background:#ede9fe}
 
 /* Leader chips */
-.lc{display:inline-flex;align-items:center;gap:3px;padding:3px 10px 3px 10px;border-radius:20px;background:var(--accent-light);color:var(--accent-dark);font-size:12px;font-weight:600;border:1px solid rgba(99,102,241,.2);margin:2px}
+.lc{display:inline-flex;align-items:center;gap:3px;padding:3px 10px 3px 10px;border-radius:20px;background:var(--accent-light);color:var(--accent-dark);font-size:12px;font-weight:600;border:1px solid rgba(37,99,235,.2);margin:2px}
 .lc .rm{padding:0 2px;cursor:pointer;opacity:.6;font-size:14px;line-height:1}.lc .rm:hover{opacity:1;color:var(--danger)}
 
 /* Progress */
@@ -160,7 +164,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .al-warn{background:var(--warn-light);color:#92400e}
 
 /* Login */
-.login-pg{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%)}
+.login-pg{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%)}
 .login-card{background:#fff;border-radius:var(--radius);padding:28px;width:100%;max-width:380px;box-shadow:0 20px 40px rgba(0,0,0,.2)}
 .login-logo{text-align:center;margin-bottom:20px}
 .login-logo .icon{font-size:48px;margin-bottom:8px}
@@ -270,7 +274,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .role-badge:hover::after{opacity:1}
 
 /* ── FIRST-RUN CARD ── */
-.first-run{background:linear-gradient(135deg,var(--accent-light),#f0e7ff);border-radius:var(--radius);padding:20px;margin-bottom:20px;border:1px solid rgba(99,102,241,.2)}
+.first-run{background:linear-gradient(135deg,var(--accent-light),#eff6ff);border-radius:var(--radius);padding:20px;margin-bottom:20px;border:1px solid rgba(37,99,235,.2)}
 .first-run h3{font-size:16px;font-weight:800;margin-bottom:10px;color:var(--accent-dark)}
 .first-run-step{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
 .first-run-num{width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
@@ -3434,7 +3438,7 @@ function buildDeck(){
       title:'The Health of '+ministry,
       core:'An honest, data-driven read on how students move from first contact to committed discipleship — and the one move that matters most this term.',
       body:isStale?'<p class="covfoot">'+esc(currency)+'</p>':'',
-      notes:'Open with warmth, then candour. Fridays and lifegroup figures are live from the allocation platform; Student Team, Connect and Decision figures come from the uploads on the Data tab. Set the frame: one governing message, three lenses, one ask.',
+      notes:'Open with warmth, then candour. Fridays and lifegroup figures are live from the connection platform; Student Team, Connect and Decision figures come from the uploads on the Data tab. Set the frame: one governing message, three lenses, one ask.',
       vizSuggest:['Full-bleed photo of a packed youth night behind a dark gradient','A single hero metric — students currently engaged — fading up on entry'],
       objections:[
         {q:'Ministry is not a spreadsheet — people are not numbers.',a:'Completely agree; numbers never saved anyone. They simply tell us which name to chase this week. Every figure here drills down to a real student in the People tab.'},
@@ -3701,6 +3705,12 @@ async function boot() {
 }
 
 boot();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
