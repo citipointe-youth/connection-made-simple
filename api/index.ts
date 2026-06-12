@@ -1,9 +1,10 @@
 import { createAppInstance } from '../src/app';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const appPromise = createAppInstance();
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: any, res: any): Promise<void> {
   const app = await appPromise;
-  app(req as any, res as any);
+  app(req, res);
 }
+
+export = handler;
