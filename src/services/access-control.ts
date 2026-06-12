@@ -9,7 +9,7 @@ export type Action =
   | 'student:write'           // create/update/delete students
   | 'leader:read'             // view leaders
   | 'leader:write'            // create/update leaders (grade login, director, admin)
-  | 'allocation:write'        // assign/unassign students to leaders
+  | 'connection:write'        // connect/disconnect students to leaders
   | 'overview:read'           // view ministry-wide overview stats
   | 'atrisk:read'             // view at-risk data
   | 'import:run'              // upload CSV data
@@ -22,7 +22,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Set<Action>> = {
     'student:read:sensitive',
     'leader:read',
     'leader:write',
-    'allocation:write',
+    'connection:write',
     'overview:read',
     'atrisk:read',
   ]),
@@ -32,7 +32,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Set<Action>> = {
     'student:read:sensitive',
     'leader:read',
     'leader:write',
-    'allocation:write',
+    'connection:write',
     'overview:read',
     'atrisk:read',
   ]),
@@ -43,7 +43,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Set<Action>> = {
     'student:write',
     'leader:read',
     'leader:write',
-    'allocation:write',
+    'connection:write',
     'overview:read',
     'atrisk:read',
     'import:run',
@@ -55,7 +55,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Set<Action>> = {
     'student:write',
     'leader:read',
     'leader:write',
-    'allocation:write',
+    'connection:write',
     'overview:read',
     'atrisk:read',
     'import:run',

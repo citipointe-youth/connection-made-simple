@@ -2,16 +2,16 @@ import { z } from 'zod';
 import { generateId } from '../utils/id';
 import { assertCan, canAccessGrade, canAccessGender } from './access-control';
 import type {
-  IAllocationRepository,
+  IConnectionRepository,
   IStudentRepository,
   ILeaderRepository,
   ISettingsRepository,
 } from '../repositories/interfaces/entity-repositories';
-import type { Allocation } from '../core/entities/allocation';
+import type { Connection } from '../core/entities/connection';
 import type { Actor } from '../core/entities/user';
 import { NotFoundError, BadRequestError, ConflictError, ForbiddenError } from '../core/errors/app-error';
 
-export interface AllocationWithNames {
+export interface ConnectionWithNames {
   id: string;
   studentId: string;
   studentName: string;
@@ -34,11 +34,11 @@ export interface ExportRow {
   atRiskStatus: string | null;
 }
 
-export interface AllocationService {
-  listByStudent(actor: Actor, studentId: string): Promise<AllocationWithNames[]>;
-  listByLeader(actor: Actor, leaderId: string): Promise<AllocationWithNames[]>;
-  listAll(actor: Actor): Promise<AllocationWithNames[]>;
-  assign(actor: Actor, input: unknown): Promise<Allocation>;
+export interface ConnectionService {
+  listByStudent(actor: Actor, studentId: string): Promise<ConnectionWithNames[]>;
+  listByLeader(actor: Actor, leaderId: string): Promise<ConnectionWithNames[]>;
+  listAll(actor: Actor): Promise<ConnectionWithNames[]>;
+  assign(actor: Actor, input: unknown): Promise<Connection>;
   unassign(actor: Actor, studentId: string, leaderId: string): Promise<void>;
   leaderSummary(actor: Actor, leaderId: string): Promise<{ students: ReturnType<typeof summariseStudent>[]; leader: { id: string; fullName: string } }>;
   exportCsv(actor: Actor): Promise<ExportRow[]>;
@@ -69,26 +69,26 @@ const AssignSchema = z.object({
 });
 
 async function checkLock(settingsRepo: ISettingsRepository, actor: Actor): Promise<void> {
-  if (actor.role === 'admin') return; // admin always bypasses lock
+  if (actor.role === 'admin') return;
   const settings = await settingsRepo.getSettings();
-  if (!settings.allocationLockDate) return;
-  const lockDate = new Date(settings.allocationLockDate);
+  if (!settings.connectionLockDate) return;
+  const lockDate = new Date(settings.connectionLockDate);
   if (new Date() >= lockDate) {
     throw new ForbiddenError(
-      `Allocations are locked as of ${lockDate.toLocaleDateString()}. Contact your admin to make changes.`,
+      `Connections are locked as of ${lockDate.toLocaleDateString()}. Contact your admin to make changes.`,
     );
   }
 }
 
-export function makeAllocationService(
-  allocRepo: IAllocationRepository,
+export function makeConnectionService(
+  connRepo: IConnectionRepository,
   studentRepo: IStudentRepository,
   leaderRepo: ILeaderRepository,
   settingsRepo: ISettingsRepository,
-): AllocationService {
-  async function enrich(allocs: Allocation[]): Promise<AllocationWithNames[]> {
-    const results: AllocationWithNames[] = [];
-    for (const a of allocs) {
+): ConnectionService {
+  async function enrich(conns: Connection[]): Promise<ConnectionWithNames[]> {
+    const results: ConnectionWithNames[] = [];
+    for (const a of conns) {
       const student = await studentRepo.findById(a.studentId);
       const leader = await leaderRepo.findById(a.leaderId);
       results.push({
@@ -103,18 +103,18 @@ export function makeAllocationService(
   return {
     async listByStudent(actor, studentId) {
       assertCan(actor, 'student:read');
-      return enrich(await allocRepo.findByStudent(studentId));
+      return enrich(await connRepo.findByStudent(studentId));
     },
 
     async listByLeader(actor, leaderId) {
       assertCan(actor, 'leader:read');
-      return enrich(await allocRepo.findByLeader(leaderId));
+      return enrich(await connRepo.findByLeader(leaderId));
     },
 
     async listAll(actor) {
       assertCan(actor, 'student:read');
-      const all = await allocRepo.findAll();
-      const filtered: Allocation[] = [];
+      const all = await connRepo.findAll();
+      const filtered: Connection[] = [];
       for (const a of all) {
         const student = await studentRepo.findById(a.studentId);
         if (!student) continue;
@@ -128,7 +128,7 @@ export function makeAllocationService(
     },
 
     async assign(actor, input) {
-      assertCan(actor, 'allocation:write');
+      assertCan(actor, 'connection:write');
       await checkLock(settingsRepo, actor);
 
       const { studentId, leaderId } = AssignSchema.parse(input);
@@ -141,15 +141,15 @@ export function makeAllocationService(
         const ownGrade = student.grade === actor.grade;
         if (!ownGrade) {
           if (!leader.gender || student.gender !== leader.gender) {
-            throw new BadRequestError('Cross-grade allocation requires student and leader to share gender');
+            throw new BadRequestError('Cross-grade connection requires student and leader to share gender');
           }
         }
       }
 
-      const existing = await allocRepo.findByStudentAndLeader(studentId, leaderId);
-      if (existing) throw new ConflictError('Allocation already exists');
+      const existing = await connRepo.findByStudentAndLeader(studentId, leaderId);
+      if (existing) throw new ConflictError('Connection already exists');
 
-      return allocRepo.save({
+      return connRepo.save({
         id: generateId(),
         studentId,
         leaderId,
@@ -159,19 +159,19 @@ export function makeAllocationService(
     },
 
     async unassign(actor, studentId, leaderId) {
-      assertCan(actor, 'allocation:write');
+      assertCan(actor, 'connection:write');
       await checkLock(settingsRepo, actor);
-      const deleted = await allocRepo.deleteByStudentAndLeader(studentId, leaderId);
-      if (!deleted) throw new NotFoundError('Allocation not found');
+      const deleted = await connRepo.deleteByStudentAndLeader(studentId, leaderId);
+      if (!deleted) throw new NotFoundError('Connection not found');
     },
 
     async leaderSummary(actor, leaderId) {
       assertCan(actor, 'leader:read');
       const leader = await leaderRepo.findById(leaderId);
       if (!leader) throw new NotFoundError('Leader not found');
-      const allocs = await allocRepo.findByLeader(leaderId);
+      const conns = await connRepo.findByLeader(leaderId);
       const students = [];
-      for (const a of allocs) {
+      for (const a of conns) {
         const s = await studentRepo.findById(a.studentId);
         if (s) students.push(summariseStudent(s));
       }
@@ -180,9 +180,9 @@ export function makeAllocationService(
 
     async exportCsv(actor) {
       assertCan(actor, 'student:read');
-      const allAllocs = await allocRepo.findAll();
+      const all = await connRepo.findAll();
       const rows: ExportRow[] = [];
-      for (const a of allAllocs) {
+      for (const a of all) {
         const student = await studentRepo.findById(a.studentId);
         const leader = await leaderRepo.findById(a.leaderId);
         if (!student || !leader) continue;
