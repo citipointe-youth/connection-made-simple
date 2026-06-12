@@ -683,7 +683,7 @@ function _hAttTile(label, studs, avgWk, opts) {
   const grpAvg = grpEnr.length ? Math.round(grpEnr.reduce((a, s) => a + s.grpAttended, 0) / grpEnr.length) : 0;
   const chev = (opts.chev !== undefined)
     ? `<span style="display:inline-block;transition:transform .2s;transform:rotate(${opts.chev ? '90' : '0'}deg);color:var(--ink-faint);font-weight:800">›</span>` : '';
-  let h = `<div class="qcard" style="${opts.span ? 'grid-column:1/-1;' : ''}${opts.click ? 'cursor:pointer;' : ''}padding:11px"${opts.click ? ` onclick="${opts.click}"` : ''}>`;
+  let h = `<div class="qcard" style="${opts.span ? 'grid-column:1/-1;max-width:480px;width:100%;' : ''}${opts.click ? 'cursor:pointer;' : ''}padding:11px"${opts.click ? ` onclick="${opts.click}"` : ''}>`;
   h += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${chev}<div style="font-size:11px;font-weight:700;color:var(--ink-mid)">${label}</div></div>`;
   h += `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center;margin-bottom:3px">
     <div style="font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px">Youth</div>
@@ -1826,7 +1826,7 @@ function renderStudentView() {
 
   let body = `
     <div class="ph"><div class="ph-title">Student Search</div><div class="ph-sub">${vis.length} of ${students.length}</div></div>
-    <div class="sbar"><span class="si">🔍</span><input type="text" placeholder="Search by name…" value="${search}" oninput="studSearch(this.value)"></div>`;
+    <div class="sbar"><span class="si">🔍</span><input id="stu-search" type="text" placeholder="Search by name…" value="${search}" oninput="studSearch(this.value)"></div>`;
   if (ssGrades.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Grade:</span>${gChips}</div>`;
   if (ssGenders.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Gender:</span>${dChips}</div>`;
 
@@ -1865,6 +1865,7 @@ function renderStudentView() {
     body += '</tbody></table></div>';
   }
   setApp(shell(body));
+  if (search) requestAnimationFrame(() => { document.getElementById('stu-search')?.focus(); });
 }
 
 function toggleSF(type, val) {
@@ -2984,7 +2985,7 @@ function model(){
     const stage=x.team?5:1;
     people.push({id:'cax-'+h32(k),name:x.name,s:null,caOnly:true,stage,trend:'stable',score:scoreOf(stage,null,'stable'),connect:x.connect||null,decision:x.decision||null,conn:!!x.hasConnect,dec:!!x.hasDecision,team:!!x.team});
   }
-  const rungs=[[1,'First contact'],[2,'Came to Friday'],[3,'Regular'],[4,'In a lifegroup'],[5,'Student team']]
+  const rungs=[[1,'First contact'],[2,'Came to Friday'],[3,'Regular'],[4,'Attended a lifegroup this term'],[5,'Student team']]
     .map(([n,lb])=>({n,lb,v:people.filter(p=>p.stage>=n).length}));
   // KPIs
   const act=students.filter(s=>s.sA>0).length;
