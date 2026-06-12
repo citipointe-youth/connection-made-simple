@@ -1,11 +1,27 @@
 import { createAppInstance } from '../src/app';
 
-const appPromise = createAppInstance();
+let appPromise: ReturnType<typeof createAppInstance> | null = null;
 
-// module.exports (not export default) so esbuild CJS bundle is a callable function
+function getApp() {
+  if (!appPromise) {
+    appPromise = createAppInstance().catch((err) => {
+      console.error('[CMS] createAppInstance failed:', err);
+      appPromise = null;
+      throw err;
+    });
+  }
+  return appPromise;
+}
+
 async function handler(req: any, res: any): Promise<void> {
-  const app = await appPromise;
-  app(req, res);
+  try {
+    const app = await getApp();
+    app(req, res);
+  } catch (err) {
+    console.error('[CMS] handler error:', err);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: String(err) }));
+  }
 }
 
 module.exports = handler;
