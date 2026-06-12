@@ -12,8 +12,8 @@ export interface QuadStat {
   quad: Quad;
   label: string;
   totalStudents: number;
-  allocatedStudents: number;
-  unallocatedStudents: number;
+  connectedStudents: number;
+  unconnectedStudents: number;
   leaderCount: number;
   atRiskCount: number;
 }
@@ -21,15 +21,15 @@ export interface QuadStat {
 export interface GradeStat {
   grade: number;
   totalStudents: number;
-  allocatedStudents: number;
-  unallocatedStudents: number;
+  connectedStudents: number;
+  unconnectedStudents: number;
   atRiskCount: number;
 }
 
 export interface OverviewStats {
   ministryTotal: number;
-  allocatedTotal: number;
-  unallocatedTotal: number;
+  connectedTotal: number;
+  unconnectedTotal: number;
   leaderCount: number;
   atRiskTotal: number;
   byQuad: QuadStat[];
@@ -63,7 +63,7 @@ export function makeOverviewService(
         return true;
       });
 
-      const allocatedIds = new Set(allConns.map((a) => a.studentId));
+      const connectedIds = new Set(allConns.map((a) => a.studentId));
 
       // Leader-to-quad mapping: a leader belongs to a quad if their grade + gender aligns.
       // We use student quad membership (derived from grade+gender) so gender is unambiguous.
@@ -94,8 +94,8 @@ export function makeOverviewService(
           quad,
           label: QUAD_LABELS[quad],
           totalStudents: qStudents.length,
-          allocatedStudents: qStudents.filter((s) => allocatedIds.has(s.id)).length,
-          unallocatedStudents: qStudents.filter((s) => !allocatedIds.has(s.id)).length,
+          connectedStudents: qStudents.filter((s) => connectedIds.has(s.id)).length,
+          unconnectedStudents: qStudents.filter((s) => !connectedIds.has(s.id)).length,
           leaderCount: leaderQuadCounts[quad] ?? 0,
           atRiskCount: qStudents.filter((s) => AT_RISK.has(s.atRiskStatus ?? '')).length,
         };
@@ -106,16 +106,16 @@ export function makeOverviewService(
         return {
           grade,
           totalStudents: gStudents.length,
-          allocatedStudents: gStudents.filter((s) => allocatedIds.has(s.id)).length,
-          unallocatedStudents: gStudents.filter((s) => !allocatedIds.has(s.id)).length,
+          connectedStudents: gStudents.filter((s) => connectedIds.has(s.id)).length,
+          unconnectedStudents: gStudents.filter((s) => !connectedIds.has(s.id)).length,
           atRiskCount: gStudents.filter((s) => AT_RISK.has(s.atRiskStatus ?? '')).length,
         };
       });
 
       return {
         ministryTotal: scoped.length,
-        allocatedTotal: scoped.filter((s) => allocatedIds.has(s.id)).length,
-        unallocatedTotal: scoped.filter((s) => !allocatedIds.has(s.id)).length,
+        connectedTotal: scoped.filter((s) => connectedIds.has(s.id)).length,
+        unconnectedTotal: scoped.filter((s) => !connectedIds.has(s.id)).length,
         leaderCount: allLeaders.length,
         atRiskTotal: scoped.filter((s) => AT_RISK.has(s.atRiskStatus ?? '')).length,
         byQuad,

@@ -770,7 +770,7 @@ async function renderHome() {
   body += `</div>`;
 
   if (stats) {
-    if (stats.unallocatedTotal === 0 && stats.ministryTotal > 0) {
+    if (stats.unconnectedTotal === 0 && stats.ministryTotal > 0) {
       body += '<div class="alert al-ok">✅ All students are connected!</div>';
     }
     if (u.role === 'admin' && stats.ministryTotal === 0) {
@@ -808,8 +808,8 @@ async function renderHome() {
       body += '<div class="sh">Connection Summary</div>';
       body += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px">';
       body += `<div class="stat"><div class="stat-v">${stats.ministryTotal}</div><div class="stat-l">Total</div></div>`;
-      body += `<div class="stat"><div class="stat-v" style="color:var(--success)">${stats.allocatedTotal}</div><div class="stat-l">Connected</div></div>`;
-      body += `<div class="stat"><div class="stat-v" style="color:var(--warn)">${stats.unallocatedTotal}</div><div class="stat-l">Pending</div></div>`;
+      body += `<div class="stat"><div class="stat-v" style="color:var(--success)">${stats.connectedTotal}</div><div class="stat-l">Connected</div></div>`;
+      body += `<div class="stat"><div class="stat-v" style="color:var(--warn)">${stats.unconnectedTotal}</div><div class="stat-l">Pending</div></div>`;
       body += `<div class="stat"><div class="stat-v" style="color:var(--danger)">${stats.atRiskTotal}</div><div class="stat-l">At Risk</div></div>`;
       body += '</div>';
     } else {
@@ -844,11 +844,11 @@ async function renderHome() {
         if (vg.length) {
           body += '<div class="sh">Connection by Grade</div><div class="card" style="padding:12px">';
           for (const g of vg) {
-            const pct = g.totalStudents > 0 ? Math.round(g.allocatedStudents / g.totalStudents * 100) : 0;
+            const pct = g.totalStudents > 0 ? Math.round(g.connectedStudents / g.totalStudents * 100) : 0;
             body += `<div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--paper-dark)">
               <div style="width:60px;font-size:13px;font-weight:700">Grade ${g.grade}</div>
               <div style="flex:1"><div class="pb"><div class="pb-f ${pct >= 80 ? 'fill-g' : pct >= 50 ? 'fill-a' : 'fill-r'}" style="width:${pct}%"></div></div></div>
-              <div style="font-size:12px;color:var(--ink-mid);width:90px;text-align:right">${g.allocatedStudents}/${g.totalStudents} (${pct}%)${g.atRiskCount ? ' ⚠️' + g.atRiskCount : ''}</div>
+              <div style="font-size:12px;color:var(--ink-mid);width:90px;text-align:right">${g.connectedStudents}/${g.totalStudents} (${pct}%)${g.atRiskCount ? ' ⚠️' + g.atRiskCount : ''}</div>
             </div>`;
           }
           body += '</div>';

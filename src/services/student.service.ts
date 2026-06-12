@@ -22,7 +22,7 @@ const CreateStudentSchema = z.object({
 const AT_RISK_VALUES = ['regular', 'declining', 'atrisk', 'stopped', 'watch', 'new'] as const;
 
 export interface StudentService {
-  list(actor: Actor, filter?: { grade?: number; gender?: string; query?: string; unallocated?: boolean }): Promise<Student[]>;
+  list(actor: Actor, filter?: { grade?: number; gender?: string; query?: string; unconnected?: boolean }): Promise<Student[]>;
   get(actor: Actor, id: string): Promise<Student>;
   create(actor: Actor, input: unknown): Promise<Student>;
   update(actor: Actor, id: string, input: unknown): Promise<Student>;
