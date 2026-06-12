@@ -24,8 +24,7 @@ await esbuild.build({
 writeFileSync(`${FUNC_DIR}/.vc-config.json`, JSON.stringify({
   runtime: 'nodejs20.x',
   handler: 'index.js',
-  launcherType: 'Nodejs',
-  shouldAddHelpers: true
+  launcherType: 'Nodejs'
 }));
 
 writeFileSync('.vercel/output/config.json', JSON.stringify({
