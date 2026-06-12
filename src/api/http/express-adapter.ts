@@ -6,11 +6,19 @@ import { resolveContext } from '../middleware/auth.middleware';
 import { sendError } from '../middleware/error.middleware';
 import { UnauthorizedError } from '../../core/errors/app-error';
 import { createLogger } from '../../utils/logger';
+import { RateLimiter } from '../../utils/rate-limiter';
 
 const logger = createLogger('http');
 
+// 10 attempts per IP per 15 minutes
+const loginRateLimiter = new RateLimiter(10, 15 * 60 * 1000);
+
 export function createApp(routes: Route[], authService: AuthService): Express {
   const app = express();
+
+  if (env.NODE_ENV === 'production' && env.CORS_ORIGINS.includes('*')) {
+    logger.warn('CORS_ORIGINS is set to * in production — lock it to your domain for security');
+  }
 
   // Security headers
   app.use((_req, res, next) => {
@@ -42,10 +50,22 @@ export function createApp(routes: Route[], authService: AuthService): Express {
 
   app.use(express.static('public'));
 
+  app.set('trust proxy', 1);
+
   for (const route of routes) {
     const method = route.method.toLowerCase() as 'get' | 'post' | 'patch' | 'delete';
     app[method](route.path, async (req: Request, res: Response) => {
       try {
+        // Rate-limit login attempts by IP
+        if (route.path === '/auth/login' && route.method === 'POST') {
+          const ip = req.ip ?? req.headers['x-forwarded-for']?.toString() ?? 'unknown';
+          if (loginRateLimiter.isBlocked(ip)) {
+            res.status(429).setHeader('Retry-After', String(loginRateLimiter.retryAfterSeconds(ip)));
+            res.json({ code: 'RATE_LIMITED', message: 'Too many login attempts. Try again later.' });
+            return;
+          }
+        }
+
         const ctx = await resolveContext(req.headers['authorization'], authService, route.auth);
         if (route.auth && !ctx) throw new UnauthorizedError();
 

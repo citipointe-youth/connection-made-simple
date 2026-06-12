@@ -7,7 +7,16 @@ import { UnauthorizedError } from '../core/errors/app-error';
 import { LoginInputSchema } from '../core/validation/auth.schema';
 
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
-const SESSION_SECRET = process.env['SESSION_SECRET'] ?? 'cms-dev-secret-change-in-production';
+const INSECURE_FALLBACK = 'cms-dev-secret-change-in-production';
+const SESSION_SECRET = process.env['SESSION_SECRET'] ?? INSECURE_FALLBACK;
+
+if (process.env['NODE_ENV'] === 'production' && SESSION_SECRET === INSECURE_FALLBACK) {
+  // eslint-disable-next-line no-console
+  console.error(
+    '[SECURITY] SESSION_SECRET env var is not set. ' +
+    'Session tokens can be forged. Set SESSION_SECRET in your deployment environment immediately.'
+  );
+}
 
 function signSession(userId: string, expiresAt: number): string {
   const payload = Buffer.from(JSON.stringify({ userId, expiresAt })).toString('base64url');
