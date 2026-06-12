@@ -2,12 +2,12 @@
   "name": "connection-made-simple",
   "version": "1.0.0",
   "description": "Youth ministry connection platform — phone-first SPA backed by Express + Supabase",
-"scripts": {
+  "type": "module",
+  "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "vercel-build": "npx esbuild api/_entry.ts --bundle --platform=node --target=node24 --outfile=api/index.js --format=cjs"
+    "test": "vitest run"
   },
   "dependencies": {
     "express": "^4.19.2",
