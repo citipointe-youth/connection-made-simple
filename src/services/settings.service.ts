@@ -13,6 +13,7 @@ const SettingsPatchSchema = z.object({
   riskRateNumerator: z.number().int().min(1).optional(),
   riskRateDenominator: z.number().int().min(1).optional(),
   validThresholdPct: z.number().min(0).max(100).optional(),
+  serviceMinAttendance: z.number().int().min(0).optional(),
   serviceName: z.string().min(1).optional(),
   lifegroupName: z.string().min(1).optional(),
   connectionLockDate: z.string().nullable().optional(),

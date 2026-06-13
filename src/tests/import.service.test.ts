@@ -34,6 +34,9 @@ async function initRepos(r: ReturnType<typeof makeRepos>) {
     r.imports.init(), r.settings.init(),
     r.lifegroups.init(), r.lifegroupWeeks.init(), r.lifegroupAttendance.init(),
   ]);
+  // Tiny test datasets: treat any session with >=1 attendee as a valid service
+  // (production default is 100). Individual tests can override.
+  await r.settings.updateSettings({ serviceMinAttendance: 1 });
 }
 
 // ── TC55 — Outlier detection: sessions < 50% of average are flagged ──
@@ -58,8 +61,11 @@ describe('Import Service', () => {
     expect(result.sessionsAdded).toBe(2);
     expect(result.studentsAdded).toBe(1);
     const students = await r.students.findAll();
+    // Valid services = sessions with >=floor attendance. 2025-02-07 has 1 attendee
+    // (valid); 2025-02-14 has 0 (Alice absent -> not a valid service). So svcTotal
+    // counts the 1 valid service, which Alice attended.
     expect(students[0]?.svcAttended).toBe(1);
-    expect(students[0]?.svcTotal).toBe(2);
+    expect(students[0]?.svcTotal).toBe(1);
   });
 
   // ── TC57 — Excel short-date columns (DD-MMM) are normalised to ISO ──
@@ -79,8 +85,9 @@ describe('Import Service', () => {
       expect(s.sessionDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
     const students = await r.students.findAll();
+    // Bob attends 7-Feb + 14-Feb (valid); 21-Feb has 0 attendees (not a valid service).
     expect(students[0]?.svcAttended).toBe(2);
-    expect(students[0]?.svcTotal).toBe(3);
+    expect(students[0]?.svcTotal).toBe(2);
   });
 
   // ── TC58 — Excel short-date with explicit 2-digit year suffix ──
@@ -173,9 +180,10 @@ describe('Import Service', () => {
     ], 'second.csv');
     const after = await r.students.findAll();
     expect(after[0]?.dateOfBirth).toBe('2010-07-31');
-    // Attendance should have accumulated across both imports
-    expect(after[0]?.svcTotal).toBe(2);
-    expect(after[0]?.svcAttended).toBe(2);
+    // Each service import is authoritative (a full-year export), so svc counts
+    // reflect the latest import's valid services rather than accumulating.
+    expect(after[0]?.svcTotal).toBe(1);
+    expect(after[0]?.svcAttended).toBe(1);
   });
 
   // ── TC64 — rows without optional columns don't fail ──
@@ -194,11 +202,14 @@ describe('Import Service', () => {
     expect(students.every(s => s.parentPhone === null)).toBe(true);
   });
 
-  // ── TC65 — Outlier flagging in trends: low session excluded from average ──
-  it('TC65: trends service excludes outlier sessions from averageAttendance', async () => {
+  // ── TC65 — Sub-floor sessions are excluded from the trends average ──
+  it('TC65: trends service excludes sub-floor sessions from averageAttendance', async () => {
     const r = makeRepos();
     await initRepos(r);
-    // Import 5 sessions: 4 with ~10 attending, 1 outlier with 1 attending
+    // Floor of 5: the 1-attendee session is below it (invalid); the 12-attendee
+    // sessions are valid.
+    await r.settings.updateSettings({ serviceMinAttendance: 5 });
+    // Import 5 sessions: 4 with 12 attending, 1 sub-floor with 1 attending
     const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance);
     // Create 12 students first
     const names = ['A','B','C','D','E','F','G','H','I','J','K','L'];

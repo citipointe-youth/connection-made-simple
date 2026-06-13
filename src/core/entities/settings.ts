@@ -10,6 +10,10 @@ export interface AppSettings {
   riskRateNumerator: number;
   riskRateDenominator: number;
   validThresholdPct: number;
+  // Minimum total ministry attendance for a Friday to count as a "valid service".
+  // Sessions below this are disregarded entirely (not counted in any average or
+  // attendance-rate denominator) — treated like a week the ministry didn't meet.
+  serviceMinAttendance: number;
   serviceName: string;
   lifegroupName: string;
   // Allocation lock: if set and today >= lockDate, non-admin writes are blocked

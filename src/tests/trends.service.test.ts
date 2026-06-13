@@ -22,6 +22,8 @@ async function makeServices() {
   const sessionRepo = new InMemoryServiceSessionRepository();
   const attendanceRepo = new InMemoryServiceAttendanceRepository();
   await Promise.all([studentRepo.init(), settingsRepo.init(), sessionRepo.init(), attendanceRepo.init()]);
+  // Tiny dataset: any session with >=1 attendee counts as valid (prod default 100).
+  await settingsRepo.updateSettings({ serviceMinAttendance: 1 });
 
   const studentSvc = makeStudentService(studentRepo);
   const atRiskSvc = makeAtRiskService(studentRepo, settingsRepo);
@@ -68,14 +70,16 @@ describe('Trends Service', () => {
     expect(totalAttended).toBe(4); // 1+1+2
   });
 
-  // TC50 — outlier detection marks low sessions
-  it('TC50: session below threshold is marked as outlier', async () => {
+  // TC50 — sub-floor sessions are flagged as invalid (not a valid service)
+  it('TC50: session below the attendance floor is marked as outlier', async () => {
     const { trendsSvc, settingsRepo } = await makeServices();
-    // Lower the threshold to 10% — all sessions should pass (none are outliers)
-    await settingsRepo.updateSettings({ validThresholdPct: 10 });
+    // Floor of 2: sess-0 and sess-1 (1 attendee each) are below it; sess-2 (2) is valid.
+    await settingsRepo.updateSettings({ serviceMinAttendance: 2 });
     const data = await trendsSvc.get(ADMIN);
-    // No session should be an outlier with 10% threshold
-    expect(data.ministry.sessions.every(s => !s.isOutlier)).toBe(true);
+    const byId = Object.fromEntries(data.ministry.sessions.map(s => [s.sessionId, s.isOutlier]));
+    expect(byId['sess-0']).toBe(true);
+    expect(byId['sess-1']).toBe(true);
+    expect(byId['sess-2']).toBe(false);
   });
 
   // TC51 — grad scoping works

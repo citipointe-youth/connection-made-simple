@@ -234,14 +234,10 @@ export function makeImportService(
         const existing = studentByName.get(nameKey) ?? null;
 
         let studentId: string;
-        let prevAttended: number;
-        let prevTotal: number;
         let baseStudent: Parameters<typeof studentRepo.save>[0];
 
         if (existing) {
           studentId = existing.id;
-          prevAttended = existing.svcAttended;
-          prevTotal = existing.svcTotal;
           const incomingMobile = row.mobile ?? row.phone ?? null;
           const incomingParentPhone = row.parent_phone ?? row.guardian_phone ?? null;
           const incomingDob = normalizeDob(row.date_of_birth ?? row.birthday ?? null);
@@ -258,8 +254,6 @@ export function makeImportService(
         } else {
           const grade = row.grade ?? null;
           studentId = generateId();
-          prevAttended = 0;
-          prevTotal = 0;
           baseStudent = {
             id: studentId,
             firstName: row.first_name,
@@ -287,9 +281,9 @@ export function makeImportService(
           studentsAdded++;
         }
 
-        // Count attendance from this row's date columns
-        let sessionAttended = 0;
-        let sessionTotal = 0;
+        // Record attendance for this row's date columns. Session validity
+        // (>= floor) and per-student svc counts are computed in a second pass
+        // below, once attendance for every session has been tallied.
         for (const [origKey, isoDate] of normalisedDates.entries()) {
           const sessionId = sessionMap.get(isoDate);
           if (!sessionId) continue;
@@ -297,22 +291,50 @@ export function makeImportService(
           const attended = val === true || val === 'true' || val === '1' ||
             String(val).toLowerCase() === 'yes' || String(val) === 'Y';
           attendanceMap.set(`${studentId}:${sessionId}`, { studentId, sessionId, attended });
-          sessionTotal++;
-          if (attended) sessionAttended++;
         }
 
-        // Compute final svc counts and at-risk status — no second pass needed
-        const finalAttended = prevAttended + sessionAttended;
-        const finalTotal = prevTotal + sessionTotal;
-        const svcRate = finalTotal > 0 ? finalAttended / finalTotal : null;
+        studentsToSaveMap.set(studentId, baseStudent);
+        studentByName.set(nameKey, baseStudent);
+      }
+
+      // ── Second pass: which Fridays count as "valid services"? ──
+      // A session counts only if the WHOLE-ministry attendance that week meets
+      // the floor (default 100). Everything below — holidays, term breaks,
+      // future-dated columns — is disregarded entirely.
+      const minAttendance = settings.serviceMinAttendance;
+      const sessionAttendedCount = new Map<string, number>();
+      for (const rec of attendanceMap.values()) {
+        if (rec.attended) sessionAttendedCount.set(rec.sessionId, (sessionAttendedCount.get(rec.sessionId) ?? 0) + 1);
+      }
+      const validSessions = new Set<string>();
+      for (const s of sessionsToCreate) {
+        const cnt = sessionAttendedCount.get(s.id) ?? 0;
+        s.totalAttendance = cnt;
+        s.isValid = cnt >= minAttendance;
+        if (s.isValid) validSessions.add(s.id);
+      }
+      const validTotal = validSessions.size;
+
+      // Per-student attendance counted over valid services only.
+      const validAttendedByStudent = new Map<string, number>();
+      for (const rec of attendanceMap.values()) {
+        if (rec.attended && validSessions.has(rec.sessionId)) {
+          validAttendedByStudent.set(rec.studentId, (validAttendedByStudent.get(rec.studentId) ?? 0) + 1);
+        }
+      }
+
+      // Finalise each student's svc counts (attended / total VALID services) and
+      // at-risk status. This is the same definition the overview, at-risk and
+      // Connection Audit 'regulars' all read from.
+      for (const [sid, stu] of studentsToSaveMap) {
+        const svcAttended = validAttendedByStudent.get(sid) ?? 0;
+        const svcRate = validTotal > 0 ? svcAttended / validTotal : null;
         const atRiskStatus: 'regular' | 'new' | 'declining' | 'atrisk' | 'stopped' =
-          finalTotal === 0 ? 'new' :
-          finalAttended === 0 && finalTotal >= 3 ? 'stopped' :
+          validTotal === 0 ? 'new' :
+          svcAttended === 0 ? 'stopped' :
           svcRate !== null && svcRate < riskN / riskD ? 'atrisk' :
           svcRate !== null && svcRate < regN / regD ? 'declining' : 'regular';
-
-        studentsToSaveMap.set(studentId, { ...baseStudent, svcAttended: finalAttended, svcTotal: finalTotal, atRiskStatus });
-        studentByName.set(nameKey, { ...baseStudent, svcAttended: finalAttended, svcTotal: finalTotal, atRiskStatus });
+        studentsToSaveMap.set(sid, { ...stu, svcAttended, svcTotal: validTotal, atRiskStatus });
       }
 
       const studentsToSave = [...studentsToSaveMap.values()];

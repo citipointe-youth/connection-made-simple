@@ -2730,9 +2730,9 @@ async function renderAdminView(settings, users) {
         </div>
       </div>
       <div class="form-row">
-        <div class="fg"><label class="fl">Valid Session Threshold %</label>
-          <input class="fi" id="s-vt" type="number" min="0" max="100" value="${settings.validThresholdPct||25}">
-          <div class="help-text">Weeks below this % of the typical (median) week are treated as holidays and left out of the average</div>
+        <div class="fg"><label class="fl">Min attendance for a valid service</label>
+          <input class="fi" id="s-minatt" type="number" min="0" max="2000" value="${settings.serviceMinAttendance ?? 100}">
+          <div class="help-text">Fridays below this total attendance are disregarded (holidays / breaks) — excluded from averages and attendance rates</div>
         </div>
         <div class="fg"><label class="fl">Term Gap (days)</label>
           <input class="fi" id="s-tg" type="number" min="1" max="90" value="${settings.termGapDays||14}">
@@ -2879,7 +2879,7 @@ async function saveSettings() {
       regRateDenominator: parseInt(document.getElementById('s-rd')?.value||'4',10),
       riskRateNumerator: parseInt(document.getElementById('s-an')?.value||'1',10),
       riskRateDenominator: parseInt(document.getElementById('s-ad')?.value||'2',10),
-      validThresholdPct: parseInt(document.getElementById('s-vt')?.value||'25',10),
+      serviceMinAttendance: parseInt(document.getElementById('s-minatt')?.value||'100',10),
       termGapDays: parseInt(document.getElementById('s-tg')?.value||'14',10),
       // Change 11: include connectionLockDate
       connectionLockDate: document.getElementById('s-lock')?.value || null,

@@ -72,26 +72,11 @@ function recentTrend(sessions: SessionPoint[]): 'up' | 'down' | 'stable' {
   return 'stable';
 }
 
-// Flag "non-normal" weeks (holidays, camps, future/empty columns) so they don't
-// drag down the average. A week is excluded if its attendance falls below
-// thresholdPct% of the MEDIAN of *non-empty* weeks.
-//
-// The reference is the median of sessions with attendance > 0 — NOT all
-// sessions. A full-year export typically contains many weeks with zero
-// attendance (future dates, term breaks); if those were included, the median
-// itself would be 0 and the threshold would never exclude anything, so the
-// empty weeks would crater the average. Anchoring on the typical *active* week
-// keeps genuine low-but-real weeks while dropping the dead ones.
-function markOutliers(points: { totalAttended: number }[], thresholdPct: number): boolean[] {
-  if (points.length < 3) return points.map(() => false);
-  const active = points.map((p) => p.totalAttended).filter((v) => v > 0).sort((a, b) => a - b);
-  if (active.length < 3) return points.map(() => false);
-  const mid = Math.floor(active.length / 2);
-  const median = active.length % 2 === 0
-    ? (active[mid - 1]! + active[mid]!) / 2
-    : active[mid]!;
-  const threshold = median * (thresholdPct / 100);
-  return points.map((p) => p.totalAttended < threshold);
+function averageOf(points: { totalAttended: number; isOutlier: boolean }[]): number {
+  const valid = points.filter((p) => !p.isOutlier);
+  return valid.length > 0
+    ? Math.round(valid.reduce((s, p) => s + p.totalAttended, 0) / valid.length)
+    : 0;
 }
 
 export function makeTrendsService(
@@ -105,7 +90,7 @@ export function makeTrendsService(
       assertCan(actor, 'overview:read');
 
       const settings = await settingsRepo.getSettings();
-      const thresholdPct = settings.validThresholdPct;
+      const minAttendance = settings.serviceMinAttendance;
 
       const allStudents = await studentRepo.findAll();
       const allSessions = await sessionRepo.findAll();
@@ -127,7 +112,9 @@ export function makeTrendsService(
         (a, b) => a.sessionDate.localeCompare(b.sessionDate),
       );
 
-      // Build attendance index: sessionId -> Set<studentId>
+      // Build attendance index: sessionId -> Set<studentId>. This holds ALL
+      // attendees (not scope-filtered) so session validity reflects the whole
+      // Friday service.
       const attendedBySession = new Map<string, Set<string>>();
       for (const rec of allAttendance) {
         if (!rec.attended) continue;
@@ -135,20 +122,35 @@ export function makeTrendsService(
         attendedBySession.get(rec.sessionId)!.add(rec.studentId);
       }
 
-      // ── Ministry-level trend ──
-      const ministryPoints = sortedSessions.map((sess) => {
-        const attendedSet = attendedBySession.get(sess.id) ?? new Set<string>();
-        const totalAttended = [...attendedSet].filter((id) => scopedIds.has(id)).length;
-        return { sessionId: sess.id, sessionDate: sess.sessionDate, sessionName: sess.sessionName, totalAttended, totalPresent: scopedStudents.length, isOutlier: false };
-      });
+      // A session is "valid" iff the whole-ministry attendance that week is >=
+      // the configured floor (default 100). Anything below — holidays, term
+      // breaks, future-dated columns, cancelled services — is disregarded
+      // entirely. This single global mask is applied to ministry, quad AND grade
+      // averages so they share one denominator and stay additive. isOutlier on a
+      // point means "not a valid service" (also hides it from the chart).
+      const isValidSession = (sessionId: string): boolean =>
+        (attendedBySession.get(sessionId)?.size ?? 0) >= minAttendance;
 
-      const outlierFlags = markOutliers(ministryPoints, thresholdPct);
-      const ministryWithOutliers: SessionPoint[] = ministryPoints.map((p, i) => ({ ...p, isOutlier: outlierFlags[i] ?? false }));
+      const buildPoints = (memberIds: Set<string> | null, totalPresent: number): SessionPoint[] =>
+        sortedSessions.map((sess) => {
+          const attendedSet = attendedBySession.get(sess.id) ?? new Set<string>();
+          const totalAttended = memberIds
+            ? [...attendedSet].filter((id) => memberIds.has(id)).length
+            : attendedSet.size;
+          return {
+            sessionId: sess.id,
+            sessionDate: sess.sessionDate,
+            sessionName: sess.sessionName,
+            totalAttended,
+            totalPresent,
+            isOutlier: !isValidSession(sess.id),
+          };
+        });
 
+      // ── Ministry-level trend (scoped to the actor) ──
+      const ministryWithOutliers = buildPoints(scopedIds, scopedStudents.length);
       const validMinistry = ministryWithOutliers.filter((p) => !p.isOutlier);
-      const avgMinistry = validMinistry.length > 0
-        ? Math.round(validMinistry.reduce((s, p) => s + p.totalAttended, 0) / validMinistry.length)
-        : 0;
+      const avgMinistry = averageOf(ministryWithOutliers);
       const peakPoint = validMinistry.reduce((max, p) => p.totalAttended > (max?.totalAttended ?? 0) ? p : max, validMinistry[0]);
 
       const ministry: MinistryTrend = {
@@ -159,38 +161,22 @@ export function makeTrendsService(
         recentTrend: recentTrend(ministryWithOutliers),
       };
 
-      // ── Per-quad trend ──
+      // ── Per-quad trend (same valid-session mask) ──
       const byQuad: QuadTrend[] = QUADS.map((quad) => {
         const quadStudentIds = new Set(
           scopedStudents.filter((s) => s.quad === quad).map((s) => s.id),
         );
-        const quadPoints = sortedSessions.map((sess) => {
-          const attendedSet = attendedBySession.get(sess.id) ?? new Set<string>();
-          const totalAttended = [...attendedSet].filter((id) => quadStudentIds.has(id)).length;
-          return { sessionId: sess.id, sessionDate: sess.sessionDate, sessionName: sess.sessionName, totalAttended, totalPresent: quadStudentIds.size, isOutlier: false };
-        });
-        const flags = markOutliers(quadPoints, thresholdPct);
-        const withOutliers: SessionPoint[] = quadPoints.map((p, i) => ({ ...p, isOutlier: flags[i] ?? false }));
-        const valid = withOutliers.filter((p) => !p.isOutlier);
-        const avg = valid.length > 0 ? Math.round(valid.reduce((s, p) => s + p.totalAttended, 0) / valid.length) : 0;
-        return { quad, label: QUAD_LABELS[quad], sessions: withOutliers, averageAttendance: avg };
+        const withOutliers = buildPoints(quadStudentIds, quadStudentIds.size);
+        return { quad, label: QUAD_LABELS[quad], sessions: withOutliers, averageAttendance: averageOf(withOutliers) };
       });
 
-      // ── Per-grade trend ──
+      // ── Per-grade trend (same valid-session mask) ──
       const byGrade: GradeTrend[] = [7, 8, 9, 10, 11, 12].map((grade) => {
         const gradeStudentIds = new Set(
           scopedStudents.filter((s) => s.grade === grade).map((s) => s.id),
         );
-        const gradePoints = sortedSessions.map((sess) => {
-          const attendedSet = attendedBySession.get(sess.id) ?? new Set<string>();
-          const totalAttended = [...attendedSet].filter((id) => gradeStudentIds.has(id)).length;
-          return { sessionId: sess.id, sessionDate: sess.sessionDate, sessionName: sess.sessionName, totalAttended, totalPresent: gradeStudentIds.size, isOutlier: false };
-        });
-        const flags = markOutliers(gradePoints, thresholdPct);
-        const withOutliers: SessionPoint[] = gradePoints.map((p, i) => ({ ...p, isOutlier: flags[i] ?? false }));
-        const valid = withOutliers.filter((p) => !p.isOutlier);
-        const avg = valid.length > 0 ? Math.round(valid.reduce((s, p) => s + p.totalAttended, 0) / valid.length) : 0;
-        return { grade, sessions: withOutliers, averageAttendance: avg };
+        const withOutliers = buildPoints(gradeStudentIds, gradeStudentIds.size);
+        return { grade, sessions: withOutliers, averageAttendance: averageOf(withOutliers) };
       });
 
       // ── Group attendance summary (derived from student aggregate fields) ──

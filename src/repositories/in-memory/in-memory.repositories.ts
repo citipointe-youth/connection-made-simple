@@ -387,6 +387,7 @@ export class InMemorySettingsRepository
       riskRateNumerator: 1,
       riskRateDenominator: 2,
       validThresholdPct: 25,
+      serviceMinAttendance: 100,
       serviceName: 'Sunday Service',
       lifegroupName: 'Lifegroup',
       connectionLockDate: null,
