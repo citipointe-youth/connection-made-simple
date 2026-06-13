@@ -1982,20 +1982,72 @@ async function submitAtRiskUpdate(studentId) {
 // ============================================================
 // STUDENTS
 // ============================================================
-let _sS = { students:[], search:'', gf:new Set(), df:new Set() };
+let _sS = { students:[], leaderNames:new Set(), search:'', gf:new Set(), df:new Set() };
 
 async function renderStudents() {
   if (!_allCached('/students')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
-  try { _sS.students = await API.get('/students'); } catch {}
+  // Leaders are fetched alongside students so they can be hidden from the search
+  // (a person who both leads and appears in the service export shows up as a
+  // student row otherwise).
+  const [students, leaders] = await Promise.all([
+    API.get('/students').catch(() => []),
+    API.get('/leaders').catch(() => []),
+  ]);
+  _sS.students = students || [];
+  _sS.leaderNames = new Set((leaders || []).map(l => (l.fullName || '').trim().toLowerCase()).filter(Boolean));
   renderStudentView();
 }
 
-function renderStudentView() {
-  const { students, search, gf, df } = _sS;
-  let vis = students;
+// The students that pass the leader filter + grade/gender chips + name search.
+function _visStudents() {
+  const { students, leaderNames, search, gf, df } = _sS;
+  let vis = students.filter(s => !leaderNames.has(`${s.firstName} ${s.lastName}`.trim().toLowerCase()));
   if (gf.size) vis = vis.filter(s => gf.has(s.grade));
   if (df.size) vis = vis.filter(s => df.has(s.gender));
   if (search) { const q = search.toLowerCase(); vis = vis.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q)); }
+  return vis;
+}
+
+// Just the results list (mobile cards + desktop table) — re-rendered on every
+// keystroke WITHOUT rebuilding the search input, so the cursor never jumps.
+function _studentResultsHtml(vis) {
+  if (!vis.length) return `<div class="empty">${icEmpty('id')}<div class="empty-title">No students found</div></div>`;
+  let h = '<div class="mob">';
+  for (const s of vis) {
+    const pct = svcPct(s);
+    h += `<div class="li" onclick="showStudentDetail('${s.id}')" style="cursor:pointer">
+      <div class="li-body">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span class="li-title">${s.firstName} ${s.lastName}</span>
+          ${riskChip(s.atRiskStatus)}
+        </div>
+        <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender} ${quadChip(s.quad)}</div>
+        ${pct!==null?`<div style="margin-top:5px">${pBar(pct)}<div style="font-size:11px;color:var(--ink-faint);margin-top:2px">${s.svcAttended}/${s.svcTotal} (${pct}%)</div></div>`:''}
+      </div>
+      <div class="li-right" style="color:var(--ink-faint)">›</div>
+    </div>`;
+  }
+  h += '</div>';
+  h += `<div class="desk"><table class="dt"><thead><tr><th>Name</th><th>Gr</th><th>Gender</th><th>Quad</th><th>Svc %</th><th>Status</th><th></th></tr></thead><tbody>`;
+  for (const s of vis) {
+    const pct = svcPct(s);
+    h += `<tr>
+      <td><strong>${s.firstName} ${s.lastName}</strong></td>
+      <td>${s.grade||'—'}</td><td>${s.gender}</td>
+      <td>${quadChip(s.quad)}</td>
+      <td>${pct!==null?`<div style="display:flex;align-items:center;gap:6px">${pct}%<div class="pb" style="width:50px">${pBar(pct)}</div></div>`:'—'}</td>
+      <td>${riskChip(s.atRiskStatus)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="showStudentDetail('${s.id}')">View →</button></td>
+    </tr>`;
+  }
+  h += '</tbody></table></div>';
+  return h;
+}
+
+function renderStudentView() {
+  const { search, gf, df } = _sS;
+  const totalSearchable = _sS.students.filter(s => !_sS.leaderNames.has(`${s.firstName} ${s.lastName}`.trim().toLowerCase())).length;
+  const vis = _visStudents();
 
   const u = S.user;
   const ssGrades = u.role==='grade' ? [] : u.role==='quad'
@@ -2006,47 +2058,17 @@ function renderStudentView() {
   const dChips = ssGenders.map(g => `<button class="fc ${df.has(g)?'on':''}" onclick="toggleSF('d','${g}')">${g.charAt(0).toUpperCase()+g.slice(1)}</button>`).join('');
 
   let body = `
-    <div class="ph"><div class="ph-title">Student Search</div><div class="ph-sub">${vis.length} of ${students.length}</div></div>
-    <div class="sbar"><input id="stu-search" type="text" placeholder="Search by name…" value="${search}" oninput="studSearch(this.value)"></div>`;
+    <div class="ph"><div class="ph-title">Student Search</div><div class="ph-sub"><span id="stu-count">${vis.length} of ${totalSearchable}</span></div></div>
+    <div class="sbar"><input id="stu-search" type="text" placeholder="Search by name…" value="${search.replace(/"/g,'&quot;')}" oninput="studSearch(this.value)"></div>`;
   if (ssGrades.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Grade:</span>${gChips}</div>`;
   if (ssGenders.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Gender:</span>${dChips}</div>`;
+  body += `<div id="stu-results">${_studentResultsHtml(vis)}</div>`;
 
-  if (!vis.length) {
-    body += `<div class="empty">${icEmpty('id')}<div class="empty-title">No students found</div></div>`;
-  } else {
-    body += '<div class="mob">';
-    for (const s of vis) {
-      const pct = svcPct(s);
-      body += `<div class="li" onclick="showStudentDetail('${s.id}')" style="cursor:pointer">
-        <div class="li-body">
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span class="li-title">${s.firstName} ${s.lastName}</span>
-            ${riskChip(s.atRiskStatus)}
-          </div>
-          <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender} ${quadChip(s.quad)}</div>
-          ${pct!==null?`<div style="margin-top:5px">${pBar(pct)}<div style="font-size:11px;color:var(--ink-faint);margin-top:2px">${s.svcAttended}/${s.svcTotal} (${pct}%)</div></div>`:''}
-        </div>
-        <div class="li-right" style="color:var(--ink-faint)">›</div>
-      </div>`;
-    }
-    body += '</div>';
-
-    body += `<div class="desk"><table class="dt"><thead><tr><th>Name</th><th>Gr</th><th>Gender</th><th>Quad</th><th>Svc %</th><th>Status</th><th></th></tr></thead><tbody>`;
-    for (const s of vis) {
-      const pct = svcPct(s);
-      body += `<tr>
-        <td><strong>${s.firstName} ${s.lastName}</strong></td>
-        <td>${s.grade||'—'}</td><td>${s.gender}</td>
-        <td>${quadChip(s.quad)}</td>
-        <td>${pct!==null?`<div style="display:flex;align-items:center;gap:6px">${pct}%<div class="pb" style="width:50px">${pBar(pct)}</div></div>`:'—'}</td>
-        <td>${riskChip(s.atRiskStatus)}</td>
-        <td><button class="btn btn-ghost btn-sm" onclick="showStudentDetail('${s.id}')">View →</button></td>
-      </tr>`;
-    }
-    body += '</tbody></table></div>';
-  }
   setApp(shell(body));
-  if (search) requestAnimationFrame(() => { document.getElementById('stu-search')?.focus(); });
+  if (search) requestAnimationFrame(() => {
+    const el = document.getElementById('stu-search');
+    if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch {} }
+  });
 }
 
 function toggleSF(type, val) {
@@ -2054,7 +2076,20 @@ function toggleSF(type, val) {
   else { if (_sS.df.has(val)) _sS.df.delete(val); else _sS.df.add(val); }
   renderStudentView();
 }
-function studSearch(v) { _sS.search = v; renderStudentView(); }
+
+// On keystroke, update ONLY the results list + count — the input element stays
+// in the DOM so the caret position is preserved.
+function studSearch(v) {
+  _sS.search = v;
+  const vis = _visStudents();
+  const res = document.getElementById('stu-results');
+  if (res) res.innerHTML = _studentResultsHtml(vis);
+  const cnt = document.getElementById('stu-count');
+  if (cnt) {
+    const total = _sS.students.filter(s => !_sS.leaderNames.has(`${s.firstName} ${s.lastName}`.trim().toLowerCase())).length;
+    cnt.textContent = `${vis.length} of ${total}`;
+  }
+}
 
 // Student-detail leader assignment (aligned to demo showSD/assignSD/unassignSD)
 let _sdStudent = null, _sdLeaders = [], _sdAssigned = new Set();
