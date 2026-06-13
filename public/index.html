@@ -59,14 +59,14 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .desk-nav .ic-n{width:16px;height:16px}
 
 /* Bottom nav */
-.bot-nav{display:flex;background:var(--paper-card);border-top:1px solid var(--line);padding:6px 0 calc(6px + var(--safe-b));position:sticky;bottom:0;z-index:100;box-shadow:0 -2px 8px rgba(18,35,59,.06)}
+.bot-nav{display:flex;background:var(--paper-card);border-top:1px solid var(--line);padding:6px 0 calc(6px + var(--safe-b));position:fixed;left:0;right:0;bottom:0;z-index:100;box-shadow:0 -2px 8px rgba(18,35,59,.06)}
 .bot-nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;padding:4px 2px;cursor:pointer;transition:color .15s}
 .bot-nav a.on{color:var(--accent)}
 .bot-nav a .ic-n{transition:color .15s}
 @media(min-width:768px){.bot-nav{display:none}}
 
 /* Page */
-.pg{flex:1;padding:14px 16px;max-width:680px;margin:0 auto;width:100%;overflow-x:hidden}
+.pg{flex:1;padding:14px 16px calc(76px + var(--safe-b));max-width:680px;margin:0 auto;width:100%;overflow-x:hidden}
 @media(min-width:768px){.pg{padding:20px 24px;max-width:1000px}}
 
 /* Cards */
@@ -1328,24 +1328,31 @@ function toggleUnconnectOnly() { _aS.unconnectOnly = !_aS.unconnectOnly; saveCon
 
 // ── STUDENT PICKER MODAL (replaces tiny <select> — works at 60+ students) ──
 function openStudentPicker(leaderId, leaderGender, leaderName) {
+  const leader = (_aS.leaders || []).find(l => l.id === leaderId);
+  const leaderGrades = (leader && leader.grades) ? leader.grades : [];
   _pickerCtx = { leaderId, leaderGender, leaderName };
   const assignedForLeader = new Set(
     _aS.students.filter(s => _aS.allocs[s.id]?.includes(leaderId)).map(s => s.id)
   );
-  // Pool: same gender (or ungendered leader) — includes all grades for cross-grade connection
-  const pool = _aS.students.filter(s => !leaderGender || s.gender === leaderGender);
 
   modal(`
     <div class="mo-title">Add Students → ${leaderName}</div>
     <div style="position:relative;margin-bottom:4px">
-      <input class="picker-search" id="picker-q" placeholder="Search by name, grade…" oninput="filterPicker()" autofocus>
+      <input class="picker-search" id="picker-q" placeholder="Search by name to add anyone…" oninput="filterPicker()" autofocus>
     </div>
-    <div id="picker-list" class="picker-list"></div>`,
+    <div id="picker-list" class="picker-list"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px">
+      <button class="btn btn-primary btn-sm" onclick="closeModal()">Done</button>
+    </div>`,
     () => { _pickerCtx = null; }
   );
 
-  // Pre-render the list
-  window._pickerPool = pool;
+  // Full roster is searchable; the default (no search) view is narrowed to the
+  // leader's own grade(s) + gender, so students with no grade/gender stay hidden
+  // until explicitly searched for.
+  window._pickerPool = _aS.students;
+  window._pickerGrades = new Set(leaderGrades);
+  window._pickerGender = leaderGender || '';
   window._pickerAssigned = assignedForLeader;
   filterPicker();
 
@@ -1360,11 +1367,24 @@ function filterPicker() {
 
   let list = pool;
   if (q) {
-    // Match each word against first name, last name, or grade
+    // Searching surfaces ANYONE by name/grade (cross-grade, and otherwise-hidden
+    // no-grade/no-gender students).
     const terms = q.split(/\s+/).filter(Boolean);
     list = pool.filter(s => {
       const text = `${s.firstName} ${s.lastName} ${s.grade||''}`.toLowerCase();
       return terms.every(t => text.includes(t));
+    });
+  } else {
+    // Default view: only the leader's own grade(s) + gender. Students with no
+    // grade or no gender are hidden until explicitly searched.
+    const grades = window._pickerGrades || new Set();
+    const gender = window._pickerGender || '';
+    list = pool.filter(s => {
+      if (s.grade == null) return false;
+      if (s.gender !== 'male' && s.gender !== 'female') return false;
+      if (gender && s.gender !== gender) return false;
+      if (grades.size > 0 && !grades.has(s.grade)) return false;
+      return true;
     });
   }
 

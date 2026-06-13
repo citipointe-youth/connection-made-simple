@@ -484,6 +484,15 @@ export function makeImportService(
         const totalWeeksRan = weeksRanList.length;
 
         for (const member of youthMembers) {
+          // Weeks this member actually attended (>=1 "true" that week). A member
+          // listed on the roll but who attended 0 weeks is NOT part of the group
+          // — skip them entirely (no student created, no grp counts).
+          const attendedWeeks = new Set<string>();
+          for (let i = 0; i < member.attendance.length; i++) {
+            if (member.attendance[i] === true) { const w = weekOfIdx[i]; if (w) attendedWeeks.add(w); }
+          }
+          if (attendedWeeks.size === 0) continue;
+
           rowCount++;
           const nameKey = `${member.first_name.toLowerCase()} ${member.last_name.toLowerCase()}`;
           let student = studentByName.get(nameKey) ?? null;
@@ -518,12 +527,6 @@ export function makeImportService(
             studentsUpdated++;
           }
           const studentId = student.id;
-
-          // Weeks this member attended (>=1 "true" in that week).
-          const attendedWeeks = new Set<string>();
-          for (let i = 0; i < member.attendance.length; i++) {
-            if (member.attendance[i] === true) { const w = weekOfIdx[i]; if (w) attendedWeeks.add(w); }
-          }
 
           // One attendance row per week the group ran (binary attended-that-week).
           for (const w of weeksRanList) {
