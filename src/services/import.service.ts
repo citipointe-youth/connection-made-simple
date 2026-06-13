@@ -129,8 +129,6 @@ export function makeImportService(
       const settings = await settingsRepo.getSettings();
       const importId = generateId();
       const now = new Date().toISOString();
-      let studentsAdded = 0;
-      let studentsUpdated = 0;
 
       // Detect session date columns — supports both ISO (YYYY-MM-DD) and
       // Excel-exported short dates (DD-MMM or D-MMM, e.g. "7-Feb", "14-Mar").
@@ -154,11 +152,11 @@ export function makeImportService(
         if (m[3]) {
           year = m[3].length === 2 ? 2000 + parseInt(m[3], 10) : parseInt(m[3], 10);
         } else {
-          const now = new Date();
-          year = now.getFullYear();
+          const nowDate = new Date();
+          year = nowDate.getFullYear();
           // If the parsed month is more than 2 months in the future assume previous year
           const parsed = new Date(`${year}-${mon}-${day}`);
-          if (parsed.getTime() - now.getTime() > 60 * 24 * 3600 * 1000) year--;
+          if (parsed.getTime() - nowDate.getTime() > 60 * 24 * 3600 * 1000) year--;
         }
         return `${year}-${mon}-${day}`;
       }
@@ -169,10 +167,26 @@ export function makeImportService(
       const normalisedDates = new Map<string, string>(
         allDateKeys.map((k) => [k, normaliseDate(k)!]),
       );
+      const dateKeys = [...normalisedDates.values()];
+
+      // Save import record FIRST — service_sessions.import_id has FK to import_records.id
+      await importRepo.save({
+        id: importId,
+        type: 'service',
+        filename,
+        fileHash: '',
+        rowCount: rows.length,
+        sessionsAdded: 0,
+        studentsAdded: 0,
+        studentsUpdated: 0,
+        status: 'ok',
+        errorMessage: null,
+        importedAt: now,
+        importedBy: actor.id,
+      });
 
       // Create service sessions for each date column
       const sessionMap = new Map<string, string>(); // normalisedDate -> sessionId
-      const dateKeys = [...normalisedDates.values()];
       for (let i = 0; i < allDateKeys.length; i++) {
         const origKey = allDateKeys[i];
         if (!origKey) continue;
@@ -192,10 +206,20 @@ export function makeImportService(
         });
       }
 
-      // Track attendance per student for aggregation
-      const studentAttendance = new Map<string, { attended: number; total: number }>();
+      // Load ALL students once — avoids one full-table scan per CSV row
+      const allStudents = await studentRepo.findAll();
+      const studentByName = new Map<string, typeof allStudents[0]>();
+      for (const s of allStudents) {
+        studentByName.set(`${s.firstName.toLowerCase()} ${s.lastName.toLowerCase()}`, s);
+      }
 
-      const attendanceRecords = [];
+      let studentsAdded = 0;
+      let studentsUpdated = 0;
+      const studentAttendance = new Map<string, { attended: number; total: number }>();
+      // Track objects so final update pass avoids a findById per student
+      const studentObjects = new Map<string, typeof allStudents[0]>();
+      const attendanceRecords: Array<{ studentId: string; sessionId: string; attended: boolean }> = [];
+
       for (const rawRow of rows) {
         const parsed = ServiceRowSchema.safeParse(rawRow);
         if (!parsed.success) continue;
@@ -205,21 +229,16 @@ export function makeImportService(
           genderLower === 'f' || genderLower === 'female' ? 'female' :
           genderLower === 'm' || genderLower === 'male' ? 'male' : 'other';
 
-        // Upsert student
-        const existing = (await studentRepo.search(`${row.first_name} ${row.last_name}`)).find(
-          (s) =>
-            s.firstName.toLowerCase() === row.first_name.toLowerCase() &&
-            s.lastName.toLowerCase() === row.last_name.toLowerCase(),
-        );
+        const nameKey = `${row.first_name.toLowerCase()} ${row.last_name.toLowerCase()}`;
+        const existing = studentByName.get(nameKey) ?? null;
 
         let studentId: string;
         if (existing) {
-          // Preserve existing attendance totals; we'll add session columns below
           studentId = existing.id;
           const incomingMobile = row.mobile ?? row.phone ?? null;
           const incomingParentPhone = row.parent_phone ?? row.guardian_phone ?? null;
           const incomingDob = row.date_of_birth ?? row.birthday ?? null;
-          await studentRepo.save({
+          const updated = {
             ...existing,
             grade: row.grade ?? existing.grade,
             mobile: incomingMobile ?? existing.mobile ?? null,
@@ -227,16 +246,19 @@ export function makeImportService(
             dateOfBirth: incomingDob ?? existing.dateOfBirth ?? null,
             quad: computeQuad(row.grade ?? existing.grade, normalGender),
             updatedAt: now,
-          });
+          };
+          await studentRepo.save(updated);
           studentsUpdated++;
           studentAttendance.set(studentId, {
             attended: existing.svcAttended,
             total: existing.svcTotal,
           });
+          studentObjects.set(studentId, updated);
+          studentByName.set(nameKey, updated);
         } else {
           const grade = row.grade ?? null;
           studentId = generateId();
-          await studentRepo.save({
+          const newStudent = {
             id: studentId,
             firstName: row.first_name,
             lastName: row.last_name,
@@ -259,9 +281,12 @@ export function makeImportService(
             dataSource: filename,
             createdAt: now,
             updatedAt: now,
-          });
+          };
+          await studentRepo.save(newStudent);
           studentsAdded++;
           studentAttendance.set(studentId, { attended: 0, total: 0 });
+          studentObjects.set(studentId, newStudent);
+          studentByName.set(nameKey, newStudent);
         }
 
         // Collect attendance records and track aggregation.
@@ -289,17 +314,18 @@ export function makeImportService(
 
       await attendanceRepo.saveMany(attendanceRecords);
 
-      // Write aggregated attendance counts back to students and recompute at-risk
+      // Write aggregated attendance counts back to students and recompute at-risk.
+      // Uses tracked objects — no findById round-trips needed.
       const riskN = settings.riskRateNumerator;
       const riskD = settings.riskRateDenominator;
       const regN = settings.regRateNumerator;
       const regD = settings.regRateDenominator;
 
       for (const [studentId, agg] of studentAttendance.entries()) {
-        const s = await studentRepo.findById(studentId);
+        const s = studentObjects.get(studentId);
         if (!s) continue;
         const svcRate = agg.total > 0 ? agg.attended / agg.total : null;
-        let atRiskStatus: 'regular' | 'new' | 'declining' | 'atrisk' | 'stopped' =
+        const atRiskStatus: 'regular' | 'new' | 'declining' | 'atrisk' | 'stopped' =
           agg.total === 0 ? 'new' :
           agg.attended === 0 && agg.total >= 3 ? 'stopped' :
           svcRate !== null && svcRate < riskN / riskD ? 'atrisk' :
@@ -313,7 +339,7 @@ export function makeImportService(
         });
       }
 
-      // Log import
+      // Update import record with final counts
       await importRepo.save({
         id: importId,
         type: 'service',
@@ -349,12 +375,39 @@ export function makeImportService(
       let weeksAdded = 0;
       let rowCount = 0;
 
+      // Save import record FIRST — lifegroup_weeks.import_id has FK to import_records.id
+      await importRepo.save({
+        id: importId,
+        type: 'lifegroup',
+        filename,
+        fileHash: '',
+        rowCount: 0,
+        sessionsAdded: 0,
+        studentsAdded: 0,
+        studentsUpdated: 0,
+        status: 'ok',
+        errorMessage: null,
+        importedAt: now,
+        importedBy: actor.id,
+      });
+
+      // Load ALL students and lifegroups once upfront — avoids N+1 queries
+      const allStudents = await studentRepo.findAll();
+      const studentByName = new Map<string, typeof allStudents[0]>();
+      for (const s of allStudents) {
+        studentByName.set(`${s.firstName.toLowerCase()} ${s.lastName.toLowerCase()}`, s);
+      }
+      const allExistingGroups = await lifegroupRepo.findAll();
+
       const studentGrpAgg = new Map<string, { attended: number; total: number; metWeeks: number }>();
+      const studentObjects = new Map<string, typeof allStudents[0]>();
+      const allAttendanceRecords: Array<{
+        studentId: string; weekId: string; lifegroupId: string; groupMet: boolean; attended: boolean;
+      }> = [];
 
       for (const group of groups) {
-        // Find or create lifegroup by name
-        const allGroups = await lifegroupRepo.findAll();
-        let lifegroup = allGroups.find((g) => g.fullName === group.name) ?? null;
+        // Find or create lifegroup (using preloaded list)
+        let lifegroup = allExistingGroups.find((g) => g.fullName === group.name) ?? null;
         if (!lifegroup) {
           const { grade, gender } = parseGroupName(group.name);
           lifegroup = await lifegroupRepo.save({
@@ -365,6 +418,7 @@ export function makeImportService(
             gender,
             createdAt: now,
           });
+          allExistingGroups.push(lifegroup);
           groupsAdded++;
         }
 
@@ -389,13 +443,8 @@ export function makeImportService(
         for (const member of group.members) {
           rowCount++;
 
-          // Find or create student by name match
-          const searchResults = await studentRepo.search(`${member.first_name} ${member.last_name}`);
-          const existing = searchResults.find(
-            (s) =>
-              s.firstName.toLowerCase() === member.first_name.toLowerCase() &&
-              s.lastName.toLowerCase() === member.last_name.toLowerCase(),
-          ) ?? null;
+          const nameKey = `${member.first_name.toLowerCase()} ${member.last_name.toLowerCase()}`;
+          const existing = studentByName.get(nameKey) ?? null;
 
           let studentId: string;
           if (existing) {
@@ -407,14 +456,15 @@ export function makeImportService(
                 total: existing.grpTotal,
                 metWeeks: existing.grpMetWeeks,
               });
+              studentObjects.set(studentId, existing);
             }
           } else {
             studentId = generateId();
-            await studentRepo.save({
+            const newStudent = {
               id: studentId,
               firstName: member.first_name,
               lastName: member.last_name,
-              gender: 'other',
+              gender: 'other' as const,
               grade: null,
               quad: null,
               mobile: null,
@@ -433,13 +483,15 @@ export function makeImportService(
               dataSource: filename,
               createdAt: now,
               updatedAt: now,
-            });
+            };
+            await studentRepo.save(newStudent);
             studentsAdded++;
             studentGrpAgg.set(studentId, { attended: 0, total: 0, metWeeks: 0 });
+            studentObjects.set(studentId, newStudent);
+            studentByName.set(nameKey, newStudent);
           }
 
-          // Build attendance records for dates where student was a member
-          const attRecords: Array<{ studentId: string; weekId: string; lifegroupId: string; groupMet: boolean; attended: boolean }> = [];
+          // Accumulate attendance for this member across this group's meetings
           let memberAttended = 0;
           let memberTotal = 0;
           for (let i = 0; i < group.meetings.length; i++) {
@@ -448,7 +500,7 @@ export function makeImportService(
             const isoDate = group.meetings[i]!;
             const weekId = weekMap.get(isoDate);
             if (!weekId) continue;
-            attRecords.push({
+            allAttendanceRecords.push({
               studentId,
               weekId,
               lifegroupId: lifegroup.id,
@@ -458,9 +510,7 @@ export function makeImportService(
             memberTotal++;
             if (att) memberAttended++;
           }
-          await lifegroupAttendanceRepo.saveMany(attRecords);
 
-          // Accumulate
           const agg = studentGrpAgg.get(studentId)!;
           studentGrpAgg.set(studentId, {
             attended: agg.attended + memberAttended,
@@ -470,9 +520,15 @@ export function makeImportService(
         }
       }
 
-      // Write aggregated group attendance back to each affected student
+      // Save all attendance in a single bulk call
+      if (allAttendanceRecords.length > 0) {
+        await lifegroupAttendanceRepo.saveMany(allAttendanceRecords);
+      }
+
+      // Write aggregated group attendance back to each affected student.
+      // Uses tracked objects — no findById round-trips needed.
       for (const [studentId, agg] of studentGrpAgg.entries()) {
-        const s = await studentRepo.findById(studentId);
+        const s = studentObjects.get(studentId);
         if (!s) continue;
         await studentRepo.save({
           ...s,
@@ -483,7 +539,7 @@ export function makeImportService(
         });
       }
 
-      // Log import record
+      // Update import record with final counts
       await importRepo.save({
         id: importId,
         type: 'lifegroup',
