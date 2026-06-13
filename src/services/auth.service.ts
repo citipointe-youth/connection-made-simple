@@ -1,5 +1,5 @@
 import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
-import { verifyPassword } from '../utils/crypto';
+import { verifyPassword, hashPassword, needsRehash } from '../utils/crypto';
 import type { IUserRepository } from '../repositories/interfaces/entity-repositories';
 import type { Actor, User, SafeUser } from '../core/entities/user';
 import type { Grade, Quad } from '../core/types/enums';
@@ -74,6 +74,12 @@ export function makeAuthService(users: IUserRepository): AuthService {
 
       const valid = await verifyPassword(password, user.passwordHash);
       if (!valid) throw new UnauthorizedError('Invalid credentials');
+
+      // Silently upgrade legacy SHA-256 hashes to bcrypt on first login
+      if (needsRehash(user.passwordHash)) {
+        const newHash = await hashPassword(password);
+        await users.save({ ...user, passwordHash: newHash, updatedAt: new Date().toISOString() });
+      }
 
       const token = signSession(user.id, Date.now() + TOKEN_TTL_MS);
       return { token, user: toSafeUser(user) };

@@ -43,18 +43,19 @@ HIGH — Do soon
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-LONGER TERM — When you have capacity
+COMPLETED
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-4. UPGRADE PASSWORD HASHING TO BCRYPT
-   Current: SHA-256 with salt — fast to brute-force with a GPU.
-   Target: bcrypt (slow by design, industry standard for passwords).
-   This requires a database migration + re-hash-on-login strategy.
-   Ask Claude to implement when ready — it's a medium-sized change.
+4. PASSWORD HASHING UPGRADED TO BCRYPT ✓
+   hashPassword() now uses bcryptjs (12 rounds, ~300ms).
+   verifyPassword() auto-detects legacy SHA-256 hashes and handles them
+   correctly. On first successful login with a legacy hash, the password
+   is silently re-hashed to bcrypt and saved — no user action needed.
+   New passwords (set via Admin → Accounts) are always bcrypt.
 
-5. ADD SUPABASE ROW-LEVEL SECURITY (RLS)
-   Currently all tables are wide-open at the database level.
-   Access control lives entirely in the Express API layer, which is correct,
-   but RLS adds a second layer of defence if the database connection string
-   ever leaked. Especially important given this app holds minors' contact details.
-   Ask Claude to write a migration when ready.
+5. SUPABASE ROW-LEVEL SECURITY ENABLED ✓
+   Migration 006 enables RLS on all 13 tables with no anon policies,
+   so any connection via the Supabase anon key (PostgREST) is denied.
+   The Express API uses the postgres superuser connection string which
+   bypasses RLS automatically — no impact on app behaviour.
+   Apply migration 006 in Supabase SQL Editor to activate.
