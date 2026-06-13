@@ -458,7 +458,7 @@ function closeModal() { const r = document.getElementById('modal-root'); if (r._
 let _shellReady = false;
 function setApp(h) {
   const main = document.getElementById('page-main');
-  if (_shellReady && main) { main.innerHTML = h; _updateNavActive(); }
+  if (_shellReady && main) { main.innerHTML = h; window.scrollTo(0, 0); _updateNavActive(); }
   else document.getElementById('app').innerHTML = h;
 }
 
@@ -613,6 +613,7 @@ const IC = {
   arru:     '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
   arrd:     '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
   arrr:     '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+  xmark:    '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
 };
 function icN(k){ return `<svg class="ic-n" viewBox="0 0 24 24">${IC[k]||''}</svg>`; }
 function icS(k){ return `<svg class="ic-s" viewBox="0 0 24 24">${IC[k]||''}</svg>`; }
@@ -1403,7 +1404,7 @@ function pickerRow(s, isAssigned) {
   if (isAssigned) {
     return `<div class="picker-item assigned">
       <div>
-        <div class="picker-item-name">✓ ${s.firstName} ${s.lastName}</div>
+        <div class="picker-item-name" style="display:flex;align-items:center;gap:4px">${icS('check')} ${s.firstName} ${s.lastName}</div>
         <div class="picker-item-meta">Gr ${s.grade||'—'} · ${s.gender}${pct!==null?' · '+pct+'%':''}</div>
       </div>
       <div class="picker-item-right">${risk}<button onclick="remPick('${s.id}')" title="Remove from this leader" style="margin-left:8px;border:none;background:none;color:var(--danger);font-size:20px;font-weight:700;line-height:1;cursor:pointer">−</button></div>
@@ -2488,7 +2489,7 @@ function processImport(file) {
     try {
       const result = await API.post('/import/csv', { rows, filename: file.name });
       Cache.clear();
-      statusEl.innerHTML = `<div class="alert al-ok">✓ Import complete: ${result.studentsAdded} added, ${result.studentsUpdated} updated, ${result.sessionsAdded} sessions</div>`;
+      statusEl.innerHTML = `<div class="alert al-ok" style="display:flex;align-items:center;gap:6px">${icS('check')} Import complete: ${result.studentsAdded} added, ${result.studentsUpdated} updated, ${result.sessionsAdded} sessions</div>`;
     } catch (err) { statusEl.innerHTML = `<div class="alert al-err">Import failed: ${err.message}</div>`; }
   };
   if (isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file);
@@ -3168,7 +3169,7 @@ function caShell(body,page){
   let content=back+body;
   if(stale()&&!warnOff&&page!=='ca-data'){
     const seedy=seedOn();
-    content+='<div class="ca-warnb"><span class="ca-wi">⚠</span><div onclick="go(\'ca-data\')" style="cursor:pointer"><b>'+(seedy?'Demo seed in use.':'Data ageing.')+'</b> Student Team, Connect, Decision &amp; People Flow data '+(seedy?'was seeded '+fmtD(st.uploads.team.at):'needs a refresh')+' — update it in the <b>Data</b> tab for currency.</div><span class="ca-wx" onclick="CA.dismissWarn()">✕</span></div>';
+    content+='<div class="ca-warnb"><span class="ca-wi">'+icS('alert')+'</span><div onclick="go(\'ca-data\')" style="cursor:pointer"><b>'+(seedy?'Demo seed in use.':'Data ageing.')+'</b> Student Team, Connect, Decision &amp; People Flow data '+(seedy?'was seeded '+fmtD(st.uploads.team.at):'needs a refresh')+' — update it in the <b>Data</b> tab for currency.</div><span class="ca-wx" onclick="CA.dismissWarn()">'+icS('xmark')+'</span></div>';
   }
   setApp(content);
 }
@@ -3418,7 +3419,7 @@ function exportQuad(q){
   document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u);
   closeModal();toast((rows.length-1)+' follow-ups exported');
 }
-function slotS(t,sub){return '<div class="ca-uslot"><div class="ca-uic ok">✓</div><div class="ca-usl"><div class="ca-ust">'+t+'</div><div class="ca-uss">'+sub+'</div></div><span class="chip c-success">Synced</span></div>';}
+function slotS(t,sub){return '<div class="ca-uslot"><div class="ca-uic ok">'+icS('check')+'</div><div class="ca-usl"><div class="ca-ust">'+t+'</div><div class="ca-uss">'+sub+'</div></div><span class="chip c-success">Synced</span></div>';}
 function slotU(kind,t,up){
   const sd=up.src==='seed';
   return '<div class="ca-uslot"><div class="ca-uic '+(sd?'wn':'ok')+'">'+icS('upload')+'</div><div class="ca-usl"><div class="ca-ust">'+t+'</div><div class="ca-uss">'+(sd?'Demo seed':esc(up.fn))+' · '+up.rows.length+' rows · '+fmtD(up.at)+'</div></div><button class="btn btn-secondary btn-sm" onclick="CA.pick(\''+kind+'\')">Replace</button><input type="file" id="ca-f-'+kind+'" accept=".csv,.xlsx" style="display:none" onchange="CA.upload(\''+kind+'\',this)"></div>';
@@ -3820,7 +3821,10 @@ boot();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js').then(() => {
+      // When a new SW activates and claims this page, reload to pick up the new HTML
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+    }).catch(() => {});
   });
 }
 </script>
