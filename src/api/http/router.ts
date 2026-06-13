@@ -11,6 +11,7 @@ import { makeSettingsController } from '../controllers/settings.controller';
 import { makeAccountController } from '../controllers/account.controller';
 import { makeAdminController } from '../controllers/admin.controller';
 import { makeTrendsController } from '../controllers/trends.controller';
+import { makeLifegroupStatsController } from '../controllers/lifegroup-stats.controller';
 
 export function buildRoutes(services: Services): Route[] {
   const auth = makeAuthController({ auth: services.auth, users: services.users });
@@ -28,6 +29,7 @@ export function buildRoutes(services: Services): Route[] {
   const account = makeAccountController({ account: services.account });
   const admin = makeAdminController({ admin: services.admin });
   const trends = makeTrendsController({ trends: services.trends });
+  const lifegroupStats = makeLifegroupStatsController({ lifegroupStats: services.lifegroupStats });
 
   return [
     // ----- Auth -----
@@ -73,6 +75,7 @@ export function buildRoutes(services: Services): Route[] {
 
     // ----- Trends -----
     { method: 'GET', path: '/trends', auth: true, handler: (r) => trends.get(r) },
+    { method: 'GET', path: '/lifegroups/stats', auth: true, handler: (r) => lifegroupStats.get(r) },
 
     // ----- Import -----
     { method: 'POST',   path: '/import/csv',          auth: true, handler: (r) => importCtrl.importCsv(r) },

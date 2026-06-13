@@ -61,6 +61,7 @@ import { makeSettingsService, type SettingsService } from './services/settings.s
 import { makeAccountService, type AccountService } from './services/account.service';
 import { makeAdminService, type AdminService } from './services/admin.service';
 import { makeTrendsService, type TrendsService } from './services/trends.service';
+import { makeLifegroupStatsService, type LifegroupStatsService } from './services/lifegroup-stats.service';
 
 export interface Repositories {
   users: IUserRepository;
@@ -86,6 +87,7 @@ export interface Services {
   overview: OverviewService;
   atRisk: AtRiskService;
   trends: TrendsService;
+  lifegroupStats: LifegroupStatsService;
   importService: ImportService;
   settings: SettingsService;
   account: AccountService;
@@ -171,6 +173,7 @@ export async function buildContainer(): Promise<Container> {
   const overview = makeOverviewService(students, leaders, connections);
   const atRisk = makeAtRiskService(students, settings);
   const trends = makeTrendsService(students, serviceSessions, serviceAttendance, settings);
+  const lifegroupStats = makeLifegroupStatsService(students, lifegroups, lifegroupWeeks, lifegroupAttendance, serviceSessions, settings);
   const importService = makeImportService(students, serviceSessions, serviceAttendance, imports, settings, lifegroups, lifegroupWeeks, lifegroupAttendance, leaders);
   const settingsSvc = makeSettingsService(settings, audit);
   const account = makeAccountService(users);
@@ -182,7 +185,7 @@ export async function buildContainer(): Promise<Container> {
   );
 
   const services: Services = {
-    auth, student, leader, connection, overview, atRisk, trends,
+    auth, student, leader, connection, overview, atRisk, trends, lifegroupStats,
     importService, settings: settingsSvc, account, admin,
     users,
   };
