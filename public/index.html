@@ -782,7 +782,7 @@ async function _renderHomeInner() {
   const grpAvgWk = grpWeeks > 0 ? Math.round(grpAtt / grpWeeks) : 0;
 
   let body = `<div style="background:linear-gradient(135deg,#1e3a5f,#2d5a8a);color:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px">`;
-  body += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:18px;font-weight:800;line-height:1.1">👋 ${u.displayName}</div>${roleBadge(u)}</div>`;
+  body += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:18px;font-weight:800;line-height:1.1;display:flex;align-items:center;gap:7px">${icN('users')} ${u.displayName}</div>${roleBadge(u)}</div>`;
   body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><colgroup><col style="width:44%"><col style="width:28%"><col style="width:28%"></colgroup>`;
   body += `<thead><tr>
     <th style="font-size:8px;font-weight:700;opacity:.45;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:3px">This term</th>
@@ -829,7 +829,7 @@ async function _renderHomeInner() {
     }
     if (u.role === 'admin' && stats.ministryTotal === 0) {
       body += `<div class="first-run">
-        <h3>👋 Welcome — let's get started</h3>
+        <h3 style="display:flex;align-items:center;gap:8px">${icN('target')} Welcome — let's get started</h3>
         <div class="first-run-step"><div class="first-run-num">1</div><div><strong>Import attendance data</strong><br><span style="font-size:13px;color:var(--ink-mid)">Upload a CSV via <a onclick="go('import')" style="color:var(--accent-dark);cursor:pointer;text-decoration:underline">Import</a></span></div></div>
         <div class="first-run-step"><div class="first-run-num">2</div><div><strong>Add grade leaders</strong><br><span style="font-size:13px;color:var(--ink-mid)">Add them via <a onclick="go('leaders')" style="color:var(--accent-dark);cursor:pointer;text-decoration:underline">Leaders</a></span></div></div>
         <div class="first-run-step"><div class="first-run-num">3</div><div><strong>Connect students</strong><br><span style="font-size:13px;color:var(--ink-mid)">Assign students to leaders using the search picker</span></div></div>
@@ -852,7 +852,7 @@ async function _renderHomeInner() {
       body += '<div class="sh">Quick Actions</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">';
       for (const x of qa) {
         const warn = x.id === 'at-risk' && stats.atRiskTotal > 0;
-        body += `<button class="btn btn-secondary" style="justify-content:flex-start${warn ? ';border-color:var(--danger);color:var(--danger)' : ''}" onclick="go('${x.id}')">${x.icon} ${x.label}</button>`;
+        body += `<button class="btn btn-secondary" style="justify-content:flex-start${warn ? ';border-color:var(--danger);color:var(--danger)' : ''}" onclick="go('${x.id}')">${icS(x.ic)} ${x.label}</button>`;
       }
       body += '</div>';
     }
