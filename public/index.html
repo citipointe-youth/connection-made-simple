@@ -394,9 +394,9 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 const API = (() => {
   let _t = localStorage.getItem('yap_token') || null;
   const hdr = () => ({ 'Content-Type': 'application/json', ...(_t ? { Authorization: `Bearer ${_t}` } : {}) });
-  async function r(method, path, body) {
+  async function r(method, path, body, timeoutMs) {
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(new Error('Request timed out')), 20000);
+    const timer = setTimeout(() => ac.abort(new Error('Request timed out')), timeoutMs || 25000);
     try {
       const res = await fetch(path, { method, headers: hdr(), signal: ac.signal, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || e.error || res.statusText || 'Request failed'); }
@@ -417,7 +417,7 @@ const API = (() => {
       _inflight.set(p, promise);
       return promise;
     },
-    post: (p, b) => r('POST', p, b),
+    post: (p, b, timeoutMs) => r('POST', p, b, timeoutMs),
     patch: (p, b) => r('PATCH', p, b),
     del: (p) => r('DELETE', p),
   };
@@ -2526,7 +2526,7 @@ function processImport(file) {
     if (!rows.length) { statusEl.innerHTML = '<div class="alert al-err">No valid rows found</div>'; return; }
     statusEl.innerHTML = `<div class="alert al-info">Found ${rows.length} rows. Uploading…</div>`;
     try {
-      const result = await API.post('/import/csv', { rows, filename: file.name });
+      const result = await API.post('/import/csv', { rows, filename: file.name }, 90000);
       Cache.clear();
       statusEl.innerHTML = `<div class="alert al-ok" style="display:flex;align-items:center;gap:6px">${icS('check')} Import complete: ${result.studentsAdded} added, ${result.studentsUpdated} updated, ${result.sessionsAdded} sessions</div>`;
     } catch (err) { statusEl.innerHTML = `<div class="alert al-err">Import failed: ${err.message}</div>`; }
@@ -2589,7 +2589,7 @@ function processGroupImport(file) {
     const totalMembers = parsed.groups.reduce((n, g) => n + g.members.length, 0);
     statusEl.innerHTML = `<div class="alert al-info">Found ${parsed.groups.length} groups, ${totalMembers} members. Uploading…</div>`;
     try {
-      const result = await API.post('/import/group-csv', { groups: parsed.groups, filename: file.name });
+      const result = await API.post('/import/group-csv', { groups: parsed.groups, filename: file.name }, 90000);
       Cache.clear();
       statusEl.innerHTML = `<div class="alert al-ok" style="display:flex;align-items:center;gap:6px">${icS('check')} Import complete: ${result.groupsAdded} groups created, ${result.studentsAdded} students added, ${result.studentsUpdated} updated, ${result.weeksAdded} weeks</div>`;
     } catch (err) { statusEl.innerHTML = `<div class="alert al-err">Import failed: ${err.message}</div>`; }
