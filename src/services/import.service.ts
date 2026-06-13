@@ -212,7 +212,9 @@ export function makeImportService(
 
       let studentsAdded = 0;
       let studentsUpdated = 0;
-      const studentsToSave: Parameters<typeof studentRepo.save>[0][] = [];
+      // Map keyed by student ID — prevents duplicate-row errors when the CSV has the same
+      // student appearing more than once (ON CONFLICT cannot affect same row twice)
+      const studentsToSaveMap = new Map<string, Parameters<typeof studentRepo.save>[0]>();
       const attendanceRecords: Parameters<typeof attendanceRepo.saveMany>[0] = [];
 
       // Process all rows in memory — compute final svcAttended/svcTotal/atRiskStatus here
@@ -250,7 +252,7 @@ export function makeImportService(
             quad: computeQuad(row.grade ?? existing.grade, normalGender),
             updatedAt: now,
           };
-          studentsUpdated++;
+          if (!studentsToSaveMap.has(studentId)) studentsUpdated++;
         } else {
           const grade = row.grade ?? null;
           studentId = generateId();
@@ -307,9 +309,11 @@ export function makeImportService(
           svcRate !== null && svcRate < riskN / riskD ? 'atrisk' :
           svcRate !== null && svcRate < regN / regD ? 'declining' : 'regular';
 
-        studentsToSave.push({ ...baseStudent, svcAttended: finalAttended, svcTotal: finalTotal, atRiskStatus });
+        studentsToSaveMap.set(studentId, { ...baseStudent, svcAttended: finalAttended, svcTotal: finalTotal, atRiskStatus });
         studentByName.set(nameKey, { ...baseStudent, svcAttended: finalAttended, svcTotal: finalTotal, atRiskStatus });
       }
+
+      const studentsToSave = [...studentsToSaveMap.values()];
 
       // All writes — ordered to satisfy FKs, each step a single bulk SQL statement
       // 1. Import record first (service_sessions.import_id FK)
