@@ -3545,6 +3545,18 @@ function buildDeck(){
     return '<div class="tiles">'+tile(risingN,'Rising connections')+tile(k.decisions,'Decisions recorded')+tile(teamN,'Student Team')+(strongLg?tile(strongLg.va,'Visits/active — top cohort: '+strongLg.name):'')+'</div>';
   };
   const bigNumViz=(num,cap)=>'<div class="bignum"><b>'+num+'</b><span>'+esc(cap)+'</span></div>';
+  const quadFunnelViz=()=>{
+    const QUADS=[['g79','Girls Yr 7–9'],['b79','Boys Yr 7–9'],['g1012','Girls Yr 10–12'],['b1012','Boys Yr 10–12']];
+    const RLBL=['First contact','Came to Friday','Regular','In a lifegroup','Student Team'];
+    const cells=QUADS.map(([q,ql])=>{
+      const qp=m.people.filter(p=>p.s&&p.s.quad===q);
+      if(!qp.length)return '<div class="qfcell"><div class="qfl">'+esc(ql)+'</div><p class="muted" style="font-size:.82rem">No data</p></div>';
+      const max=Math.max(1,qp.filter(p=>p.stage>=1).length);
+      const rows=[1,2,3,4,5].map((n,i)=>{const v=qp.filter(p=>p.stage>=n).length;const w=Math.max(4,Math.round(v/max*100));return '<div class="qfrow"><span class="qflb">'+esc(RLBL[i])+'</span><span class="qftrack"><span class="qfbar" style="width:'+w+'%"></span></span><b class="qfval">'+v+'</b></div>';}).join('');
+      return '<div class="qfcell"><div class="qfl">'+esc(ql)+'</div>'+rows+'</div>';
+    }).join('');
+    return '<div class="qfgrid">'+cells+'</div>';
+  };
   const slides=[
     {cls:'cover',
       kicker:dateStr+' · '+N+' people tracked · live platform data + 3 uploads',
@@ -3580,6 +3592,16 @@ function buildDeck(){
       objections:[
         {q:'Some of those first contacts were never really ours to keep.',a:'True — not every visitor is a prospect. That is exactly why we measure the step-to-step conversion, not just the raw top number.'},
         {q:'Should Student Team not be small? Why is the top narrow?',a:'A narrow top is healthy here — leadership should be selective. Our concern is the middle, not the peak.'}
+      ]},
+    {kicker:'Situation — by quad',
+      title:'The same ladder, split across all four groups',
+      core:'Each quad tells a different story. Spot which group is strongest at each rung — and which needs the most support.',
+      body:quadFunnelViz(),
+      notes:'Let the audience scan across the four panels quietly. Resist narrating every number — the visual does the work. If one quad is clearly weaker, name it now; if a quad is punching above its weight, celebrate it. The actionable question is always: what is different about the strong quad that the weak quad could adopt?',
+      vizSuggest:['Four mini-funnels in a 2×2 grid, one per quad, colour-coded by quad','Highlight the single weakest rung in each panel with a red bar'],
+      objections:[
+        {q:'Are these groups even comparable? They have different sizes.',a:'Exactly right — the bars are scaled within each panel so you are comparing shape (where the drop-off happens) not raw headcount. The absolute numbers are printed on the right.'},
+        {q:'Why split by quad and not by grade?',a:'Quads are the ministry\'s natural pastoral unit — each has a dedicated leader. Grade-level breakdowns exist in the platform for deeper drill-down.'}
       ]},
     {kicker:'Complication',
       title:dropPct+'% never cross '+Lfrom+' → '+Lto,
@@ -3716,6 +3738,14 @@ function buildDeck(){
     +'.lgt th,.lgt td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;}'
     +'.lgt th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}'
     +'.lgt .r{text-align:right;} .lgt .up{color:var(--ok);font-weight:700;} .lgt .down{color:var(--warn);font-weight:700;} .lgt .flat{color:var(--muted);}'
+    +'.qfgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0;}'
+    +'.qfcell{background:#f5f8fd;border-radius:10px;padding:10px 13px;}'
+    +'.qfl{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--blue);margin-bottom:7px;}'
+    +'.qfrow{display:grid;grid-template-columns:minmax(80px,1.5fr) 4fr auto;align-items:center;gap:7px;margin-bottom:4px;}'
+    +'.qflb{font-size:.75rem;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+    +'.qftrack{background:#e2e8f0;border-radius:5px;height:14px;overflow:hidden;}'
+    +'.qfbar{display:block;height:100%;background:#2563eb;border-radius:5px;}'
+    +'.qfval{font-size:.8rem;font-weight:800;}'
     +'.vizwrap{margin:6px 0;} .spark{width:100%;max-width:680px;height:auto;display:block;}'
     +'.vcap{font-size:.8rem;color:var(--muted);margin-top:6px;}'
     +'.pnotes{display:none;}'
