@@ -262,8 +262,8 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 /* Top-anchored, keyboard-safe picker: a flex column whose middle list scrolls so
    the search stays at the top and the Done button stays visible at the bottom.
    The box height is pinned to the visible viewport in JS (_sizePicker). */
-.mo.mo-top{align-items:flex-start}
-.mo-box.pflex{display:flex;flex-direction:column;border-radius:0 0 18px 18px}
+.mo.mo-top{align-items:flex-start;padding-top:max(env(safe-area-inset-top,0px),34px)}
+.mo-box.pflex{display:flex;flex-direction:column;border-radius:18px;margin:0 8px}
 .mo-box.pflex .mo-handle,.mo-box.pflex .mo-title,.mo-box.pflex .picker-search,.mo-box.pflex .picker-done{flex:0 0 auto}
 .mo-box.pflex #picker-list{flex:1 1 auto;min-height:0}
 .picker-done{padding-top:10px;margin-top:4px;border-top:1px solid var(--paper-dark)}
@@ -471,10 +471,22 @@ function closeModal() { const r = document.getElementById('modal-root'); if (r._
 // setApp updates only the <main id="page-main"> when the persistent shell is
 // in place, falling back to a full #app replacement (login page, first render).
 let _shellReady = false;
+let _lastRenderedPage = null;
 function setApp(h) {
   const main = document.getElementById('page-main');
-  if (_shellReady && main) { main.innerHTML = h; window.scrollTo(0, 0); _updateNavActive(); }
-  else document.getElementById('app').innerHTML = h;
+  if (_shellReady && main) {
+    // Preserve the scroll position when re-rendering the SAME page (e.g. opening a
+    // dropdown), but reset to the top when navigating to a different page. The
+    // window is the scroller, not .pg.
+    const keepY = (S.page === _lastRenderedPage) ? (window.scrollY || 0) : 0;
+    main.innerHTML = h;
+    window.scrollTo(0, keepY);
+    _lastRenderedPage = S.page;
+    _updateNavActive();
+  } else {
+    document.getElementById('app').innerHTML = h;
+    _lastRenderedPage = S.page;
+  }
 }
 
 function _updateNavActive() {
@@ -798,20 +810,25 @@ function _hScopeSvcSess(trends, u) {
   if (u.role === 'grade') { const g = (trends.byGrade || []).find(x => x.grade === u.grade); return g && g.sessions ? g.sessions.length : 0; }
   return trends.ministry && trends.ministry.sessions ? trends.ministry.sessions.length : 0;
 }
-function _hGradeMini(label, studs, avgWk) {
-  const uniq = studs.filter(s => s.svcAttended > 0).length;
-  return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--paper-dark)">
-    <div style="width:42px;font-size:11px;font-weight:700;color:var(--ink-mid)">${label}</div>
-    <div style="flex:1"><span style="font-size:14px;font-weight:800">${uniq}</span><span style="font-size:9px;color:var(--ink-faint);margin-left:4px">uniq</span></div>
-    <div><span style="font-size:14px;font-weight:800">${avgWk}</span><span style="font-size:9px;color:var(--ink-faint);margin-left:4px">avg/wk</span></div>
+function _hGradeMini(label, studs, avgWk, gLg) {
+  const sUniq = studs.filter(s => s.svcAttended > 0).length;
+  const gUniq = studs.filter(s => s.grpAttended > 0).length;
+  const gAvg = gLg ? gLg.current.avgPerWeek : 0;
+  const cell = (v, lbl) => `<div style="text-align:center"><span style="font-size:13px;font-weight:800">${v}</span><div style="font-size:8px;color:var(--ink-faint);text-transform:uppercase">${lbl}</div></div>`;
+  return `<div style="padding:5px 0;border-top:1px solid var(--paper-dark)">
+    <div style="font-size:11px;font-weight:700;color:var(--ink-mid);margin-bottom:3px">${label}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px">
+      ${cell(sUniq,'Svc uniq')}${cell(avgWk,'Svc/wk')}${cell(gUniq,'Grp uniq')}${cell(gAvg,'Grp/wk')}
+    </div>
   </div>`;
 }
 function _hAttTile(label, studs, avgWk, opts) {
   opts = opts || {};
   const svcUniq = studs.filter(s => s.svcAttended > 0).length;
-  const grpEnr = studs.filter(s => s.grpTotal > 0);
   const grpUniq = studs.filter(s => s.grpAttended > 0).length;
-  const grpAvg = grpEnr.length ? Math.round(grpEnr.reduce((a, s) => a + s.grpAttended, 0) / grpEnr.length) : 0;
+  // Group average = individuals from this scope attending a lifegroup each week
+  // (avg/wk), supplied from /lifegroups/stats; falls back to 0 if absent.
+  const grpAvg = (opts.grpAvgWk != null) ? opts.grpAvgWk : 0;
   const chev = (opts.chev !== undefined)
     ? `<span style="display:inline-block;transition:transform .2s;transform:rotate(${opts.chev ? '90' : '0'}deg);color:var(--ink-faint);font-weight:800">›</span>` : '';
   let h = `<div class="qcard" style="${opts.span ? 'grid-column:1/-1;max-width:480px;width:100%;' : ''}${opts.click ? 'cursor:pointer;' : ''}padding:11px"${opts.click ? ` onclick="${opts.click}"` : ''}>`;
@@ -824,7 +841,7 @@ function _hAttTile(label, studs, avgWk, opts) {
   h += `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center">
     <div style="font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px;opacity:.8">Groups</div>
     <div style="text-align:center;background:rgba(0,0,0,.04);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800;opacity:.8">${grpUniq}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
-    <div style="text-align:center;background:rgba(0,0,0,.04);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800;opacity:.8">${grpAvg}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Avg/grp</div></div>
+    <div style="text-align:center;background:rgba(0,0,0,.04);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800;opacity:.8">${grpAvg}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Avg/wk</div></div>
   </div>`;
   if (opts.gradeRows) h += opts.gradeRows;
   h += '</div>';
@@ -843,16 +860,20 @@ async function renderHome() {
 }
 async function _renderHomeInner() {
   const u = S.user;
-  let stats, trends, sc = [], lgStats = null;
+  let stats, trends, sc = [], lgStats = null, conns = [];
   try {
-    [stats, trends, sc, lgStats] = await Promise.all([
+    [stats, trends, sc, lgStats, conns] = await Promise.all([
       API.get('/overview').catch(() => null),
       API.get('/trends').catch(() => null),
       API.get('/students').catch(() => []),
       API.get('/lifegroups/stats').catch(() => null),
+      API.get('/connections').catch(() => []),
     ]);
   } catch {}
   sc = sc || [];
+  const _connSet = new Set((conns || []).map(a => a.studentId));
+  const _lgQuad = q => (lgStats && lgStats.byQuad || []).find(x => x.quad === q);
+  const _lgGrade = g => (lgStats && lgStats.byGrade || []).find(x => x.grade === g);
 
   // ── Hero card: welcome + attendance summary (current + previous term) ──
   const svcUniq = sc.filter(s => s.svcAttended > 0).length;
@@ -947,13 +968,14 @@ async function _renderHomeInner() {
           for (const q of vq) {
             const open = _homeQuadOpen === q.quad;
             const qStud = sc.filter(s => s.quad === q.quad);
+            const qLg = _lgQuad(q.quad);
             let gradeRows = '';
             if (open) {
               gradeRows = '<div style="margin-top:8px">';
-              for (const gr of _hQuadGrades(q.quad)) gradeRows += _hGradeMini('Yr ' + gr, qStud.filter(s => s.grade === gr), _hGradeAvg(trends, gr));
+              for (const gr of _hQuadGrades(q.quad)) gradeRows += _hGradeMini('Yr ' + gr, qStud.filter(s => s.grade === gr), _hGradeAvg(trends, gr), _lgGrade(gr));
               gradeRows += '</div>';
             }
-            body += _hAttTile(q.label, qStud, _hQuadAvg(trends, q.quad), { click: `toggleHomeQuad('${q.quad}')`, chev: open, span: open, gradeRows });
+            body += _hAttTile(q.label, qStud, _hQuadAvg(trends, q.quad), { click: `toggleHomeQuad('${q.quad}')`, chev: open, span: open, gradeRows, grpAvgWk: qLg ? qLg.current.avgPerWeek : 0 });
           }
           body += '</div>';
         }
@@ -961,7 +983,7 @@ async function _renderHomeInner() {
       // Quad: Attendance by Grade tiles (their bracket)
       if (u.role === 'quad') {
         body += '<div class="sh">Attendance by Grade</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">';
-        for (const gr of _hQuadGrades(u.quad)) body += _hAttTile('Yr ' + gr, sc.filter(s => s.grade === gr), _hGradeAvg(trends, gr));
+        for (const gr of _hQuadGrades(u.quad)) { const gLg = _lgGrade(gr); body += _hAttTile('Yr ' + gr, sc.filter(s => s.grade === gr), _hGradeAvg(trends, gr), { grpAvgWk: gLg ? gLg.current.avgPerWeek : 0 }); }
         body += '</div>';
       }
       // ── Lifegroup Attendance (current term only on Home) ──
@@ -996,7 +1018,30 @@ async function _renderHomeInner() {
       }
 
       // Connection by Grade bars
-      if (['admin', 'director', 'quad'].includes(u.role) && stats.byGrade) {
+      if (['admin', 'director'].includes(u.role)) {
+        // Director/admin: each grade row split into girls (left) and boys (right).
+        const grades = [7,8,9,10,11,12].filter(gr => sc.some(s => s.grade === gr));
+        if (grades.length) {
+          const half = (list) => {
+            const tot = list.length, con = list.filter(s => _connSet.has(s.id)).length;
+            const pct = tot ? Math.round(con / tot * 100) : 0;
+            return `<div style="flex:1"><div class="pb"><div class="pb-f ${pct >= 80 ? 'fill-g' : pct >= 50 ? 'fill-a' : 'fill-r'}" style="width:${pct}%"></div></div>
+              <div style="font-size:11px;color:var(--ink-mid);text-align:right">${con}/${tot} (${pct}%)</div></div>`;
+          };
+          body += '<div class="sh">Connection by Grade</div><div class="card" style="padding:12px">';
+          body += `<div style="display:flex;align-items:center;gap:12px;padding-bottom:4px;font-size:10px;font-weight:800;color:var(--ink-faint);text-transform:uppercase">
+            <div style="width:54px"></div><div style="flex:1;text-align:center">♀ Girls</div><div style="flex:1;text-align:center">♂ Boys</div></div>`;
+          for (const gr of grades) {
+            const girls = sc.filter(s => s.grade === gr && s.gender === 'female');
+            const boys = sc.filter(s => s.grade === gr && s.gender === 'male');
+            body += `<div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--paper-dark)">
+              <div style="width:54px;font-size:13px;font-weight:700">Gr ${gr}</div>
+              ${half(girls)}${half(boys)}
+            </div>`;
+          }
+          body += '</div>';
+        }
+      } else if (u.role === 'quad' && stats.byGrade) {
         const vg = stats.byGrade.filter(g => g.totalStudents > 0);
         if (vg.length) {
           body += '<div class="sh">Connection by Grade</div><div class="card" style="padding:12px">';
@@ -1401,9 +1446,13 @@ function openStudentPicker(leaderId, leaderGender, leaderName) {
 function _sizePicker() {
   const box = document.querySelector('.mo-box.pflex');
   if (!box) return;
+  // Leave ~1cm clear at the top (under the Dynamic Island / notch — the overlay's
+  // padding-top handles that) and ~1cm at the bottom, and keep the box inside the
+  // visible viewport so the keyboard never covers the list or the Done button.
   const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-  box.style.height = Math.round(vh - 6) + 'px';
-  box.style.maxHeight = Math.round(vh - 6) + 'px';
+  const h = Math.round(vh - 68);
+  box.style.height = h + 'px';
+  box.style.maxHeight = h + 'px';
 }
 function _setupPickerSize() {
   if (window.visualViewport) {
@@ -2397,8 +2446,6 @@ async function renderTrends() {
     <button class="tbbtn ${_trTab==='grp'?'on':''}" onclick="_trTab='grp';_trGradeOpen=null;_trQuadOpen=null;renderTrends()">Lifegroups</button>
   </div>`;
 
-  const _scrollY = document.querySelector('.pg')?.scrollTop || 0;
-
   // Term label for the "this term" sub-heading (uses the trends term range).
   const _curTerm = trends && trends.terms && trends.terms.current;
   const _termNote = _curTerm ? `${fmtDM(_curTerm.startDate)} – ${fmtDM(_curTerm.endDate)}` : 'this term';
@@ -2547,7 +2594,6 @@ async function renderTrends() {
   }
 
   setApp(shell(body));
-  requestAnimationFrame(() => { const pg = document.querySelector('.pg'); if (pg) pg.scrollTop = _scrollY; });
 }
 
 async function exportTrendsCSV() {
