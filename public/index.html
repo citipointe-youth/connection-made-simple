@@ -599,6 +599,13 @@ function phoneLink(raw) {
   if (!raw) return '';
   return `<a onclick="callPhone('${String(raw).replace(/['\\]/g, '')}')" style="color:var(--accent-dark);font-weight:700;cursor:pointer;text-decoration:none">${fmtPhone(raw)}</a>`;
 }
+// A student is "rising" if their service OR lifegroup rate improved by >=5
+// points vs last term (needs data in both terms to judge).
+function isRising(s) {
+  const up = (a, t, pa, pt) => (t > 0 && pt > 0) && ((a / t) - (pa / pt) >= 0.05);
+  return up(s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)
+      || up(s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal);
+}
 // "This term / last term" attendance line for service or groups.
 function termRow(label, curA, curT, prevA, prevT) {
   const cp = curT > 0 ? Math.round(curA / curT * 100) : null;
@@ -1954,14 +1961,24 @@ function restoreArFilter() {
 
 async function renderAtRisk() {
   setApp(shell('<div class="loading"><div class="spin"></div></div>'));
-  let list=[];
+  let list=[], allStu=[];
   try {
     const params = new URLSearchParams();
     if (_arFilter.grade) params.set('grade', _arFilter.grade);
     if (_arFilter.gender) params.set('gender', _arFilter.gender);
-    list = await API.get(`/at-risk${params.toString()?'?'+params.toString():''}`);
+    [list, allStu] = await Promise.all([
+      API.get(`/at-risk${params.toString()?'?'+params.toString():''}`),
+      API.get('/students').catch(() => []),
+    ]);
   } catch {}
   const u = S.user;
+
+  // Rising = students improving vs last term (the /students list is role-scoped;
+  // apply the same grade/gender filters as the at-risk view).
+  let rising = (allStu || []).filter(isRising);
+  if (_arFilter.grade) rising = rising.filter(s => s.grade == _arFilter.grade);
+  if (_arFilter.gender) rising = rising.filter(s => s.gender === _arFilter.gender);
+  rising.sort((a, b) => (a.firstName || '').localeCompare(b.firstName || ''));
 
   // Scoped filter chips — match demo behaviour
   const arGrades = u.role==='grade' ? [] : u.role==='quad'
@@ -1993,8 +2010,38 @@ async function renderAtRisk() {
       <button class="fc ${!_arFilter.gender?'on':''}" onclick="setArFilter('gender',null)">All</button></div>`;
   }
 
+  // ── Rising (improving vs last term) — collapsible card at the very top ──
+  if (rising.length) {
+    let rcards = '';
+    for (const s of rising) {
+      rcards += `
+        <div class="li" style="cursor:pointer;align-items:flex-start" onclick="showStudentDetail('${s.id}')">
+          <div class="li-body">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span class="li-title">${s.firstName} ${s.lastName}</span>
+              <span class="chip" style="background:#d1fae5;color:#065f46;display:inline-flex;align-items:center;gap:3px">${icS('arru')} Rising</span> ${quadChip(s.quad)}
+            </div>
+            <div class="li-sub" style="margin-top:3px">Gr ${s.grade||'—'} · ${s.gender}</div>
+            ${termRow('Service', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
+            ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
+          </div>
+          <div class="li-right" style="color:var(--ink-faint)">›</div>
+        </div>`;
+    }
+    body += `<div class="card" style="margin-bottom:12px;border-left:4px solid var(--success)">
+      <div onclick="toggleArSection('rising')" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px 16px;user-select:none">
+        <span id="ar-chev-rising" style="display:inline-flex;color:var(--ink-mid)">${icS('chevr')}</span>
+        <strong style="color:#065f46;display:inline-flex;align-items:center;gap:4px">${icS('arru')} Rising</strong>
+        <span class="badge" style="margin-left:auto">${rising.length}</span>
+      </div>
+      <div id="ar-body-rising" style="display:none;padding:0 12px 12px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">${rcards}</div>
+      </div>
+    </div>`;
+  }
+
   if (!list.length) {
-    body += `<div class="empty">${icEmpty('check')}<div class="empty-title">No at-risk students</div><div class="empty-sub">Great news — attendance looks healthy</div></div>`;
+    body += `<div class="empty">${icEmpty('check')}<div class="empty-title">No at-risk students</div><div class="empty-sub">${rising.length?'Some students are rising — see above.':'Great news — attendance looks healthy'}</div></div>`;
   } else {
     const groups = { declining:[], atrisk:[], stopped:[], watch:[] };
     for (const s of list) if (groups[s.status]) groups[s.status].push(s);
