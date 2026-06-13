@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "toolbar": false,
   "functions": {
     "api/index.ts": {
       "maxDuration": 30
