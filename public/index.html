@@ -36,13 +36,14 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 #app{display:flex;flex-direction:column;min-height:100vh}
 
 /* Header */
-.hdr{background:linear-gradient(135deg,var(--navy) 0%,#1a3a6b 100%);color:#fff;padding:var(--safe-t) 16px 0;height:calc(56px + var(--safe-t));box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(18,35,59,.25)}
+.hdr{background:linear-gradient(135deg,var(--navy) 0%,#1a3a6b 100%);color:#fff;padding:var(--safe-t) 16px 0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(18,35,59,.25)}
 .hdr h1{font-size:17px;font-weight:800;letter-spacing:-.3px}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;height:56px}
 .hdr-meta{display:flex;align-items:center;gap:10px}
 .role-badge{background:rgba(255,255,255,.18);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;text-transform:uppercase;white-space:nowrap}
 .btn-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.15);color:#fff;cursor:pointer;flex-shrink:0}
 .btn-icon:hover{background:rgba(255,255,255,.25)}
-@media(min-width:768px){.hdr{padding:0 28px;height:64px}.hdr h1{font-size:20px}}
+@media(min-width:768px){.hdr{padding:0 28px}.hdr-top{height:56px}.hdr h1{font-size:20px}}
 
 /* SVG icons */
 .ic-n,.ic-s,.ic-lg{display:inline-block;vertical-align:middle;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -50,12 +51,13 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .ic-s{width:16px;height:16px}
 .ic-lg{width:32px;height:32px}
 
-/* Desktop nav */
+/* Desktop nav — wraps to max 2 rows; labels hidden below 1024px (icon-only) */
 .desk-nav{display:none}
-@media(min-width:768px){.desk-nav{display:flex;gap:4px}}
-.desk-nav a{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;color:rgba(255,255,255,.75);cursor:pointer;transition:all .15s}
+@media(min-width:768px){.desk-nav{display:flex;flex-wrap:wrap;gap:4px;padding:4px 0 10px;max-height:72px;overflow:hidden}}
+.desk-nav a{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;color:rgba(255,255,255,.75);cursor:pointer;transition:all .15s;white-space:nowrap}
 .desk-nav a.on,.desk-nav a:hover{background:rgba(255,255,255,.2);color:#fff}
 .desk-nav .ic-n{width:16px;height:16px}
+@media(min-width:768px) and (max-width:1023px){.desk-nav .nav-lbl{display:none}.desk-nav a{padding:6px 10px}}
 
 /* Bottom nav */
 .bot-nav{display:flex;background:var(--paper-card);border-top:1px solid var(--line);padding:6px 0 calc(6px + var(--safe-b));position:sticky;bottom:0;z-index:100;box-shadow:0 -2px 8px rgba(18,35,59,.06)}
@@ -480,16 +482,18 @@ function _initShell() {
   if (!u) return;
   const items = navItems();
   const bn = bottomNavItems();
-  const dlinks = items.map(it => `<a data-nav-page="${it.id}" onclick="go('${it.id}')">${icN(it.ic)} ${it.label}</a>`).join('');
+  const dlinks = items.map(it => `<a data-nav-page="${it.id}" onclick="go('${it.id}')">${icN(it.ic)}<span class="nav-lbl"> ${it.label}</span></a>`).join('');
   const mlinks = bn.map(it => `<a data-nav-page="${it.id}" onclick="go('${it.id}')">${icN(it.ic)}<span>${it.mbl||it.label}</span></a>`).join('');
   document.getElementById('app').innerHTML = `
     <div class="hdr">
-      <h1>Youth Connection</h1>
-      <div class="hdr-meta">
-        <nav class="desk-nav">${dlinks}</nav>
-        ${roleBadge(u)}
-        <div class="btn-icon" onclick="doLogout()" title="Sign out" aria-label="Sign out">${icN('logout')}</div>
+      <div class="hdr-top">
+        <h1>Youth Connection</h1>
+        <div class="hdr-meta">
+          ${roleBadge(u)}
+          <div class="btn-icon" onclick="doLogout()" title="Sign out" aria-label="Sign out">${icN('logout')}</div>
+        </div>
       </div>
+      <nav class="desk-nav">${dlinks}</nav>
     </div>
     <main id="page-main" class="pg"></main>
     <nav class="bot-nav">${mlinks}</nav>`;
@@ -2398,21 +2402,51 @@ async function renderImport() {
     </div>`;
 
   if (history.length) {
-    body += '<div class="sh">Import History</div>';
-    for (const h of history.slice(0, 10)) {
+    const canClearAll = S.user && S.user.role === 'admin';
+    body += `<div class="sh" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Import History</span>
+      ${canClearAll ? `<button class="btn btn-sm btn-ghost" style="color:var(--danger);font-size:12px" onclick="clearAllImportHistory()">Clear All</button>` : ''}
+    </div>`;
+    for (const h of history) {
       const d = new Date(h.importedAt);
       const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-      body += `<div class="li" style="cursor:default">
+      body += `<div class="li" style="cursor:default" id="ih-${h.id}">
         <div class="li-body">
           <div class="li-title">${h.filename}</div>
           <div class="li-sub">${dateStr} · ${h.rowCount} rows · ${h.studentsAdded} added, ${h.studentsUpdated} updated, ${h.sessionsAdded} sessions</div>
         </div>
-        <span class="chip ${h.status==='ok'?'c-success':'c-danger'}">${h.status}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="chip ${h.status==='ok'?'c-success':'c-danger'}">${h.status}</span>
+          <button class="icon-btn" style="color:var(--ink-faint)" title="Delete" onclick="deleteImportEntry('${h.id}')">${icS('trash')}</button>
+        </div>
       </div>`;
     }
   }
 
   setApp(shell(body));
+}
+
+async function deleteImportEntry(id) {
+  if (!confirm('Delete this import record?')) return;
+  try {
+    await API.del(`/import/history/${id}`);
+    Cache.clear();
+    const el = document.getElementById(`ih-${id}`);
+    if (el) el.remove();
+  } catch (e) {
+    alert('Failed to delete: ' + (e.message || e));
+  }
+}
+
+async function clearAllImportHistory() {
+  if (!confirm('Delete all import history records? This cannot be undone.')) return;
+  try {
+    await API.del('/import/history');
+    Cache.clear();
+    await renderImport();
+  } catch (e) {
+    alert('Failed to clear history: ' + (e.message || e));
+  }
 }
 
 // ── XLSX READER (no library — uses the browser's native DecompressionStream) ──

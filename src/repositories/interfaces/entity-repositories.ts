@@ -23,6 +23,7 @@ export interface IStudentRepository extends IRepository<Student> {
   findByGrade(grade: number): Promise<Student[]>;
   findByGender(gender: string): Promise<Student[]>;
   search(query: string): Promise<Student[]>;
+  saveMany(students: Student[]): Promise<void>;
 }
 
 export interface ILeaderRepository extends IRepository<Leader> {
@@ -40,6 +41,7 @@ export interface IConnectionRepository extends IRepository<Connection> {
 export interface IServiceSessionRepository extends IRepository<ServiceSession> {
   findByImport(importId: string): Promise<ServiceSession[]>;
   findValid(): Promise<ServiceSession[]>;
+  saveMany(sessions: ServiceSession[]): Promise<void>;
 }
 
 export interface IServiceAttendanceRepository {
@@ -56,6 +58,7 @@ export interface ILifegroupRepository extends IRepository<Lifegroup> {}
 
 export interface ILifegroupWeekRepository extends IRepository<LifegroupWeek> {
   findByImport(importId: string): Promise<LifegroupWeek[]>;
+  saveMany(weeks: LifegroupWeek[]): Promise<void>;
 }
 
 export interface ILifegroupAttendanceRepository {

@@ -154,6 +154,33 @@ export class SupabaseServiceSessionRepository implements IServiceSessionReposito
     return toServiceSession(rows[0]!);
   }
 
+  async saveMany(sessions: ServiceSession[]): Promise<void> {
+    if (sessions.length === 0) return;
+    await this.sql`
+      insert into service_sessions ${this.sql(
+        sessions.map((s) => ({
+          id:               s.id,
+          import_id:        s.importId,
+          session_date:     s.sessionDate,
+          session_name:     s.sessionName,
+          is_regular:       s.isRegular,
+          is_valid:         s.isValid,
+          total_attendance: s.totalAttendance,
+          sort_order:       s.sortOrder,
+          created_at:       s.createdAt,
+        })),
+      )}
+      on conflict (id) do update set
+        import_id        = excluded.import_id,
+        session_date     = excluded.session_date,
+        session_name     = excluded.session_name,
+        is_regular       = excluded.is_regular,
+        is_valid         = excluded.is_valid,
+        total_attendance = excluded.total_attendance,
+        sort_order       = excluded.sort_order
+    `;
+  }
+
   async delete(id: string): Promise<boolean> {
     const rows = await this.sql`delete from service_sessions where id = ${id} returning id`;
     return rows.length > 0;
@@ -319,6 +346,28 @@ export class SupabaseLifegroupWeekRepository implements ILifegroupWeekRepository
       returning *
     `;
     return toLifegroupWeek(rows[0]!);
+  }
+
+  async saveMany(weeks: LifegroupWeek[]): Promise<void> {
+    if (weeks.length === 0) return;
+    await this.sql`
+      insert into lifegroup_weeks ${this.sql(
+        weeks.map((w) => ({
+          id:        w.id,
+          import_id: w.importId,
+          week_num:  w.weekNum,
+          week_key:  w.weekKey,
+          week_start: w.weekStart,
+          week_end:  w.weekEnd ?? null,
+        })),
+      )}
+      on conflict (id) do update set
+        import_id  = excluded.import_id,
+        week_num   = excluded.week_num,
+        week_key   = excluded.week_key,
+        week_start = excluded.week_start,
+        week_end   = excluded.week_end
+    `;
   }
 
   async delete(id: string): Promise<boolean> {

@@ -28,5 +28,19 @@ export function makeImportController(deps: { importService: ImportService }) {
       if (!req.ctx) throw new UnauthorizedError();
       return deps.importService.listHistory(req.ctx);
     },
+
+    async deleteImport(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      const id = req.params?.['id'];
+      if (!id) throw new UnauthorizedError();
+      await deps.importService.deleteImport(req.ctx, id);
+      return { ok: true };
+    },
+
+    async clearHistory(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      await deps.importService.clearHistory(req.ctx);
+      return { ok: true };
+    },
   };
 }

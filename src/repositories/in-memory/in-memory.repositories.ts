@@ -88,6 +88,11 @@ export class InMemoryStudentRepository
       .slice(0, 50)
       .map((s) => this.clone(s));
   }
+
+  async saveMany(students: Student[]): Promise<void> {
+    for (const s of students) this.store.set(s.id, this.clone(s));
+    await this.writeToPersistence();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +179,11 @@ export class InMemoryServiceSessionRepository
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((s) => this.clone(s));
   }
+
+  async saveMany(sessions: ServiceSession[]): Promise<void> {
+    for (const s of sessions) this.store.set(s.id, this.clone(s));
+    await this.writeToPersistence();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +265,11 @@ export class InMemoryLifegroupWeekRepository
     return Array.from(this.store.values())
       .filter((w) => w.importId === importId)
       .map((w) => this.clone(w));
+  }
+
+  async saveMany(weeks: LifegroupWeek[]): Promise<void> {
+    for (const w of weeks) this.store.set(w.id, this.clone(w));
+    await this.writeToPersistence();
   }
 }
 

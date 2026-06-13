@@ -79,6 +79,8 @@ export interface ImportService {
   importServiceCsv(actor: Actor, rows: unknown[], filename: string): Promise<ImportResult>;
   importGroupCsv(actor: Actor, payload: unknown, filename: string): Promise<GroupImportResult>;
   listHistory(actor: Actor): Promise<ImportHistoryEntry[]>;
+  deleteImport(actor: Actor, id: string): Promise<void>;
+  clearHistory(actor: Actor): Promise<void>;
 }
 
 function parseGroupName(name: string): { grade: number | null; gender: 'male' | 'female' | null } {
@@ -295,7 +297,7 @@ export function makeImportService(
         studentByName.set(nameKey, { ...baseStudent, svcAttended: finalAttended, svcTotal: finalTotal, atRiskStatus });
       }
 
-      // All writes — ordered to satisfy FKs, parallelised where possible
+      // All writes — ordered to satisfy FKs, each step a single bulk SQL statement
       // 1. Import record first (service_sessions.import_id FK)
       await importRepo.save({
         id: importId, type: 'service', filename, fileHash: '',
@@ -303,11 +305,9 @@ export function makeImportService(
         status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id,
       });
 
-      // 2. Sessions + students in parallel (attendance depends on both existing)
-      await Promise.all([
-        ...sessionsToCreate.map((s) => sessionRepo.save(s)),
-        ...studentsToSave.map((s) => studentRepo.save(s)),
-      ]);
+      // 2. Sessions + students — each a single bulk INSERT ... ON CONFLICT DO UPDATE
+      await sessionRepo.saveMany(sessionsToCreate);
+      await studentRepo.saveMany(studentsToSave);
 
       // 3. Attendance (depends on sessions + students)
       await attendanceRepo.saveMany(attendanceRecords);
@@ -485,7 +485,7 @@ export function makeImportService(
         updatedAt: now,
       }));
 
-      // All writes — ordered to satisfy FKs, parallelised where possible
+      // All writes — ordered to satisfy FKs, each step a single bulk SQL statement
       // 1. Import record first (lifegroup_weeks.import_id FK)
       await importRepo.save({
         id: importId, type: 'lifegroup', filename, fileHash: '',
@@ -493,13 +493,10 @@ export function makeImportService(
         status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id,
       });
 
-      // 2. New lifegroups + weeks + students in parallel
-      //    (attendance depends on all three existing)
-      await Promise.all([
-        ...newLifegroups.map((g) => lifegroupRepo.save(g)),
-        ...weeksToCreate.map((w) => lifegroupWeekRepo.save(w)),
-        ...studentsToSave.map((s) => studentRepo.save(s)),
-      ]);
+      // 2. New lifegroups (few, individual saves fine); then bulk weeks + students
+      for (const g of newLifegroups) await lifegroupRepo.save(g);
+      await lifegroupWeekRepo.saveMany(weeksToCreate);
+      await studentRepo.saveMany(studentsToSave);
 
       // 3. Attendance (depends on lifegroups + weeks + students)
       if (allAttendanceRecords.length > 0) {
@@ -514,6 +511,17 @@ export function makeImportService(
       });
 
       return { importId, type: 'lifegroup', rowCount, groupsAdded, studentsAdded, studentsUpdated, weeksAdded };
+    },
+
+    async deleteImport(actor, id) {
+      assertCan(actor, 'import:run');
+      await importRepo.delete(id);
+    },
+
+    async clearHistory(actor) {
+      assertCan(actor, 'admin:manage');
+      const all = await importRepo.findAll();
+      for (const r of all) await importRepo.delete(r.id);
     },
   };
 }

@@ -138,6 +138,59 @@ export class SupabaseStudentRepository implements IStudentRepository {
     return toStudent(rows[0]!);
   }
 
+  async saveMany(students: Student[]): Promise<void> {
+    if (students.length === 0) return;
+    await this.sql`
+      insert into students ${this.sql(
+        students.map((s) => ({
+          id:                s.id,
+          first_name:        s.firstName,
+          last_name:         s.lastName,
+          gender:            s.gender,
+          grade:             s.grade ?? null,
+          quad:              s.quad ?? null,
+          mobile:            s.mobile ?? null,
+          parent_phone:      s.parentPhone ?? null,
+          date_of_birth:     s.dateOfBirth ?? null,
+          svc_attended:      s.svcAttended,
+          svc_total:         s.svcTotal,
+          grp_attended:      s.grpAttended,
+          grp_total:         s.grpTotal,
+          grp_met_weeks:     s.grpMetWeeks,
+          prev_svc_attended: s.prevSvcAttended,
+          prev_svc_total:    s.prevSvcTotal,
+          prev_grp_attended: s.prevGrpAttended,
+          prev_grp_total:    s.prevGrpTotal,
+          at_risk_status:    s.atRiskStatus ?? null,
+          data_source:       s.dataSource ?? null,
+          created_at:        s.createdAt,
+          updated_at:        s.updatedAt,
+        })),
+      )}
+      on conflict (id) do update set
+        first_name        = excluded.first_name,
+        last_name         = excluded.last_name,
+        gender            = excluded.gender,
+        grade             = excluded.grade,
+        quad              = excluded.quad,
+        mobile            = excluded.mobile,
+        parent_phone      = excluded.parent_phone,
+        date_of_birth     = excluded.date_of_birth,
+        svc_attended      = excluded.svc_attended,
+        svc_total         = excluded.svc_total,
+        grp_attended      = excluded.grp_attended,
+        grp_total         = excluded.grp_total,
+        grp_met_weeks     = excluded.grp_met_weeks,
+        prev_svc_attended = excluded.prev_svc_attended,
+        prev_svc_total    = excluded.prev_svc_total,
+        prev_grp_attended = excluded.prev_grp_attended,
+        prev_grp_total    = excluded.prev_grp_total,
+        at_risk_status    = excluded.at_risk_status,
+        data_source       = excluded.data_source,
+        updated_at        = excluded.updated_at
+    `;
+  }
+
   async delete(id: string): Promise<boolean> {
     const rows = await this.sql`delete from students where id = ${id} returning id`;
     return rows.length > 0;

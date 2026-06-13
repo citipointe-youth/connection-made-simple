@@ -75,9 +75,11 @@ export function buildRoutes(services: Services): Route[] {
     { method: 'GET', path: '/trends', auth: true, handler: (r) => trends.get(r) },
 
     // ----- Import -----
-    { method: 'POST', path: '/import/csv',       auth: true, handler: (r) => importCtrl.importCsv(r) },
-    { method: 'POST', path: '/import/group-csv', auth: true, handler: (r) => importCtrl.importGroupCsv(r) },
-    { method: 'GET',  path: '/import/history',   auth: true, handler: (r) => importCtrl.history(r) },
+    { method: 'POST',   path: '/import/csv',          auth: true, handler: (r) => importCtrl.importCsv(r) },
+    { method: 'POST',   path: '/import/group-csv',    auth: true, handler: (r) => importCtrl.importGroupCsv(r) },
+    { method: 'GET',    path: '/import/history',      auth: true, handler: (r) => importCtrl.history(r) },
+    { method: 'DELETE', path: '/import/history',      auth: true, handler: (r) => importCtrl.clearHistory(r) },
+    { method: 'DELETE', path: '/import/history/:id',  auth: true, handler: (r) => importCtrl.deleteImport(r) },
 
     // ----- Admin -----
     { method: 'POST', path: '/admin/reset',         auth: true, handler: (r) => admin.reset(r) },
