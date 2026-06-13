@@ -111,3 +111,34 @@ What to **avoid**: storing primary data in JSON files / localStorage as the syst
 3. P2: dedupe lifegroup weeks.
 4. UX: number-phrasing pass + "weeks excluded" transparency.
 5. Optional: client-side aggregate pre-computation on import.
+
+---
+
+## Session 2 (2026-06-14) — shipped
+
+- **Lifegroup import reworked**: Monday–Sunday week bucketing (a group meeting twice
+  in a week counts once); per-student grp = weeks attended ÷ weeks the group ran;
+  **replace semantics** (keeps students + connections); **0-attendance members are
+  not counted as part of the group**; roll entries with "(leader)" create/ensure a
+  Leader (grade+gender from the group name) and are excluded from youth attendance.
+- **Service import**: replace semantics + at-risk recomputed from svc AND group.
+- **Connect picker**: defaults to the leader's own grade(s)+gender; no-grade/no-gender
+  hidden until searched by name; added a Done button.
+- **Trends/home unified** on `/trends` (avg students per valid week) so the numbers
+  reconcile; removed "avg sessions/student" and group roster/"enrolled" size; per-grade
+  dropdown shows service (uniq+avg/wk) + group (uniq); lifegroups tab shows uniq + avg %.
+- **Bottom nav** is now `position:fixed` (was floating up on short pages).
+
+## Remaining (next session) — see task #18
+
+1. **This-term / previous-term split (BIGGEST).** Spec confirmed: term boundaries from
+   service-date gaps > `termGapDays` (current + previous); same boundaries for groups;
+   holiday-break group weeks excluded; this-term default + previous as comparison;
+   term-scoped uniques. Touches import (populate `prevSvc*`/`prevGrp*`), trends/overview/
+   at-risk, and the SPA. The data model (`prev*` fields, `svcTrend`) already supports it.
+2. **Per-grade GROUP avg-students/week** — needs group session aggregation (a `/trends`
+   extension); currently the per-grade dropdown shows group *unique* only.
+3. **`/trends` SQL aggregation** (perf — still pulls full attendance table in JS).
+4. **Audit home-page group metrics** for any lingering avg-sessions/student phrasing.
+5. **Live data**: grp figures update on the next lifegroup re-import; svc on the next
+   service re-import (both now authoritative replacements).
