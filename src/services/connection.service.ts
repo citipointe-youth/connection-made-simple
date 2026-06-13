@@ -48,6 +48,7 @@ function summariseStudent(s: {
   id: string; firstName: string; lastName: string; grade: number | null; gender: string;
   mobile: string | null; parentPhone: string | null; svcAttended: number; svcTotal: number;
   grpAttended: number; grpTotal: number;
+  prevSvcAttended: number; prevSvcTotal: number; prevGrpAttended: number; prevGrpTotal: number;
 }) {
   return {
     id: s.id,
@@ -60,6 +61,11 @@ function summariseStudent(s: {
     svcTotal: s.svcTotal,
     grpAttended: s.grpAttended,
     grpTotal: s.grpTotal,
+    // Previous-term snapshot so the UI can show this-term vs last-term.
+    prevSvcAttended: s.prevSvcAttended,
+    prevSvcTotal: s.prevSvcTotal,
+    prevGrpAttended: s.prevGrpAttended,
+    prevGrpTotal: s.prevGrpTotal,
   };
 }
 

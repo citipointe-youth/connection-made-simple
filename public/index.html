@@ -581,6 +581,33 @@ function quadChip(q) {
   if (!q) return '';
   return `<span class="chip quad-${q}">${QUAD_LABELS[q] || q}</span>`;
 }
+// Format a phone number with a space after the 4th and 7th digit (e.g. 0412 345 678).
+function fmtPhone(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.length <= 4) return d;
+  if (d.length <= 7) return d.slice(0, 4) + ' ' + d.slice(4);
+  return d.slice(0, 4) + ' ' + d.slice(4, 7) + ' ' + d.slice(7);
+}
+// Tap-to-call: confirm first, then hand off to the dialer (no-op on desktop if cancelled).
+function callPhone(raw) {
+  const d = String(raw || '').replace(/[^\d+]/g, '');
+  if (!d) return;
+  if (confirm('Call ' + fmtPhone(raw) + '?')) window.location.href = 'tel:' + d;
+}
+function phoneLink(raw) {
+  if (!raw) return '';
+  return `<a onclick="callPhone('${String(raw).replace(/['\\]/g, '')}')" style="color:var(--accent-dark);font-weight:700;cursor:pointer;text-decoration:none">${fmtPhone(raw)}</a>`;
+}
+// "This term / last term" attendance line for service or groups.
+function termRow(label, curA, curT, prevA, prevT) {
+  const cp = curT > 0 ? Math.round(curA / curT * 100) : null;
+  const pp = prevT > 0 ? Math.round(prevA / prevT * 100) : null;
+  return `<div style="margin-top:6px">
+    <div style="font-size:10px;color:var(--ink-faint);font-weight:700;text-transform:uppercase">${label}</div>
+    <div style="font-size:12px">This term: <b style="color:${cp!==null&&cp<50?'var(--danger)':'var(--ink)'}">${curT>0?curA+'/'+curT+' ('+cp+'%)':'—'}</b>${prevT>0?` · <span style="color:var(--ink-faint)">Last term: ${prevA}/${prevT} (${pp}%)</span>`:''}</div>
+  </div>`;
+}
 function riskChip(s) {
   if (!s || s === 'regular') return '';
   const m = { stopped:['Stopped','risk-stopped'], atrisk:['At Risk','risk-atrisk'], declining:['Declining','risk-declining'], watch:['Watch','risk-watch'], new:['New','risk-new'] };
@@ -1690,9 +1717,6 @@ async function renderMyStudents() {
       body += '<div style="color:var(--ink-faint);font-size:13px;padding:12px 0">No students connected yet.</div>';
     } else {
       for (const s of students) {
-        const pct = s.svcTotal > 0 ? Math.round(s.svcAttended / s.svcTotal * 100) : null;
-        const pc = pct !== null ? (pct >= 70 ? 'var(--success)' : pct >= 40 ? 'var(--warn)' : 'var(--danger)') : 'var(--ink-mid)';
-        const gpct = s.grpTotal > 0 ? Math.round(s.grpAttended / s.grpTotal * 100) : null;
         const bd = fmtBday(bdayOf[s.id]);
         body += `<div class="li" style="cursor:pointer" onclick="showStudentDetail('${s.id}')">
           <div class="li-body">
@@ -1700,11 +1724,9 @@ async function renderMyStudents() {
               <span class="li-title">${s.fullName}</span>${riskChip(s.atRiskStatus)}
             </div>
             <div class="li-sub">Yr ${s.grade || '—'} · ${s.gender}${bd ? ' · ' + bd : ''}</div>
-            <div style="display:flex;gap:14px;margin-top:4px;font-size:12px">
-              <span style="font-weight:700;color:${pc}">Fridays ${pct !== null ? pct + '% (' + s.svcAttended + '/' + s.svcTotal + ')' : '—'}</span>
-              <span style="color:var(--ink-mid)">Lifegroup ${gpct !== null ? gpct + '% (' + s.grpAttended + '/' + s.grpTotal + ' wk)' : '—'}</span>
-            </div>
-            ${(s.mobile || s.parentPhone) ? `<div style="font-size:12px;color:var(--ink-mid);margin-top:2px">${s.mobile ? s.mobile : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? s.parentPhone : ''}</div>` : ''}
+            ${termRow('Fridays', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
+            ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
+            ${(s.mobile || s.parentPhone) ? `<div style="font-size:12px;margin-top:4px" onclick="event.stopPropagation()">${s.mobile ? phoneLink(s.mobile) : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? phoneLink(s.parentPhone) : ''}</div>` : ''}
           </div>
         </div>`;
       }
@@ -1981,34 +2003,18 @@ async function renderAtRisk() {
       if (!items.length) continue;
       let cards = '';
       for (const s of items) {
-        const pct = s.svcTotal > 0 ? Math.round(s.svcAttended / s.svcTotal * 100) : 0;
         cards += `
-          <div class="li" style="cursor:default;align-items:flex-start">
+          <div class="li" style="cursor:pointer;align-items:flex-start" onclick="showStudentDetail('${s.studentId}')">
             <div class="li-body">
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 <span class="li-title">${s.fullName}</span>
                 ${riskChip(s.status)} ${quadChip(s.quad)}
               </div>
               <div class="li-sub" style="margin-top:3px">Gr ${s.grade||'—'} · ${s.gender}</div>
-              <div style="display:flex;gap:16px;margin-top:8px">
-                <div>
-                  <div style="font-size:10px;color:var(--ink-faint);font-weight:700;text-transform:uppercase">Service</div>
-                  <div style="font-size:13px;font-weight:700;color:${pct<50?'var(--danger)':'var(--ink)'}">${s.svcAttended}/${s.svcTotal} (${pct}%)</div>
-                  <div class="pb" style="width:80px">${pBar(pct)}</div>
-                </div>
-                ${s.grpTotal>0?`<div>
-                  <div style="font-size:10px;color:var(--ink-faint);font-weight:700;text-transform:uppercase">Groups</div>
-                  <div style="font-size:13px;font-weight:700">${s.grpAttended}/${s.grpTotal}</div>
-                </div>`:''}
-              </div>
-              ${(s.prevSvcRate!=null||s.prevGrpRate!=null)?`<div style="font-size:11px;color:var(--ink-faint);margin-top:6px;display:flex;align-items:center;gap:6px">
-                <span>Prev term: ${s.prevSvcRate!=null?'Svc '+Math.round(s.prevSvcRate*100)+'%':''}${s.prevSvcRate!=null&&s.prevGrpRate!=null?' · ':''}${s.prevGrpRate!=null?'Grp '+Math.round(s.prevGrpRate*100)+'%':''}</span>
-                ${trendArrow(s.svcTrend)}
-              </div>`:''}
+              ${termRow('Service', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
+              ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
             </div>
-            <div class="li-right">
-              <button class="btn btn-ghost btn-sm" onclick="showAtRiskUpdate('${s.studentId}','${s.fullName.replace(/'/g,"\\'")}','${s.status}')" title="Update status">${icS('edit')}</button>
-            </div>
+            <div class="li-right" style="color:var(--ink-faint)">›</div>
           </div>`;
       }
       body += `<div class="card" style="margin-bottom:12px">
@@ -2118,20 +2124,25 @@ function _studentResultsHtml(vis) {
           ${riskChip(s.atRiskStatus)}
         </div>
         <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender} ${quadChip(s.quad)}</div>
-        ${pct!==null?`<div style="margin-top:5px">${pBar(pct)}<div style="font-size:11px;color:var(--ink-faint);margin-top:2px">${s.svcAttended}/${s.svcTotal} (${pct}%)</div></div>`:''}
+        ${termRow('Service', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
+        ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
       </div>
       <div class="li-right" style="color:var(--ink-faint)">›</div>
     </div>`;
   }
   h += '</div>';
-  h += `<div class="desk"><table class="dt"><thead><tr><th>Name</th><th>Gr</th><th>Gender</th><th>Quad</th><th>Svc %</th><th>Status</th><th></th></tr></thead><tbody>`;
+  h += `<div class="desk"><table class="dt"><thead><tr><th>Name</th><th>Gr</th><th>Gender</th><th>Quad</th><th>Service (this / last)</th><th>Lifegroup (this / last)</th><th>Status</th><th></th></tr></thead><tbody>`;
   for (const s of vis) {
     const pct = svcPct(s);
+    const psvc = s.prevSvcTotal > 0 ? Math.round(s.prevSvcAttended / s.prevSvcTotal * 100) + '%' : '—';
+    const gp = s.grpTotal > 0 ? Math.round(s.grpAttended / s.grpTotal * 100) + '%' : '—';
+    const pgp = s.prevGrpTotal > 0 ? Math.round(s.prevGrpAttended / s.prevGrpTotal * 100) + '%' : '—';
     h += `<tr>
       <td><strong>${s.firstName} ${s.lastName}</strong></td>
       <td>${s.grade||'—'}</td><td>${s.gender}</td>
       <td>${quadChip(s.quad)}</td>
-      <td>${pct!==null?`<div style="display:flex;align-items:center;gap:6px">${pct}%<div class="pb" style="width:50px">${pBar(pct)}</div></div>`:'—'}</td>
+      <td>${pct!==null?pct+'%':'—'} <span style="color:var(--ink-faint)">/ ${psvc}</span></td>
+      <td>${gp} <span style="color:var(--ink-faint)">/ ${pgp}</span></td>
       <td>${riskChip(s.atRiskStatus)}</td>
       <td><button class="btn btn-ghost btn-sm" onclick="showStudentDetail('${s.id}')">View →</button></td>
     </tr>`;
@@ -2255,15 +2266,17 @@ async function showStudentDetail(id) {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
       <div class="stat">
         <div class="stat-v" style="font-size:22px;color:${pct!==null&&pct<50?'var(--danger)':pct!==null&&pct<70?'var(--warn)':'var(--accent)'}">${pct!==null?pct+'%':'—'}</div>
-        <div class="stat-l">Service</div>
+        <div class="stat-l">Service · this term</div>
         ${pct!==null?pBar(pct):''}
         <div style="font-size:11px;color:var(--ink-faint);margin-top:3px">${s.svcAttended}/${s.svcTotal} sessions</div>
+        ${s.prevSvcTotal>0?`<div style="font-size:11px;color:var(--ink-faint);margin-top:2px">Last term: ${s.prevSvcAttended}/${s.prevSvcTotal} (${Math.round(s.prevSvcAttended/s.prevSvcTotal*100)}%)</div>`:''}
       </div>
       <div class="stat">
         <div class="stat-v" style="font-size:22px">${grpPct!==null?grpPct+'%':'—'}</div>
-        <div class="stat-l">Groups</div>
+        <div class="stat-l">Lifegroup · this term</div>
         ${grpPct!==null?pBar(grpPct):''}
         <div style="font-size:11px;color:var(--ink-faint);margin-top:3px">${s.grpAttended}/${s.grpTotal} weeks</div>
+        ${s.prevGrpTotal>0?`<div style="font-size:11px;color:var(--ink-faint);margin-top:2px">Last term: ${s.prevGrpAttended}/${s.prevGrpTotal} (${Math.round(s.prevGrpAttended/s.prevGrpTotal*100)}%)</div>`:''}
       </div>
     </div>
 
@@ -2273,10 +2286,9 @@ async function showStudentDetail(id) {
     <div id="sd-llist" style="margin-bottom:14px"></div>` : ''}
 
     ${s.mobile||s.parentPhone?`
-    <div class="sh">Contact</div>
-    <div style="margin-bottom:14px">
-      ${s.mobile?`<div style="font-size:13px;margin-bottom:6px"><span style="color:var(--ink-mid);font-weight:600">Mobile:</span> ${s.mobile}</div>`:''}
-      ${s.parentPhone?`<div style="font-size:13px"><span style="color:var(--ink-mid);font-weight:600">Parent:</span> ${s.parentPhone}</div>`:''}
+    <div style="margin-bottom:14px;display:flex;flex-direction:column;gap:6px">
+      ${s.mobile?`<div style="font-size:14px"><span style="color:var(--ink-mid);font-weight:600">Mobile:</span> ${phoneLink(s.mobile)}</div>`:''}
+      ${s.parentPhone?`<div style="font-size:14px"><span style="color:var(--ink-mid);font-weight:600">Parent:</span> ${phoneLink(s.parentPhone)}</div>`:''}
     </div>`:''}
 
     <div style="display:flex;gap:8px;margin-top:4px">
