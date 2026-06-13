@@ -250,6 +250,11 @@ export class InMemoryLifegroupRepository
   implements ILifegroupRepository
 {
   constructor(persistence?: IPersistenceAdapter<Lifegroup>) { super(persistence); }
+
+  async saveMany(lifegroups: Lifegroup[]): Promise<void> {
+    for (const g of lifegroups) this.store.set(g.id, this.clone(g));
+    await this.writeToPersistence();
+  }
 }
 
 // ---------------------------------------------------------------------------

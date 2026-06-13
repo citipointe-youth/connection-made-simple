@@ -54,7 +54,9 @@ export interface IServiceAttendanceRepository {
   findAll(): Promise<ServiceAttendance[]>;
 }
 
-export interface ILifegroupRepository extends IRepository<Lifegroup> {}
+export interface ILifegroupRepository extends IRepository<Lifegroup> {
+  saveMany(lifegroups: Lifegroup[]): Promise<void>;
+}
 
 export interface ILifegroupWeekRepository extends IRepository<LifegroupWeek> {
   findByImport(importId: string): Promise<LifegroupWeek[]>;

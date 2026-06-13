@@ -83,6 +83,20 @@ export interface ImportService {
   clearHistory(actor: Actor): Promise<void>;
 }
 
+function normalizeDob(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  // DD/MM/YYYY — Australian format common in Elvanto/UCare exports
+  const ddmm = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (ddmm) return `${ddmm[3]}-${ddmm[2]!.padStart(2, '0')}-${ddmm[1]!.padStart(2, '0')}`;
+  // MM/DD/YYYY fallback
+  const mmdd = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (mmdd) return `${mmdd[3]}-${mmdd[1]!.padStart(2, '0')}-${mmdd[2]!.padStart(2, '0')}`;
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]!;
+  return null;
+}
+
 function parseGroupName(name: string): { grade: number | null; gender: 'male' | 'female' | null } {
   const gradeMatch = name.match(/\bGrade\s+(\d+)\b/i);
   const grade = gradeMatch ? parseInt(gradeMatch[1]!, 10) : null;
@@ -226,7 +240,7 @@ export function makeImportService(
           prevTotal = existing.svcTotal;
           const incomingMobile = row.mobile ?? row.phone ?? null;
           const incomingParentPhone = row.parent_phone ?? row.guardian_phone ?? null;
-          const incomingDob = row.date_of_birth ?? row.birthday ?? null;
+          const incomingDob = normalizeDob(row.date_of_birth ?? row.birthday ?? null);
           baseStudent = {
             ...existing,
             grade: row.grade ?? existing.grade,
@@ -251,7 +265,7 @@ export function makeImportService(
             quad: computeQuad(grade, normalGender),
             mobile: row.mobile ?? row.phone ?? null,
             parentPhone: row.parent_phone ?? row.guardian_phone ?? null,
-            dateOfBirth: row.date_of_birth ?? row.birthday ?? null,
+            dateOfBirth: normalizeDob(row.date_of_birth ?? row.birthday ?? null),
             svcAttended: 0,
             svcTotal: 0,
             grpAttended: 0,
@@ -493,8 +507,8 @@ export function makeImportService(
         status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id,
       });
 
-      // 2. New lifegroups (few, individual saves fine); then bulk weeks + students
-      for (const g of newLifegroups) await lifegroupRepo.save(g);
+      // 2. New lifegroups, then bulk weeks + students
+      await lifegroupRepo.saveMany(newLifegroups);
       await lifegroupWeekRepo.saveMany(weeksToCreate);
       await studentRepo.saveMany(studentsToSave);
 

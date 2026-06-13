@@ -293,6 +293,27 @@ export class SupabaseLifegroupRepository implements ILifegroupRepository {
     return toLifegroup(rows[0]!);
   }
 
+  async saveMany(lifegroups: Lifegroup[]): Promise<void> {
+    if (lifegroups.length === 0) return;
+    await this.sql`
+      insert into lifegroups ${this.sql(
+        lifegroups.map((g) => ({
+          id:         g.id,
+          full_name:  g.fullName,
+          short_name: g.shortName,
+          grade:      g.grade ?? null,
+          gender:     g.gender ?? null,
+          created_at: g.createdAt,
+        })),
+      )}
+      on conflict (id) do update set
+        full_name  = excluded.full_name,
+        short_name = excluded.short_name,
+        grade      = excluded.grade,
+        gender     = excluded.gender
+    `;
+  }
+
   async delete(id: string): Promise<boolean> {
     const rows = await this.sql`delete from lifegroups where id = ${id} returning id`;
     return rows.length > 0;
