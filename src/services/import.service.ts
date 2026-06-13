@@ -426,9 +426,11 @@ export function makeImportService(
       const studentByName = new Map<string, typeof allStudents[0]>();
       for (const s of allStudents) studentByName.set(`${s.firstName.toLowerCase()} ${s.lastName.toLowerCase()}`, s);
 
-      const leaderByName = new Map<string, boolean>();
-      for (const l of existingLeaders) leaderByName.set(l.fullName.toLowerCase(), true);
-      const newLeaders: Parameters<typeof leaderRepo.save>[0][] = [];
+      // Leaders touched by this import (created OR existing ones we augment with
+      // an extra grade focus). Keyed by lowercase full name.
+      const existingLeaderByName = new Map<string, typeof existingLeaders[0]>();
+      for (const l of existingLeaders) existingLeaderByName.set(l.fullName.toLowerCase(), l);
+      const leadersToWrite = new Map<string, Parameters<typeof leaderRepo.save>[0]>();
 
       // Monday-week registry, keyed PER GROUP. lifegroup_attendance's PK is
       // (student_id, week_id), so a student in two groups must get a DISTINCT
@@ -447,7 +449,9 @@ export function makeImportService(
       // studentId -> running grp totals (a student can be in more than one group)
       const grpByStudent = new Map<string, { obj: Parameters<typeof studentRepo.save>[0]; attended: number; total: number }>();
 
-      const LEADER_RE = /\(leader\)/i;
+      // Matches "(leader)", "(leaders)", "(assistant leader)", "(assistant leaders)".
+      const LEADER_RE = /\(\s*(?:assistant\s+)?leaders?\s*\)/i;
+      const LEADER_RE_G = /\(\s*(?:assistant\s+)?leaders?\s*\)/ig;
 
       for (const group of groups) {
         const { grade: gGrade, gender: gGender } = parseGroupName(group.name);
@@ -469,24 +473,24 @@ export function makeImportService(
         const youthMembers: typeof group.members = [];
         for (const member of group.members) {
           if (LEADER_RE.test(`${member.first_name} ${member.last_name}`)) {
-            const cleanFirst = member.first_name.replace(/\s*\(leader\)\s*/ig, ' ').replace(/\s+/g, ' ').trim();
-            const cleanLast = member.last_name.replace(/\s*\(leader\)\s*/ig, ' ').replace(/\s+/g, ' ').trim();
+            const cleanFirst = member.first_name.replace(LEADER_RE_G, ' ').replace(/\s+/g, ' ').trim();
+            const cleanLast = member.last_name.replace(LEADER_RE_G, ' ').replace(/\s+/g, ' ').trim();
             const fullName = `${cleanFirst} ${cleanLast}`.replace(/\s+/g, ' ').trim();
             if (!fullName) continue;
             const key = fullName.toLowerCase();
-            if (!leaderByName.has(key)) {
-              leaderByName.set(key, true);
-              newLeaders.push({
-                id: generateId(),
-                fullName,
-                gender: gGender,
-                grades: (gGrade != null ? [gGrade] : []) as Parameters<typeof leaderRepo.save>[0]['grades'],
-                active: true,
-                createdByGrade: null,
-                createdAt: now,
-                updatedAt: now,
-              });
+            let lead = leadersToWrite.get(key);
+            if (!lead) {
+              const existing = existingLeaderByName.get(key);
+              lead = existing
+                ? { ...existing, grades: [...existing.grades], gender: existing.gender ?? gGender, updatedAt: now }
+                : { id: generateId(), fullName, gender: gGender, grades: [] as unknown as Parameters<typeof leaderRepo.save>[0]['grades'], active: true, createdByGrade: null, createdAt: now, updatedAt: now };
+              leadersToWrite.set(key, lead);
             }
+            // Accumulate grade focus: a leader appearing in more than one grade's
+            // lifegroup gets every grade assigned.
+            const grades = lead.grades as unknown as number[];
+            if (gGrade != null && !grades.includes(gGrade)) { grades.push(gGrade); grades.sort((a, b) => a - b); }
+            if (!lead.gender && gGender) lead.gender = gGender;
             continue; // leaders are not youth attendees
           }
           youthMembers.push(member);
@@ -606,7 +610,7 @@ export function makeImportService(
 
       // Writes, FK-safe order.
       await importRepo.save({ id: importId, type: 'lifegroup', filename, fileHash: '', rowCount: 0, sessionsAdded: 0, studentsAdded: 0, studentsUpdated: 0, status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id });
-      for (const l of newLeaders) await leaderRepo.save(l);
+      for (const l of leadersToWrite.values()) await leaderRepo.save(l);
       await lifegroupRepo.saveMany(newLifegroups);
       await lifegroupWeekRepo.saveMany(weeksToCreate);
       await studentRepo.saveMany(studentsToSave);
