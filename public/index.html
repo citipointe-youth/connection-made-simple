@@ -2576,7 +2576,9 @@ async function renderTrends() {
         if (isQOpen) {
           const grades = q.quad==='g79'||q.quad==='b79' ? [7,8,9] : [10,11,12];
           for (const gr of grades) {
-            const gl2 = students.filter(s => s.grade === gr);
+            // Scope to this quad (gender + bracket), not just the grade, so the
+            // breakdown under a gendered quad doesn't combine both genders.
+            const gl2 = students.filter(s => s.grade === gr && s.quad === q.quad);
             if (!gl2.length) continue;
             const gc = _svcAgg(gl2, false), gp = _svcAgg(gl2, true);
             body += `<div style="border-top:1px solid var(--paper-dark);padding:7px 0 5px">
