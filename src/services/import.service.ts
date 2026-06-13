@@ -5,6 +5,9 @@ import type {
   IStudentRepository,
   IServiceSessionRepository,
   IServiceAttendanceRepository,
+  ILifegroupRepository,
+  ILifegroupWeekRepository,
+  ILifegroupAttendanceRepository,
   IImportRepository,
   ISettingsRepository,
 } from '../repositories/interfaces/entity-repositories';
@@ -26,6 +29,22 @@ const ServiceRowSchema = z.object({
   birthday: z.string().optional(),        // alias for date_of_birth
 });
 
+const GroupMemberSchema = z.object({
+  first_name: z.string().min(1),
+  last_name: z.string().min(1),
+  attendance: z.array(z.boolean().nullable()),
+});
+
+const GroupDataSchema = z.object({
+  name: z.string().min(1),
+  meetings: z.array(z.string()),
+  members: z.array(GroupMemberSchema),
+});
+
+const GroupImportPayloadSchema = z.object({
+  groups: z.array(GroupDataSchema),
+});
+
 export interface ImportResult {
   importId: string;
   type: 'service';
@@ -33,6 +52,16 @@ export interface ImportResult {
   studentsAdded: number;
   studentsUpdated: number;
   sessionsAdded: number;
+}
+
+export interface GroupImportResult {
+  importId: string;
+  type: 'lifegroup';
+  rowCount: number;
+  groupsAdded: number;
+  studentsAdded: number;
+  studentsUpdated: number;
+  weeksAdded: number;
 }
 
 export interface ImportHistoryEntry {
@@ -49,7 +78,17 @@ export interface ImportHistoryEntry {
 
 export interface ImportService {
   importServiceCsv(actor: Actor, rows: unknown[], filename: string): Promise<ImportResult>;
+  importGroupCsv(actor: Actor, payload: unknown, filename: string): Promise<GroupImportResult>;
   listHistory(actor: Actor): Promise<ImportHistoryEntry[]>;
+}
+
+function parseGroupName(name: string): { grade: number | null; gender: 'male' | 'female' | null } {
+  const gradeMatch = name.match(/\bGrade\s+(\d+)\b/i);
+  const grade = gradeMatch ? parseInt(gradeMatch[1]!, 10) : null;
+  let gender: 'male' | 'female' | null = null;
+  if (/\bboys?\b/i.test(name)) gender = 'male';
+  else if (/\bgirls?\b/i.test(name)) gender = 'female';
+  return { grade, gender };
 }
 
 export function makeImportService(
@@ -58,11 +97,16 @@ export function makeImportService(
   attendanceRepo: IServiceAttendanceRepository,
   importRepo: IImportRepository,
   settingsRepo: ISettingsRepository,
+  lifegroupRepo: ILifegroupRepository,
+  lifegroupWeekRepo: ILifegroupWeekRepository,
+  lifegroupAttendanceRepo: ILifegroupAttendanceRepository,
 ): ImportService {
   return {
     async listHistory(actor) {
       assertCan(actor, 'import:run');
-      const records = await importRepo.findByType('service');
+      const records = await importRepo.findAll();
+      // Sort by importedAt descending
+      records.sort((a, b) => b.importedAt.localeCompare(a.importedAt));
       return records.map((r) => ({
         id: r.id,
         filename: r.filename,
@@ -286,6 +330,176 @@ export function makeImportService(
       });
 
       return { importId, type: 'service', rowCount: rows.length, studentsAdded, studentsUpdated, sessionsAdded: dateKeys.length };
+    },
+
+    async importGroupCsv(actor, payload, filename) {
+      assertCan(actor, 'import:run');
+
+      const parsed = GroupImportPayloadSchema.safeParse(payload);
+      if (!parsed.success) throw new BadRequestError('Invalid group import data');
+
+      const { groups } = parsed.data;
+      if (groups.length === 0) throw new BadRequestError('No groups found in upload');
+
+      const importId = generateId();
+      const now = new Date().toISOString();
+      let groupsAdded = 0;
+      let studentsAdded = 0;
+      let studentsUpdated = 0;
+      let weeksAdded = 0;
+      let rowCount = 0;
+
+      const studentGrpAgg = new Map<string, { attended: number; total: number; metWeeks: number }>();
+
+      for (const group of groups) {
+        // Find or create lifegroup by name
+        const allGroups = await lifegroupRepo.findAll();
+        let lifegroup = allGroups.find((g) => g.fullName === group.name) ?? null;
+        if (!lifegroup) {
+          const { grade, gender } = parseGroupName(group.name);
+          lifegroup = await lifegroupRepo.save({
+            id: generateId(),
+            fullName: group.name,
+            shortName: group.name.replace(/^[^-]+-\s*/u, '').slice(0, 40).trim(),
+            grade,
+            gender,
+            createdAt: now,
+          });
+          groupsAdded++;
+        }
+
+        // Create LifegroupWeek for each meeting date
+        const weekMap = new Map<string, string>(); // ISO date -> weekId
+        for (let i = 0; i < group.meetings.length; i++) {
+          const isoDate = group.meetings[i]!;
+          const weekId = generateId();
+          await lifegroupWeekRepo.save({
+            id: weekId,
+            importId,
+            weekNum: i + 1,
+            weekKey: isoDate,
+            weekStart: isoDate,
+            weekEnd: null,
+          });
+          weekMap.set(isoDate, weekId);
+          weeksAdded++;
+        }
+
+        // Process each member
+        for (const member of group.members) {
+          rowCount++;
+
+          // Find or create student by name match
+          const searchResults = await studentRepo.search(`${member.first_name} ${member.last_name}`);
+          const existing = searchResults.find(
+            (s) =>
+              s.firstName.toLowerCase() === member.first_name.toLowerCase() &&
+              s.lastName.toLowerCase() === member.last_name.toLowerCase(),
+          ) ?? null;
+
+          let studentId: string;
+          if (existing) {
+            studentId = existing.id;
+            studentsUpdated++;
+            if (!studentGrpAgg.has(studentId)) {
+              studentGrpAgg.set(studentId, {
+                attended: existing.grpAttended,
+                total: existing.grpTotal,
+                metWeeks: existing.grpMetWeeks,
+              });
+            }
+          } else {
+            studentId = generateId();
+            await studentRepo.save({
+              id: studentId,
+              firstName: member.first_name,
+              lastName: member.last_name,
+              gender: 'other',
+              grade: null,
+              quad: null,
+              mobile: null,
+              parentPhone: null,
+              dateOfBirth: null,
+              svcAttended: 0,
+              svcTotal: 0,
+              grpAttended: 0,
+              grpTotal: 0,
+              grpMetWeeks: 0,
+              prevSvcAttended: 0,
+              prevSvcTotal: 0,
+              prevGrpAttended: 0,
+              prevGrpTotal: 0,
+              atRiskStatus: null,
+              dataSource: filename,
+              createdAt: now,
+              updatedAt: now,
+            });
+            studentsAdded++;
+            studentGrpAgg.set(studentId, { attended: 0, total: 0, metWeeks: 0 });
+          }
+
+          // Build attendance records for dates where student was a member
+          const attRecords: Array<{ studentId: string; weekId: string; lifegroupId: string; groupMet: boolean; attended: boolean }> = [];
+          let memberAttended = 0;
+          let memberTotal = 0;
+          for (let i = 0; i < group.meetings.length; i++) {
+            const att = member.attendance[i];
+            if (att === null || att === undefined) continue; // not a member this date
+            const isoDate = group.meetings[i]!;
+            const weekId = weekMap.get(isoDate);
+            if (!weekId) continue;
+            attRecords.push({
+              studentId,
+              weekId,
+              lifegroupId: lifegroup.id,
+              groupMet: true,
+              attended: att,
+            });
+            memberTotal++;
+            if (att) memberAttended++;
+          }
+          await lifegroupAttendanceRepo.saveMany(attRecords);
+
+          // Accumulate
+          const agg = studentGrpAgg.get(studentId)!;
+          studentGrpAgg.set(studentId, {
+            attended: agg.attended + memberAttended,
+            total: agg.total + memberTotal,
+            metWeeks: agg.metWeeks + memberTotal,
+          });
+        }
+      }
+
+      // Write aggregated group attendance back to each affected student
+      for (const [studentId, agg] of studentGrpAgg.entries()) {
+        const s = await studentRepo.findById(studentId);
+        if (!s) continue;
+        await studentRepo.save({
+          ...s,
+          grpAttended: agg.attended,
+          grpTotal: agg.total,
+          grpMetWeeks: agg.metWeeks,
+          updatedAt: now,
+        });
+      }
+
+      // Log import record
+      await importRepo.save({
+        id: importId,
+        type: 'lifegroup',
+        filename,
+        fileHash: '',
+        rowCount,
+        sessionsAdded: weeksAdded,
+        studentsAdded,
+        studentsUpdated,
+        status: 'ok',
+        errorMessage: null,
+        importedAt: now,
+        importedBy: actor.id,
+      });
+
+      return { importId, type: 'lifegroup', rowCount, groupsAdded, studentsAdded, studentsUpdated, weeksAdded };
     },
   };
 }

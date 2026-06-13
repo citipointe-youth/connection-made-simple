@@ -655,7 +655,7 @@ function navItems() {
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
-    { id:'admin',      ic:'settings', label:'Admin',             mbl:'Admin' },
+    { id:'admin',      ic:'settings', label:'Admin Settings',     mbl:'Settings' },
     { id:'ca-hub',     ic:'link',     label:'Connection Audit',  mbl:'Connection Audit' }, /*CA-HOOK*/
   ];
   // Director: same as admin minus admin tile
@@ -740,8 +740,10 @@ function renderLogin() {
         <div class="fg"><label class="fl">Email</label><input class="fi" id="lemail" type="email" placeholder="g79@youth.ministry or grade7f@youth.ministry" autocomplete="username"></div>
         <div class="fg"><label class="fl">Password</label><input class="fi" id="lpw" type="password" placeholder="••••••••" autocomplete="current-password"></div>
         <button class="btn btn-primary btn-full" onclick="doLogin()">Sign In</button>
+        ${/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? `<p style="text-align:center;font-size:12px;color:var(--ink-faint);margin-top:14px">Install as an app — <a href="/install.html" style="color:var(--accent)">how to add to Home Screen</a></p>` : ''}
       </div>
     </div>`;
+  document.getElementById('lemail')?.addEventListener('keypress', e => { if (e.key==='Enter') doLogin(); });
   document.getElementById('lpw')?.addEventListener('keypress', e => { if (e.key==='Enter') doLogin(); });
 }
 
@@ -2357,12 +2359,12 @@ async function renderImport() {
   try { history = await API.get('/import/history'); } catch {}
 
   let body = `
-    <div class="ph"><div class="ph-title">Import Data</div><div class="ph-sub">Upload CSV to update students and attendance</div></div>
+    <div class="ph"><div class="ph-title">Import Data</div><div class="ph-sub">Upload CSV files to update students and attendance</div></div>
     <div class="card">
       <div class="card-title" style="margin-bottom:6px">Service Attendance CSV</div>
       <p style="font-size:13px;color:var(--ink-mid);margin-bottom:12px">
-        Required columns: <code>first_name</code>, <code>last_name</code>, <code>gender</code>, <code>grade</code><br>
-        Date columns (YYYY-MM-DD) are read as attendance (true/false/1/0/yes/no)
+        Upload a "Service Individual Attendance" export from Elvanto/UCare.<br>
+        Columns like <code>First Name</code>, <code>School Grade</code>, and session date columns are detected automatically.
       </p>
       <div id="drop-zone" style="border:2px dashed var(--paper-dark);border-radius:var(--radius-sm);padding:32px;text-align:center;cursor:pointer;transition:border-color .2s"
         onclick="document.getElementById('csv-file').click()"
@@ -2375,6 +2377,24 @@ async function renderImport() {
       </div>
       <input type="file" id="csv-file" accept=".csv,.xlsx" style="display:none" onchange="handleImportFile(this)">
       <div id="import-status" style="margin-top:12px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:6px">Group Attendance CSV</div>
+      <p style="font-size:13px;color:var(--ink-mid);margin-bottom:12px">
+        Upload a "Group Individual Attendance" export from Elvanto/UCare.<br>
+        Group blocks, <code>Last, First</code> names, and <code>DD/MM/YYYY</code> date columns are detected automatically.
+      </p>
+      <div id="grp-drop-zone" style="border:2px dashed var(--paper-dark);border-radius:var(--radius-sm);padding:32px;text-align:center;cursor:pointer;transition:border-color .2s"
+        onclick="document.getElementById('grp-csv-file').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+        ondragleave="this.style.borderColor=''"
+        ondrop="event.preventDefault();this.style.borderColor='';handleGroupImportDrop(event)">
+        <div style="margin-bottom:8px">${icLg('upload')}</div>
+        <div style="font-weight:600">Drop CSV here or tap to browse</div>
+        <div style="font-size:12px;color:var(--ink-faint);margin-top:4px">Supports .csv files up to 10MB</div>
+      </div>
+      <input type="file" id="grp-csv-file" accept=".csv" style="display:none" onchange="handleGroupImportFile(this)">
+      <div id="import-status-grp" style="margin-top:12px"></div>
     </div>`;
 
   if (history.length) {
@@ -2471,6 +2491,8 @@ function rowsToCsv(rows){return rows.map(r=>r.map(v=>'"'+String(v==null?'':v).re
 
 function handleImportDrop(e) { const f = e.dataTransfer.files[0]; if (f) processImport(f); }
 function handleImportFile(input) { const f = input.files[0]; if (f) processImport(f); }
+function handleGroupImportDrop(e) { const f = e.dataTransfer.files[0]; if (f) processGroupImport(f); }
+function handleGroupImportFile(input) { const f = input.files[0]; if (f) processGroupImport(f); }
 
 function processImport(file) {
   const statusEl = document.getElementById('import-status');
@@ -2494,6 +2516,69 @@ function processImport(file) {
   if (isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file);
 }
 
+// Parse a "Group Individual Attendance" CSV export (Elvanto/UCare).
+// Returns { groups: [...] } or null if the file is not recognised as a group CSV.
+function parseGroupCSV(csv) {
+  const lines = csv.trim().split(/\r?\n/);
+  if (lines.length < 2) return null;
+  const rawHeaders = splitCSVLine(lines[0]).map(h => h.replace(/^"|"$/g,''));
+  // Find date columns: DD/MM/YYYY format
+  const dateCols = [];
+  for (let i = 0; i < rawHeaders.length; i++) {
+    const m = rawHeaders[i].match(/^(\d{1,2})\/(\d{2})\/(\d{4})$/);
+    if (m) dateCols.push({ index: i, iso: `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` });
+  }
+  if (!dateCols.length) return null;
+  const meetings = dateCols.map(d => d.iso);
+  const groups = [];
+  let curGroup = null;
+  for (const line of lines.slice(1)) {
+    const vals = splitCSVLine(line).map(v => v.replace(/^"|"$/g,''));
+    if (!vals[0] || !vals[0].trim()) continue;
+    // Group header: all date columns are empty
+    const isHeader = dateCols.every(d => !vals[d.index] || vals[d.index].trim() === '');
+    if (isHeader) {
+      curGroup = { name: vals[0].trim(), meetings, members: [] };
+      groups.push(curGroup);
+      continue;
+    }
+    if (!curGroup) continue;
+    // Parse "Lastname, Firstname"
+    const nameStr = vals[0].trim();
+    const ci = nameStr.indexOf(',');
+    let first_name, last_name;
+    if (ci >= 0) { last_name = nameStr.slice(0, ci).trim(); first_name = nameStr.slice(ci + 1).trim(); }
+    else { const parts = nameStr.split(' '); first_name = parts.slice(0, -1).join(' '); last_name = parts[parts.length - 1] || ''; }
+    if (!first_name || !last_name) continue;
+    // attendance: null = not a member ('-'), true = Y, false = N
+    const attendance = dateCols.map(d => {
+      const v = (vals[d.index] || '').trim();
+      if (!v || v === '-') return null;
+      return ['y','yes','true','1'].includes(v.toLowerCase());
+    });
+    if (attendance.some(a => a !== null)) curGroup.members.push({ first_name, last_name, attendance });
+  }
+  return groups.length ? { groups } : null;
+}
+
+function processGroupImport(file) {
+  const statusEl = document.getElementById('import-status-grp');
+  statusEl.innerHTML = '<div class="alert al-info"><div class="spin" style="margin-right:8px"></div>Parsing CSV…</div>';
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const parsed = parseGroupCSV(e.target.result);
+    if (!parsed) { statusEl.innerHTML = '<div class="alert al-err">Could not parse as a Group Attendance CSV. Check the file format.</div>'; return; }
+    const totalMembers = parsed.groups.reduce((n, g) => n + g.members.length, 0);
+    statusEl.innerHTML = `<div class="alert al-info">Found ${parsed.groups.length} groups, ${totalMembers} members. Uploading…</div>`;
+    try {
+      const result = await API.post('/import/group-csv', { groups: parsed.groups, filename: file.name });
+      Cache.clear();
+      statusEl.innerHTML = `<div class="alert al-ok" style="display:flex;align-items:center;gap:6px">${icS('check')} Import complete: ${result.groupsAdded} groups created, ${result.studentsAdded} students added, ${result.studentsUpdated} updated, ${result.weeksAdded} weeks</div>`;
+    } catch (err) { statusEl.innerHTML = `<div class="alert al-err">Import failed: ${err.message}</div>`; }
+  };
+  reader.readAsText(file);
+}
+
 function splitCSVLine(line) {
   const vals=[]; let cur='', inQ=false;
   for (let i=0; i<line.length; i++) {
@@ -2506,22 +2591,64 @@ function splitCSVLine(line) {
   vals.push(cur.trim());
   return vals;
 }
+// Normalize known Elvanto/UCare column names to backend field names.
+const _CSV_FIELD_MAP = {
+  'first name':'first_name', 'first_name':'first_name',
+  'last name':'last_name', 'last_name':'last_name',
+  'gender':'gender',
+  'school grade':'grade', 'grade':'grade',
+  'mobile number':'mobile', 'mobile':'mobile',
+  'phone':'phone',
+  'youth parent phone number':'parent_phone', 'parent_phone':'parent_phone',
+  'guardian phone':'guardian_phone', 'guardian_phone':'guardian_phone',
+  'date of birth':'date_of_birth', 'date_of_birth':'date_of_birth',
+  'birthday':'birthday',
+};
+const _CSV_SKIP = new Set(['attended','absent']);
+// Try to extract an ISO date from a column header (handles ISO, DD/MM/YYYY,
+// and descriptive session names like "Brisbane - Youth Society - Fri 30/01 6:50 PM").
+function _extractHeaderDate(h) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(h)) return h;
+  const m4 = h.match(/\b(\d{1,2})\/(\d{2})\/(\d{4})\b/);
+  if (m4) return `${m4[3]}-${m4[2].padStart(2,'0')}-${m4[1].padStart(2,'0')}`;
+  const m2 = h.match(/\b(\d{1,2})\/(\d{2})\b/);
+  if (m2) {
+    const day = m2[1].padStart(2,'0'), mon = m2[2].padStart(2,'0');
+    const now = new Date();
+    let yr = now.getFullYear();
+    if (new Date(`${yr}-${mon}-${day}`).getTime() - now.getTime() > 60*24*3600000) yr--;
+    return `${yr}-${mon}-${day}`;
+  }
+  return null;
+}
 function parseCSV(csv) {
   const lines = csv.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
-  const headers = splitCSVLine(lines[0]).map(h => h.replace(/^"|"$/g,'').toLowerCase());
+  const rawHeaders = splitCSVLine(lines[0]).map(h => h.replace(/^"|"$/g,''));
+  // Map each header index to its normalized key (null = skip)
+  const headerMap = rawHeaders.map(h => {
+    const lo = h.toLowerCase().trim();
+    if (_CSV_SKIP.has(lo)) return null;
+    if (_CSV_FIELD_MAP[lo]) return { type:'field', key:_CSV_FIELD_MAP[lo] };
+    const d = _extractHeaderDate(h);
+    if (d) return { type:'date', key:d };
+    return null;
+  });
   return lines.slice(1).map(line => {
     const vals = splitCSVLine(line).map(v => v.replace(/^"|"$/g,''));
     const obj = {};
-    headers.forEach((h, i) => {
+    headerMap.forEach((norm, i) => {
+      if (!norm) return;
       const v = vals[i] || '';
-      if (/^\d{4}-\d{2}-\d{2}$/.test(h)) {
-        obj[h] = ['true','1','yes','y'].includes(v.toLowerCase());
-      } else if (h === 'grade') {
-        obj[h] = v ? parseInt(v, 10) : null;
-      } else { obj[h] = v; }
+      if (norm.type === 'date') {
+        obj[norm.key] = ['true','1','yes','y'].includes(v.toLowerCase());
+      } else if (norm.key === 'grade') {
+        obj[norm.key] = v ? parseInt(v, 10) : null;
+      } else {
+        obj[norm.key] = v;
+      }
     });
-    return (obj.first_name || obj['first name']) ? obj : null;
+    return obj['first_name'] ? obj : null;
   }).filter(Boolean);
 }
 

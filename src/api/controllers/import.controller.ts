@@ -14,6 +14,16 @@ export function makeImportController(deps: { importService: ImportService }) {
       );
     },
 
+    async importGroupCsv(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      const body = req.body as { groups?: unknown; filename?: string };
+      return deps.importService.importGroupCsv(
+        req.ctx,
+        { groups: body.groups ?? [] },
+        body.filename ?? 'upload.csv',
+      );
+    },
+
     async history(req: HttpRequest) {
       if (!req.ctx) throw new UnauthorizedError();
       return deps.importService.listHistory(req.ctx);
