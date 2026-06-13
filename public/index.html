@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Connection">
@@ -27,13 +27,13 @@
   --safe-t:env(safe-area-inset-top,0px);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:16px;-webkit-text-size-adjust:100%}
+html{font-size:16px;-webkit-text-size-adjust:100%;overflow-x:hidden;touch-action:pan-x pan-y}
 @media(min-width:768px){html{font-size:17px}}
 @media(min-width:1280px){html{font-size:18px}}
 body{font-family:var(--font);color:var(--ink);background:var(--paper);min-height:100vh;overflow-x:hidden}
 button{cursor:pointer;border:none;background:none;font-family:inherit;font-size:inherit}
 input,select,textarea{font-family:inherit;font-size:inherit}
-#app{display:flex;flex-direction:column;min-height:100vh}
+#app{display:flex;flex-direction:column;min-height:100vh;max-width:100%;overflow-x:hidden}
 
 /* Header */
 .hdr{background:linear-gradient(135deg,var(--navy) 0%,#1a3a6b 100%);color:#fff;padding:var(--safe-t) 16px 0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(18,35,59,.25)}
@@ -833,7 +833,7 @@ async function renderHome() {
 }
 async function _renderHomeInner() {
   const u = S.user;
-  let stats, trends, sc = [], importHistory;
+  let stats, trends, sc = [];
   try {
     [stats, trends, sc] = await Promise.all([
       API.get('/overview').catch(() => null),
@@ -842,10 +842,6 @@ async function _renderHomeInner() {
     ]);
   } catch {}
   sc = sc || [];
-
-  if (['director', 'admin'].includes(u.role)) {
-    try { importHistory = await API.get('/import/history'); } catch {}
-  }
 
   // ── Hero card: welcome + attendance summary (current + previous term) ──
   const svcUniq = sc.filter(s => s.svcAttended > 0).length;
@@ -911,17 +907,6 @@ async function _renderHomeInner() {
         <div class="first-run-step"><div class="first-run-num">3</div><div><strong>Connect students</strong><br><span style="font-size:13px;color:var(--ink-mid)">Assign students to leaders using the search picker</span></div></div>
       </div>`;
     }
-    if (importHistory && importHistory.length > 0) {
-      const last = importHistory[0];
-      const d = new Date(last.importedAt);
-      const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      body += `<div class="card" style="padding:12px 14px;margin-bottom:12px">
-        <div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Last Import</div>
-        <div style="font-size:14px;font-weight:600">${last.filename}</div>
-        <div style="font-size:12px;color:var(--ink-mid);margin-top:3px">${dateStr} · ${last.studentsAdded} added, ${last.studentsUpdated} updated</div>
-      </div>`;
-    }
-
     // ── Quick action tiles ABOVE the breakdown ──
     const qa = quickActionItems();
     if (qa.length) {
