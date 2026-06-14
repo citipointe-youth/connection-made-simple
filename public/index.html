@@ -698,6 +698,20 @@ function fmtDM(d) {
 // Quad helpers (gender + year bracket) — mirror backend quadGenderOf/quadGradesOf
 function quadGrades(q) { return (q === 'g79' || q === 'b79') ? [7, 8, 9] : (q === 'g1012' || q === 'b1012') ? [10, 11, 12] : []; }
 function quadGender(q) { return (q === 'g79' || q === 'g1012') ? 'female' : (q === 'b79' || q === 'b1012') ? 'male' : null; }
+// The gender a login is scoped to: quad logins from their quad; grade logins from
+// the email convention (grade7g -> female, grade7b -> male). null = both (ungendered).
+function _loginGender(u) {
+  if (!u) return null;
+  if (u.role === 'quad') return quadGender(u.quad);
+  if (u.role === 'grade') {
+    const local = (u.email || '').split('@')[0].toLowerCase();
+    if (/^grade\s*\d+\s*g$/.test(local) || local.includes('girl')) return 'female';
+    if (/^grade\s*\d+\s*b$/.test(local) || local.includes('boy') || local.includes('guy')) return 'male';
+  }
+  return null;
+}
+// " Girls" / " Boys" / "" — suffix for gendered grade/quad tile labels.
+function _gsfx(gender) { return gender === 'female' ? ' Girls' : gender === 'male' ? ' Boys' : ''; }
 
 // ============================================================
 // ICON SYSTEM
@@ -1062,7 +1076,7 @@ async function _renderHomeInner() {
               // Gendered per-grade group stat from this quad's own breakdown.
               for (const gr of _hQuadGrades(q.quad)) {
                 const qgLg = (qLg && qLg.grades || []).find(x => x.grade === gr);
-                gradeRows += _hGradeMini('Yr ' + gr, qStud.filter(s => s.grade === gr), _hGradeAvg(trends, gr), qgLg);
+                gradeRows += _hGradeMini('Yr ' + gr + _gsfx(quadGender(q.quad)), qStud.filter(s => s.grade === gr), _hGradeAvg(trends, gr), qgLg);
               }
               gradeRows += '</div>';
             }
@@ -1074,7 +1088,7 @@ async function _renderHomeInner() {
       // Quad: Attendance by Grade tiles (their bracket)
       if (u.role === 'quad') {
         body += '<div class="sh">Attendance by Grade</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">';
-        for (const gr of _hQuadGrades(u.quad)) { const gLg = _lgGrade(gr); body += _hAttTile('Yr ' + gr, sc.filter(s => s.grade === gr), _hGradeAvg(trends, gr), { grpAvgWk: gLg ? gLg.current.avgPerWeek : 0 }); }
+        for (const gr of _hQuadGrades(u.quad)) { const gLg = _lgGrade(gr); body += _hAttTile('Yr ' + gr + _gsfx(_loginGender(u)), sc.filter(s => s.grade === gr), _hGradeAvg(trends, gr), { grpAvgWk: gLg ? gLg.current.avgPerWeek : 0 }); }
         body += '</div>';
       }
       // ── Lifegroup Attendance (current term only on Home) ──
@@ -1092,8 +1106,8 @@ async function _renderHomeInner() {
                 <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${q.current.uniqueAttenders} uniq · ${q.current.avgPerWeek} avg/wk</span>
               </div>`;
             if (open) for (const gr of _hQuadGrades(q.quad)) {
-              const g = (lgStats.byGrade || []).find(x => x.grade === gr);
-              if (g) body += _lgGradeBlock(g, false, 'home');
+              const g = (q.grades || []).find(x => x.grade === gr);
+              if (g) body += _lgGradeBlock(g, false, 'home', _gsfx(quadGender(q.quad)));
             }
             body += '</div>';
           }
@@ -1103,7 +1117,7 @@ async function _renderHomeInner() {
         const grades = (lgStats.byGrade || []).filter(g => g.current.weeksRan > 0 || g.current.uniqueAttenders > 0);
         if (grades.length) {
           body += '<div class="sh">Lifegroups by Grade</div><div class="card" style="margin-bottom:16px">';
-          for (const g of grades) body += _lgGradeBlock(g, false, 'home');
+          for (const g of grades) body += _lgGradeBlock(g, false, 'home', _gsfx(_loginGender(u)));
           body += '</div>';
         }
       }
@@ -1139,7 +1153,7 @@ async function _renderHomeInner() {
           for (const g of vg) {
             const pct = g.totalStudents > 0 ? Math.round(g.connectedStudents / g.totalStudents * 100) : 0;
             body += `<div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--paper-dark)">
-              <div style="width:60px;font-size:13px;font-weight:700">Grade ${g.grade}</div>
+              <div style="width:60px;font-size:13px;font-weight:700">Gr ${g.grade}${_gsfx(_loginGender(u))}</div>
               <div style="flex:1"><div class="pb"><div class="pb-f ${pct >= 80 ? 'fill-g' : pct >= 50 ? 'fill-a' : 'fill-r'}" style="width:${pct}%"></div></div></div>
               <div style="font-size:12px;color:var(--ink-mid);width:90px;text-align:right">${g.connectedStudents}/${g.totalStudents} (${pct}%)${g.atRiskCount ? ` <span style="color:var(--danger);display:inline-flex;align-items:center;gap:2px">${icS('alert')}${g.atRiskCount}</span>` : ''}</div>
             </div>`;
@@ -2440,15 +2454,16 @@ function _lgGroupRow(lg, showPrev) {
 // A grade block: summary line + (when open) its lifegroups. `mode` selects which
 // page owns the open-state + re-render ('trends' → _trGradeOpen/renderTrends;
 // 'home' → _homeLgGrade/renderHome).
-function _lgGradeBlock(g, showPrev, mode) {
+function _lgGradeBlock(g, showPrev, mode, gsfx) {
   mode = mode || 'trends';
+  gsfx = gsfx || '';
   const isOpen = (mode === 'home' ? _homeLgGrade : _trGradeOpen) === g.grade;
   const setvar = mode === 'home' ? '_homeLgGrade' : '_trGradeOpen';
   const rerender = mode === 'home' ? 'renderHome()' : 'renderTrends()';
   let h = `<div style="border-top:1px solid var(--paper-dark)">
     <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 0" onclick="${setvar}=${isOpen?'null':g.grade};${rerender}">
       <span style="font-size:12px;transition:.2s;display:inline-block;transform:${isOpen?'rotate(90deg)':'rotate(0deg)'}">›</span>
-      <div style="flex:1;font-size:13px;font-weight:700">Year ${g.grade}</div>
+      <div style="flex:1;font-size:13px;font-weight:700">Year ${g.grade}${gsfx}</div>
       <span style="font-size:12px;color:var(--ink-mid)">${g.current.uniqueAttenders} uniq · ${g.current.avgPerWeek} avg/wk</span>
     </div>`;
   if (showPrev && g.previous.weeksRan > 0) h += `<div style="font-size:11px;color:var(--ink-faint);padding:0 0 4px 20px">prev term: ${g.previous.uniqueAttenders} uniq · ${g.previous.avgPerWeek} avg/wk · ${g.previous.weeksRan} wks</div>`;
@@ -2548,7 +2563,7 @@ async function renderTrends() {
     if (u.role === 'grade') {
       const gl = students.filter(s => s.grade === u.grade);
       const c = _svcAgg(gl, false), p = _svcAgg(gl, true);
-      body += `<div class="sh">Grade ${u.grade}</div><div class="card">`;
+      body += `<div class="sh">Grade ${u.grade}${_gsfx(_loginGender(u))}</div><div class="card">`;
       body += statCard([c.uniq, c.avg], ['Unique attenders','Avg students/week'], _svcPrevSub(p));
       body += '</div>';
       // Weekly attendance bar graph for this grade (already gender-scoped server-side).
@@ -2574,7 +2589,7 @@ async function renderTrends() {
         if (!gl2.length) continue;
         const gc = _svcAgg(gl2, false), gp = _svcAgg(gl2, true);
         body += `<div style="border-top:1px solid var(--paper-dark);padding:7px 0 5px 20px">
-          <div style="font-size:13px;font-weight:600">Year ${gr}</div>
+          <div style="font-size:13px;font-weight:600">Year ${gr}${_gsfx(_loginGender(u))}</div>
           <div style="font-size:12px;color:var(--ink-mid)"><b style="color:var(--ink)">${gc.uniq}</b> uniq · <b style="color:var(--ink)">${gc.avg}</b> avg/wk</div>
           ${gp.weeks>0?`<div style="font-size:11px;color:var(--ink-faint)">prev term: ${gp.uniq} uniq · ${gp.avg} avg/wk</div>`:''}
         </div>`;
@@ -2604,7 +2619,7 @@ async function renderTrends() {
             if (!gl2.length) continue;
             const gc = _svcAgg(gl2, false), gp = _svcAgg(gl2, true);
             body += `<div style="border-top:1px solid var(--paper-dark);padding:7px 0 5px">
-                <div style="font-size:13px;font-weight:600;padding-left:20px;margin-bottom:2px">Year ${gr}</div>
+                <div style="font-size:13px;font-weight:600;padding-left:20px;margin-bottom:2px">Year ${gr}${_gsfx(quadGender(q.quad))}</div>
                 <div style="padding-left:20px;font-size:12px;color:var(--ink-mid)"><b style="color:var(--ink)">${gc.uniq}</b> uniq · <b style="color:var(--ink)">${gc.avg}</b> avg/wk${gp.weeks>0?` <span style="color:var(--ink-faint)">(prev ${gp.uniq} · ${gp.avg})</span>`:''}</div>
               </div>`;
           }
@@ -2638,14 +2653,14 @@ async function renderTrends() {
 
       if (u.role === 'grade') {
         const g = (lgStats.byGrade || [])[0];
-        body += `<div class="sh">Grade ${u.grade} Lifegroups</div><div class="card">`;
+        body += `<div class="sh">Grade ${u.grade}${_gsfx(_loginGender(u))} Lifegroups</div><div class="card">`;
         if (g && g.lifegroups.length) for (const lg of g.lifegroups) body += _lgGroupRow(lg, true);
         else body += `<div style="color:var(--ink-faint);font-size:13px">No lifegroups ran this term</div>`;
         body += '</div>';
       } else if (u.role === 'quad') {
         body += `<div class="sh">By Grade</div><div class="card">`;
         const grades = (lgStats.byGrade || []);
-        if (grades.length) for (const g of grades) body += _lgGradeBlock(g, true);
+        if (grades.length) for (const g of grades) body += _lgGradeBlock(g, true, 'trends', _gsfx(_loginGender(u)));
         else body += `<div style="color:var(--ink-faint);font-size:13px">No lifegroup data yet</div>`;
         body += '</div>';
       } else {
@@ -2663,7 +2678,7 @@ async function renderTrends() {
           if (isQOpen) {
             // Use the quad's own GENDERED per-grade breakdown (not the combined byGrade).
             const gradeStats = q.grades || [];
-            if (gradeStats.length) for (const g of gradeStats) body += _lgGradeBlock(g, true);
+            if (gradeStats.length) for (const g of gradeStats) body += _lgGradeBlock(g, true, 'trends', _gsfx(quadGender(q.quad)));
             else body += `<div style="font-size:12px;color:var(--ink-faint);padding:6px 0 4px 20px">No lifegroups ran this term</div>`;
           }
           body += '</div>';
