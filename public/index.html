@@ -3550,11 +3550,20 @@ function flowStats(){
     c.done++;c.od+=od;
   }
   const termList=[...terms.values()].sort((a,b)=>a.sort-b.sort).slice(-4);
-  const adminRows=[...admins.entries()].map(([nm,m])=>({
-    admin:nm,
-    terms:termList.map(t=>m.get(t.key)||null),
-    total:termList.reduce((s,t)=>s+((m.get(t.key)||{}).done||0),0),
-  })).filter(a=>a.total>0).sort((a,b)=>b.total-a.total);
+  const lastIdx=termList.length-1;
+  // Average days overdue in a given term cell (-1 = no follow-ups that term).
+  const cellAvgOd=(c)=>(c&&c.done)?c.od/c.done:-1;
+  const adminRows=[...admins.entries()].map(([nm,m])=>{
+    const cells=termList.map(t=>m.get(t.key)||null);
+    return {
+      admin:nm,
+      terms:cells,
+      total:cells.reduce((s,c)=>s+((c&&c.done)||0),0),
+      recentAvgOd:cellAvgOd(cells[lastIdx]),
+    };
+  }).filter(a=>a.total>0)
+    // Most recent term first, by highest average days overdue down to lowest.
+    .sort((a,b)=>b.recentAvgOd-a.recentAvgOd || b.total-a.total);
   return{terms:termList,admins:adminRows};
 }
 
@@ -3663,7 +3672,7 @@ function rHub(){
     +'<div style="font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;opacity:.7">This term</div>'
     +'<div style="display:flex;gap:18px;margin-top:7px">'
     +'<div><div style="font-size:1.3rem;font-weight:800">'+m.kpis.act+'</div><div style="font-size:.56rem;opacity:.75;text-transform:uppercase">Active youth</div></div>'
-    +'<div><div style="font-size:1.3rem;font-weight:800">'+partPct+'%</div><div style="font-size:.56rem;opacity:.75;text-transform:uppercase">In a lifegroup</div></div>'
+    +'<div><div style="font-size:1.3rem;font-weight:800">'+partPct+'%</div><div style="font-size:.56rem;opacity:.75;text-transform:uppercase">Attended a lifegroup (at least once this term)</div></div>'
     +'<div><div style="font-size:1.3rem;font-weight:800">'+m.kpis.decisions+'</div><div style="font-size:.56rem;opacity:.75;text-transform:uppercase">Decisions</div></div>'
     +'</div></div>';
   const tiles=[
@@ -3685,7 +3694,7 @@ function rOverview(){
   b+='<div class="stat-grid">'
     +'<div class="stat"><div class="stat-v">'+k.act+'</div><div class="stat-l">Active youth</div>'+at+'</div>'
     +'<div class="stat"><div class="stat-v">'+k.avgFri+'</div><div class="stat-l">Avg Friday</div>'+dl(k.svcD)+'</div>'
-    +'<div class="stat"><div class="stat-v">'+(k.act?Math.round(k.inLG/k.act*100):0)+'%</div><div class="stat-l">In a lifegroup</div>'+dl(k.grpD)+'</div>'
+    +'<div class="stat"><div class="stat-v">'+(k.act?Math.round(k.inLG/k.act*100):0)+'%</div><div class="stat-l">Attended a lifegroup (at least once this term)</div>'+dl(k.grpD)+'</div>'
     +'<div class="stat"><div class="stat-v">'+k.decisions+'</div><div class="stat-l">Decisions</div><div class="ca-dlt fl">this term</div></div>'
     +'</div>';
   const max=m.rungs[0].v||1;
@@ -3694,9 +3703,9 @@ function rOverview(){
   const row=(g,chip)=>'<div class="ca-alr" onclick="CA.showGroup(\''+g.id+'\')"><div style="font-size:.78rem;font-weight:600">'+g.name+'</div>'+chip+'</div>';
   const tops=m.groups.slice().sort((a,b)=>b.trendPct-a.trendPct||b.va-a.va).slice(0,2);
   b+='<div class="card"><div class="ca-ct">Group highlights</div>'
-    +(tops.length?tops.map(g=>row(g,'<span class="chip '+(g.trendPct>0?'c-success':'c-neutral')+'">'+(g.trendPct>0?'▲ +'+g.trendPct+'pp':'− level')+'</span>')).join(''):'<div style="font-size:.74rem;color:var(--ca-muted)">No group data yet</div>')
+    +(tops.length?tops.map(g=>row(g,'<span class="chip '+(g.trendPct>0?'c-success':'c-neutral')+'">'+(g.trendPct>0?'▲ +'+g.trendPct+'%':'− level')+'</span>')).join(''):'<div style="font-size:.74rem;color:var(--ca-muted)">No group data yet</div>')
     +'</div>';
-  const aDecl=m.groups.filter(g=>g.trend==='declining').sort((a,b)=>a.trendPct-b.trendPct).map(g=>[g,'<span class="chip c-danger">▼ Declining '+g.trendPct+'pp</span>']);
+  const aDecl=m.groups.filter(g=>g.trend==='declining').sort((a,b)=>a.trendPct-b.trendPct).map(g=>[g,'<span class="chip c-danger">▼ Declining '+g.trendPct+'%</span>']);
   const aLoose=m.groups.filter(g=>g.loose).map(g=>[g,'<span class="chip ca-cw">Wide but loose</span>']);
   const alerts=[...aDecl,...aLoose].slice(0,2);
   b+='<div class="card"><div class="ca-ct">Group alerts</div>'
@@ -3752,8 +3761,8 @@ function rFunnel(){
       const qp=m.people.filter(p=>p.s&&p.s.quad===q);
       const qr=R.map(r=>({lb:r.lb,v:qp.filter(p=>p.stage>=r.n).length}));
       b+='<div class="card" style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px"><span class="chip quad-'+q+'">'+(QLBL[q]||q)+'</span><span style="font-size:.62rem;color:var(--ca-muted)">'+qr[0].v+' people</span></div>';
-      // Centered tapered funnel (same style as the overall funnel above).
-      b+='<div class="ca-fw">'+qr.map((r,i)=>{const w=Math.round(92-(92-30)*(i/(qr.length-1)));return '<div class="ca-fseg" style="width:'+w+'%;background:linear-gradient(180deg,'+cols[i][0]+','+cols[i][1]+')"><div class="ca-fv">'+r.v+'</div><div class="ca-fn">'+r.lb+'</div></div>';}).join('')+'</div>';
+      // Integration ladder (same horizontal-bar style as the overview ladder).
+      b+=qr.map((r,i)=>'<div class="ca-lrow"><div class="ca-lname">'+r.lb+'</div><div class="ca-lbar"><div class="ca-lfill" style="width:'+Math.max(8,Math.round((qr[0].v?r.v/qr[0].v:0)*100))+'%;background:'+cols[i][0]+'">'+r.v+'</div></div></div>').join('');
       if(qr[0].v>0){
         const qcv=[];for(let i=1;i<qr.length;i++)qcv.push(qr[i-1].v?Math.round(qr[i].v/qr[i-1].v*100):0);
         const ql=qcv.indexOf(Math.min(...qcv));
@@ -3767,8 +3776,8 @@ function rFunnel(){
 }
 function fquad(){FQ=!FQ;rerender();}
 function gChip(g){
-  if(g.trend==='declining')return'<span class="chip c-danger">▼ Declining '+g.trendPct+'pp</span>';
-  if(g.trend==='rising')return'<span class="chip c-success">▲ Rising +'+g.trendPct+'pp</span>';
+  if(g.trend==='declining')return'<span class="chip c-danger">▼ Declining '+g.trendPct+'%</span>';
+  if(g.trend==='rising')return'<span class="chip c-success">▲ Rising +'+g.trendPct+'%</span>';
   if(g.loose)return'<span class="chip ca-cw">Wide but loose</span>';
   return'<span class="chip c-neutral">− Stable</span>';
 }
@@ -4013,7 +4022,7 @@ function buildDeck(){
   };
   const lgTableViz=()=>{
     if(!m.groups.length)return '<p class="muted">No lifegroup data.</p>';
-    const arrow=g=>g.trend==='rising'?'<span class="up">▲ +'+g.trendPct+'pp</span>':g.trend==='declining'?'<span class="down">▼ '+g.trendPct+'pp</span>':g.loose?'<span class="down">loose</span>':'<span class="flat">—</span>';
+    const arrow=g=>g.trend==='rising'?'<span class="up">▲ +'+g.trendPct+'%</span>':g.trend==='declining'?'<span class="down">▼ '+g.trendPct+'%</span>':g.loose?'<span class="down">loose</span>':'<span class="flat">—</span>';
     const rows=m.groups.slice().sort((a,b)=>b.va-a.va).map(g=>'<tr><td>'+esc(g.name)+'</td><td class="r">'+g.enrolled+'</td><td class="r">'+g.active+'</td><td class="r">'+g.va+'</td><td>'+arrow(g)+'</td></tr>').join('');
     return '<table class="lgt"><thead><tr><th>Cohort</th><th class="r">Enrolled</th><th class="r">Active</th><th class="r">Visits/active</th><th>Trend</th></tr></thead><tbody>'+rows+'</tbody></table>';
   };
