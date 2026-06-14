@@ -111,4 +111,34 @@ describe('Lifegroup Stats Service', () => {
     expect(data.byGrade.map((g) => g.grade)).toEqual([9]);
     expect(data.byQuad).toHaveLength(0); // grade logins don't get a quad breakdown
   });
+
+  it('per-quad grade breakdown is GENDERED (g79 grade 9 excludes the boys group)', async () => {
+    const r = makeRepos();
+    await Promise.all([
+      r.students.init(), r.sessions.init(), r.attendance.init(), r.imports.init(), r.settings.init(),
+      r.lifegroups.init(), r.lifegroupWeeks.init(), r.lifegroupAttendance.init(), r.leaders.init(),
+    ]);
+    await r.settings.updateSettings({ serviceMinAttendance: 1 });
+    const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+    await svc.importServiceCsv(ADMIN, [
+      { first_name: 'Amy', last_name: 'A', gender: 'female', grade: 9, '2026-04-17': true, '2026-04-24': true },
+      { first_name: 'Ben', last_name: 'B', gender: 'male', grade: 9, '2026-04-17': true, '2026-04-24': true },
+    ], 'svc.csv');
+    await svc.importGroupCsv(DIR, {
+      groups: [
+        { name: 'Grade 9 Girls Lifegroup', meetings: ['2026-04-13', '2026-04-20'], members: [{ first_name: 'Amy', last_name: 'A', attendance: [true, true] }] },
+        { name: 'Grade 9 Boys Lifegroup', meetings: ['2026-04-13', '2026-04-20'], members: [{ first_name: 'Ben', last_name: 'B', attendance: [true, true] }] },
+      ],
+    }, 'grp.csv');
+
+    const statsSvc = makeLifegroupStatsService(r.students, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.sessions, r.settings);
+    const data = await statsSvc.get(ADMIN);
+    const g79 = data.byQuad.find((q) => q.quad === 'g79')!;
+    const grade9 = g79.grades.find((g) => g.grade === 9)!;
+    // Only the girls' group + Amy should be counted under g79 / grade 9.
+    expect(grade9.lifegroups.map((l) => l.name)).toEqual(['Grade 9 Girls Lifegroup']);
+    expect(grade9.current.uniqueAttenders).toBe(1);
+    const b79 = data.byQuad.find((q) => q.quad === 'b79')!;
+    expect(b79.grades.find((g) => g.grade === 9)!.lifegroups.map((l) => l.name)).toEqual(['Grade 9 Boys Lifegroup']);
+  });
 });

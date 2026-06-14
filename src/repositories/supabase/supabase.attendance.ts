@@ -21,17 +21,32 @@ import { chunk } from './bulk';
 // Mappers
 // ---------------------------------------------------------------------------
 
+// Tolerant date coercion. The pg driver normally returns Date objects, but a
+// null/undefined column (or a string, depending on driver/casts) must not crash
+// the whole findAll() — one bad row would 500 the endpoint. `dateOnly` returns
+// YYYY-MM-DD, `dateIso` a full ISO timestamp; both fall back safely.
+function dateOnly(v: unknown): string {
+  if (v instanceof Date) return v.toISOString().split('T')[0]!;
+  if (typeof v === 'string' && v.length >= 10) return v.slice(0, 10);
+  return '';
+}
+function dateIso(v: unknown): string {
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === 'string' && v) return v;
+  return new Date(0).toISOString();
+}
+
 function toServiceSession(row: Record<string, unknown>): ServiceSession {
   return {
     id: row['id'] as string,
     importId: row['import_id'] as string,
-    sessionDate: (row['session_date'] as Date).toISOString().split('T')[0]!,
+    sessionDate: dateOnly(row['session_date']),
     sessionName: row['session_name'] as string,
     isRegular: row['is_regular'] as boolean,
     isValid: row['is_valid'] as boolean,
     totalAttendance: row['total_attendance'] as number,
     sortOrder: row['sort_order'] as number,
-    createdAt: (row['created_at'] as Date).toISOString(),
+    createdAt: dateIso(row['created_at']),
   };
 }
 
@@ -50,7 +65,7 @@ function toLifegroup(row: Record<string, unknown>): Lifegroup {
     shortName: row['short_name'] as string,
     grade: (row['grade'] as number | null) ?? null,
     gender: (row['gender'] as string | null) ?? null,
-    createdAt: (row['created_at'] as Date).toISOString(),
+    createdAt: dateIso(row['created_at']),
   };
 }
 
@@ -60,11 +75,8 @@ function toLifegroupWeek(row: Record<string, unknown>): LifegroupWeek {
     importId: row['import_id'] as string,
     weekNum: row['week_num'] as number,
     weekKey: row['week_key'] as string,
-    weekStart: (row['week_start'] as Date).toISOString().split('T')[0]!,
-    weekEnd:
-      row['week_end'] != null
-        ? (row['week_end'] as Date).toISOString().split('T')[0]!
-        : null,
+    weekStart: dateOnly(row['week_start']),
+    weekEnd: row['week_end'] != null ? dateOnly(row['week_end']) : null,
   };
 }
 
@@ -90,7 +102,7 @@ function toImportRecord(row: Record<string, unknown>): ImportRecord {
     studentsUpdated: row['students_updated'] as number,
     status: row['status'] as 'ok' | 'error',
     errorMessage: (row['error_message'] as string | null) ?? null,
-    importedAt: (row['imported_at'] as Date).toISOString(),
+    importedAt: dateIso(row['imported_at']),
     importedBy: row['imported_by'] as string,
   };
 }

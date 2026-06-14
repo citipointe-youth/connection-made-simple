@@ -1006,7 +1006,11 @@ async function _renderHomeInner() {
             let gradeRows = '';
             if (open) {
               gradeRows = '<div style="margin-top:8px">';
-              for (const gr of _hQuadGrades(q.quad)) gradeRows += _hGradeMini('Yr ' + gr, qStud.filter(s => s.grade === gr), _hGradeAvg(trends, gr), _lgGrade(gr));
+              // Gendered per-grade group stat from this quad's own breakdown.
+              for (const gr of _hQuadGrades(q.quad)) {
+                const qgLg = (qLg && qLg.grades || []).find(x => x.grade === gr);
+                gradeRows += _hGradeMini('Yr ' + gr, qStud.filter(s => s.grade === gr), _hGradeAvg(trends, gr), qgLg);
+              }
               gradeRows += '</div>';
             }
             body += _hAttTile(q.label, qStud, _hQuadAvg(trends, q.quad), { click: `toggleHomeQuad('${q.quad}')`, chev: open, span: open, gradeRows, grpAvgWk: qLg ? qLg.current.avgPerWeek : 0 });
@@ -2639,13 +2643,10 @@ async function renderTrends() {
           </div>`;
           if (q.previous.weeksRan>0) body += `<div style="font-size:11px;color:var(--ink-faint);padding-left:20px;margin-top:2px">prev term: ${q.previous.uniqueAttenders} uniq · ${q.previous.avgPerWeek} avg/wk</div>`;
           if (isQOpen) {
-            const grades = _hQuadGrades(q.quad);
-            let any = false;
-            for (const gr of grades) {
-              const g = (lgStats.byGrade || []).find(x => x.grade === gr);
-              if (g) { body += _lgGradeBlock(g, true); any = true; }
-            }
-            if (!any) body += `<div style="font-size:12px;color:var(--ink-faint);padding:6px 0 4px 20px">No lifegroups ran this term</div>`;
+            // Use the quad's own GENDERED per-grade breakdown (not the combined byGrade).
+            const gradeStats = q.grades || [];
+            if (gradeStats.length) for (const g of gradeStats) body += _lgGradeBlock(g, true);
+            else body += `<div style="font-size:12px;color:var(--ink-faint);padding:6px 0 4px 20px">No lifegroups ran this term</div>`;
           }
           body += '</div>';
         }

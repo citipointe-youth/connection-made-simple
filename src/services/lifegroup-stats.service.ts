@@ -41,6 +41,9 @@ export interface QuadLifegroupStat {
   label: string;
   current: TermAgg;
   previous: TermAgg;
+  // Per-grade breakdown scoped to THIS quad's gender + bracket (so a gendered
+  // quad's grade rows are gendered, not combined across both genders).
+  grades: GradeLifegroupStat[];
 }
 
 export interface WeekPoint {
@@ -193,25 +196,42 @@ export function makeLifegroupStatsService(
           ? (actor.quad ? [actor.quad] : [])
           : [...QUADS];
 
-      // ── Per-grade: average = individuals OF THAT GRADE attending any lifegroup
-      //    each week the grade's groups ran; lifegroups listed underneath. ──
-      const byGrade: GradeLifegroupStat[] = [];
-      for (const grade of visibleGrades) {
-        const groupsOfGrade = lifegroups.filter((l) => l.grade === grade && lifegroupVisible(l.id));
-        if (groupsOfGrade.length === 0) continue;
-        const inGrade = (id: string) => { const lg = lifegroupById.get(id); return lg?.grade === grade; };
-        const gradeStudent = (row: JoinedRow) => row.grade === grade;
+      // A per-grade stat, optionally constrained to a gender (for the per-quad
+      // breakdown). `gender` null = any gender (used for the top-level byGrade,
+      // which is already gender-scoped for quad/grade logins via lifegroupVisible).
+      // `studentFilter` picks which attenders count toward the grade average.
+      const gradeStatFor = (
+        grade: number,
+        gender: 'male' | 'female' | null,
+        studentFilter: (row: JoinedRow) => boolean,
+      ): GradeLifegroupStat => {
+        const matchGender = (g: string | null) => gender == null || !g || g === gender;
+        const groupsOfGrade = lifegroups.filter((l) => l.grade === grade && lifegroupVisible(l.id) && matchGender(l.gender));
+        const inGrade = (id: string) => { const lg = lifegroupById.get(id); return lg?.grade === grade && matchGender(lg.gender); };
         const lifegroupStats = groupsOfGrade
           .map((l) => statForGroup(l.id))
           .filter((s) => s.current.weeksRan > 0 || s.previous.weeksRan > 0)
           .sort((a, b) => b.current.uniqueAttenders - a.current.uniqueAttenders || a.name.localeCompare(b.name));
-        const current = termAgg(inGrade, gradeStudent, 'current');
-        const previous = termAgg(inGrade, gradeStudent, 'previous');
-        if (current.weeksRan === 0 && previous.weeksRan === 0 && lifegroupStats.length === 0) continue;
-        byGrade.push({ grade, current, previous, lifegroups: lifegroupStats });
+        return {
+          grade,
+          current: termAgg(inGrade, studentFilter, 'current'),
+          previous: termAgg(inGrade, studentFilter, 'previous'),
+          lifegroups: lifegroupStats,
+        };
+      };
+      const isEmptyGrade = (g: GradeLifegroupStat) =>
+        g.current.weeksRan === 0 && g.previous.weeksRan === 0 && g.lifegroups.length === 0;
+
+      // ── Per-grade (top level): individuals OF THAT GRADE attending each week. ──
+      const byGrade: GradeLifegroupStat[] = [];
+      for (const grade of visibleGrades) {
+        const gs = gradeStatFor(grade, null, (row) => row.grade === grade);
+        if (isEmptyGrade(gs)) continue;
+        byGrade.push(gs);
       }
 
-      // ── Per-quad: individuals OF THAT QUAD attending any quad lifegroup each week ──
+      // ── Per-quad: individuals OF THAT QUAD attending each week, with a GENDERED
+      //    per-grade breakdown underneath (grade + the quad's gender). ──
       const byQuad: QuadLifegroupStat[] = [];
       for (const quad of visibleQuads) {
         const grades = quadGradesOf(quad);
@@ -225,8 +245,11 @@ export function makeLifegroupStatsService(
         const quadStudent = (row: JoinedRow) => row.quad === quad;
         const current = termAgg(inQuad, quadStudent, 'current');
         const previous = termAgg(inQuad, quadStudent, 'previous');
-        if (current.weeksRan === 0 && previous.weeksRan === 0) continue;
-        byQuad.push({ quad, label: QUAD_LABELS[quad], current, previous });
+        const quadGrades = grades
+          .map((g) => gradeStatFor(g, gender, (row) => row.quad === quad && row.grade === g))
+          .filter((g) => !isEmptyGrade(g));
+        if (current.weeksRan === 0 && previous.weeksRan === 0 && quadGrades.length === 0) continue;
+        byQuad.push({ quad, label: QUAD_LABELS[quad], current, previous, grades: quadGrades });
       }
 
       // ── Overall (scoped to the login): all visible groups, all visible students ──
