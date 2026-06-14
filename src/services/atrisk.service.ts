@@ -54,9 +54,12 @@ export function computeStatus(
 
   if (svcTotal === 0 && grpTotal === 0) return 'new';
 
-  // Stopped: attended zero times in either stream (with enough sessions to judge)
-  if (svcTotal >= 3 && svcAttended === 0) return 'stopped';
-  if (grpTotal >= 3 && grpAttended === 0) return 'stopped';
+  // Stopped: attended NEITHER service NOR lifegroup this term (with enough data
+  // in at least one stream to judge). A student who attended >=1 service OR >=1
+  // lifegroup is not "stopped" — they fall through to declining/at-risk below.
+  const attendedSomething = svcAttended > 0 || grpAttended > 0;
+  const enoughData = svcTotal >= 3 || grpTotal >= 3;
+  if (!attendedSomething && enoughData) return 'stopped';
 
   // At risk: below risk threshold
   if (svcRate !== null && svcRate < riskThreshold) return 'atrisk';

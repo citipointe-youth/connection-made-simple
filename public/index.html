@@ -606,6 +606,59 @@ function isRising(s) {
   return up(s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)
       || up(s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal);
 }
+// ── Dynamic per-stream qualifier (this term vs last term) ──
+// 'rising'  = rate up >=5pts vs last term
+// 'declining' = rate down >=5pts vs last term
+// 'stopped' = attended 0 this term (>=3 sessions/weeks to judge)
+// 'steady'/'none' = no qualifier.
+function _streamQual(curA, curT, prevA, prevT) {
+  if (curT < 1) return 'none';
+  if (curT >= 3 && curA === 0) return 'stopped';
+  if (prevT >= 1) {
+    const d = curA / curT - prevA / prevT;
+    if (d >= 0.05) return 'rising';
+    if (d <= -0.05) return 'declining';
+  }
+  return 'steady';
+}
+// Overall category: stopped (neither stream this term) / mixed (one up + one
+// down) / rising / declining / steady.
+function attendQual(s) {
+  const svcQ = _streamQual(s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal);
+  const grpQ = _streamQual(s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal);
+  const enough = (s.svcTotal >= 3) || (s.grpTotal >= 3);
+  const stoppedBoth = enough && s.svcAttended === 0 && s.grpAttended === 0;
+  let category;
+  if (stoppedBoth) category = 'stopped';
+  else {
+    const up = svcQ === 'rising' || grpQ === 'rising';
+    const down = svcQ === 'declining' || svcQ === 'stopped' || grpQ === 'declining' || grpQ === 'stopped';
+    category = (up && down) ? 'mixed' : up ? 'rising' : down ? 'declining' : 'steady';
+  }
+  return { svcQ, grpQ, category };
+}
+const _QUAL_STYLE = {
+  rising: ['#d1fae5', '#065f46', 'arru'],
+  declining: ['#fee2e2', '#991b1b', 'arrd'],
+  stopped: ['#fef3c7', '#92400e', 'alert'],
+};
+function _qualWord(q) { return q === 'rising' ? 'Rising' : q === 'declining' ? 'Declining' : q === 'stopped' ? 'Stopped' : ''; }
+function _qualChip(label, q) {
+  const st = _QUAL_STYLE[q];
+  if (!st) return '';
+  return `<span class="chip" style="background:${st[0]};color:${st[1]};display:inline-flex;align-items:center;gap:3px">${icS(st[2])} ${label}</span>`;
+}
+// Dynamic status chip(s) for the search / at-risk screens (replaces the at-risk
+// chip). '' when steady.
+function qualChips(s) {
+  const { svcQ, grpQ, category } = attendQual(s);
+  if (category === 'stopped') return _qualChip('Stopped both', 'stopped');
+  let h = '';
+  if (svcQ === 'rising' || svcQ === 'declining' || svcQ === 'stopped') h += _qualChip(_qualWord(svcQ) + ' service', svcQ);
+  if (grpQ === 'rising' || grpQ === 'declining' || grpQ === 'stopped') h += (h ? ' ' : '') + _qualChip(_qualWord(grpQ) + ' group', grpQ);
+  return h;
+}
+
 // "This term / last term" attendance line for service or groups.
 function termRow(label, curA, curT, prevA, prevT) {
   const cp = curT > 0 ? Math.round(curA / curT * 100) : null;
@@ -1965,65 +2018,57 @@ function restoreArFilter() {
 
 async function renderAtRisk() {
   setApp(shell('<div class="loading"><div class="spin"></div></div>'));
-  let list=[], allStu=[];
-  try {
-    const params = new URLSearchParams();
-    if (_arFilter.grade) params.set('grade', _arFilter.grade);
-    if (_arFilter.gender) params.set('gender', _arFilter.gender);
-    [list, allStu] = await Promise.all([
-      API.get(`/at-risk${params.toString()?'?'+params.toString():''}`),
-      API.get('/students').catch(() => []),
-    ]);
-  } catch {}
+  let allStu = [];
+  try { allStu = await API.get('/students'); } catch {}
   const u = S.user;
 
-  // Rising = students improving vs last term (the /students list is role-scoped;
-  // apply the same grade/gender filters as the at-risk view).
-  let rising = (allStu || []).filter(isRising);
-  if (_arFilter.grade) rising = rising.filter(s => s.grade == _arFilter.grade);
-  if (_arFilter.gender) rising = rising.filter(s => s.gender === _arFilter.gender);
-  rising.sort((a, b) => (a.firstName || '').localeCompare(b.firstName || ''));
+  // The /students list is role-scoped (grade/gender) server-side; apply the page's
+  // grade/gender filters on top, then categorise by the dynamic qualifier.
+  let scoped = (allStu || []).slice();
+  if (_arFilter.grade) scoped = scoped.filter(s => s.grade == _arFilter.grade);
+  if (_arFilter.gender) scoped = scoped.filter(s => s.gender === _arFilter.gender);
 
-  // Scoped filter chips — match demo behaviour
+  const sections = { rising:[], mixed:[], declining:[], stopped:[] };
+  for (const s of scoped) { const cat = attendQual(s).category; if (sections[cat]) sections[cat].push(s); }
+  for (const k of Object.keys(sections)) sections[k].sort((a,b)=>(a.firstName||'').localeCompare(b.firstName||''));
+  const flagged = sections.mixed.length + sections.declining.length + sections.stopped.length;
+
   const arGrades = u.role==='grade' ? [] : u.role==='quad'
-    ? (u.quad==='g79'||u.quad==='b79'?[7,8,9]:[10,11,12])
-    : [7,8,9,10,11,12];
+    ? (u.quad==='g79'||u.quad==='b79'?[7,8,9]:[10,11,12]) : [7,8,9,10,11,12];
   const arGenders = ['director','admin'].includes(u.role) ? ['male','female'] : [];
-
-  const gChips = arGrades.map(g =>
-    `<button class="fc ${_arFilter.grade==g?'on':''}" onclick="setArFilter('grade',${g})">${g}</button>`
-  ).join('');
-  const dChips = arGenders.map(g =>
-    `<button class="fc ${_arFilter.gender===g?'on':''}" onclick="setArFilter('gender','${g}')">${g.charAt(0).toUpperCase()+g.slice(1)}</button>`
-  ).join('');
+  const gChips = arGrades.map(g => `<button class="fc ${_arFilter.grade==g?'on':''}" onclick="setArFilter('grade',${g})">${g}</button>`).join('');
+  const dChips = arGenders.map(g => `<button class="fc ${_arFilter.gender===g?'on':''}" onclick="setArFilter('gender','${g}')">${g.charAt(0).toUpperCase()+g.slice(1)}</button>`).join('');
 
   let body = `
     <div class="ph">
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <div><div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('alert')} At Risk</div><div class="ph-sub">${list.length} student${list.length!==1?'s':''} flagged</div></div>
+        <div><div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('alert')} At Risk</div><div class="ph-sub">${flagged} need attention${sections.rising.length?` · ${sections.rising.length} rising`:''}</div></div>
         ${['director','admin'].includes(u.role)?`<button class="btn btn-secondary btn-sm" onclick="recomputeAtRisk()">Recompute</button>`:''}
       </div>
     </div>`;
+  if (arGrades.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Grade:</span>${gChips}<button class="fc ${!_arFilter.grade?'on':''}" onclick="setArFilter('grade',null)">All</button></div>`;
+  if (arGenders.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Gender:</span>${dChips}<button class="fc ${!_arFilter.gender?'on':''}" onclick="setArFilter('gender',null)">All</button></div>`;
 
-  if (arGrades.length) {
-    body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Grade:</span>${gChips}
-      <button class="fc ${!_arFilter.grade?'on':''}" onclick="setArFilter('grade',null)">All</button></div>`;
-  }
-  if (arGenders.length) {
-    body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Gender:</span>${dChips}
-      <button class="fc ${!_arFilter.gender?'on':''}" onclick="setArFilter('gender',null)">All</button></div>`;
-  }
-
-  // ── Rising (improving vs last term) — collapsible card at the very top ──
-  if (rising.length) {
-    let rcards = '';
-    for (const s of rising) {
-      rcards += `
+  // Sections: Rising / Mixed (one stream up, one down) / Declining / Stopped (neither this term).
+  const SEC = [
+    ['rising', 'Rising', '#065f46', 'arru'],
+    ['mixed', 'Mixed', '#92400e', 'arrr'],
+    ['declining', 'Declining', '#991b1b', 'arrd'],
+    ['stopped', 'Stopped', '#991b1b', 'alert'],
+  ];
+  let any = false;
+  for (const [key, label, col, ic] of SEC) {
+    const items = sections[key];
+    if (!items.length) continue;
+    any = true;
+    let cards = '';
+    for (const s of items) {
+      cards += `
         <div class="li" style="cursor:pointer;align-items:flex-start" onclick="showStudentDetail('${s.id}')">
           <div class="li-body">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span class="li-title">${s.firstName} ${s.lastName}</span>
-              <span class="chip" style="background:#d1fae5;color:#065f46;display:inline-flex;align-items:center;gap:3px">${icS('arru')} Rising</span> ${quadChip(s.quad)}
+              ${qualChips(s)} ${quadChip(s.quad)}
             </div>
             <div class="li-sub" style="margin-top:3px">Gr ${s.grade||'—'} · ${s.gender}</div>
             ${termRow('Service', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
@@ -2032,56 +2077,18 @@ async function renderAtRisk() {
           <div class="li-right" style="color:var(--ink-faint)">›</div>
         </div>`;
     }
-    body += `<div class="card" style="margin-bottom:12px;border-left:4px solid var(--success)">
-      <div onclick="toggleArSection('rising')" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px 16px;user-select:none">
-        <span id="ar-chev-rising" style="display:inline-flex;color:var(--ink-mid)">${icS('chevr')}</span>
-        <strong style="color:#065f46;display:inline-flex;align-items:center;gap:4px">${icS('arru')} Rising</strong>
-        <span class="badge" style="margin-left:auto">${rising.length}</span>
+    body += `<div class="card" style="margin-bottom:12px;border-left:4px solid ${col}">
+      <div onclick="toggleArSection('${key}')" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px 16px;user-select:none">
+        <span id="ar-chev-${key}" style="display:inline-flex;color:var(--ink-mid)">${icS('chevr')}</span>
+        <strong style="color:${col};display:inline-flex;align-items:center;gap:4px">${icS(ic)} ${label}</strong>
+        <span class="badge" style="margin-left:auto">${items.length}</span>
       </div>
-      <div id="ar-body-rising" style="display:none;padding:0 12px 12px">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">${rcards}</div>
+      <div id="ar-body-${key}" style="display:none;padding:0 12px 12px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">${cards}</div>
       </div>
     </div>`;
   }
-
-  if (!list.length) {
-    body += `<div class="empty">${icEmpty('check')}<div class="empty-title">No at-risk students</div><div class="empty-sub">${rising.length?'Some students are rising — see above.':'Great news — attendance looks healthy'}</div></div>`;
-  } else {
-    const groups = { declining:[], atrisk:[], stopped:[], watch:[] };
-    for (const s of list) if (groups[s.status]) groups[s.status].push(s);
-    const labels = { declining:'Declining', atrisk:'At Risk', stopped:'Stopped Attending', watch:'Watch List' };
-    for (const [status, items] of Object.entries(groups)) {
-      if (!items.length) continue;
-      let cards = '';
-      for (const s of items) {
-        cards += `
-          <div class="li" style="cursor:pointer;align-items:flex-start" onclick="showStudentDetail('${s.studentId}')">
-            <div class="li-body">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <span class="li-title">${s.fullName}</span>
-                ${riskChip(s.status)} ${quadChip(s.quad)}
-              </div>
-              <div class="li-sub" style="margin-top:3px">Gr ${s.grade||'—'} · ${s.gender}</div>
-              ${termRow('Service', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
-              ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
-            </div>
-            <div class="li-right" style="color:var(--ink-faint)">›</div>
-          </div>`;
-      }
-      body += `<div class="card" style="margin-bottom:12px">
-        <div onclick="toggleArSection('${status}')" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px 16px;user-select:none">
-          <span id="ar-chev-${status}" style="display:inline-flex;color:var(--ink-mid)">${icS('chevr')}</span>
-          <strong>${labels[status]}</strong>
-          <span class="badge" style="margin-left:auto">${items.length}</span>
-        </div>
-        <div id="ar-body-${status}" style="display:none;padding:0 12px 12px">
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">
-            ${cards}
-          </div>
-        </div>
-      </div>`;
-    }
-  }
+  if (!any) body += `<div class="empty">${icEmpty('check')}<div class="empty-title">Nothing flagged</div><div class="empty-sub">Attendance looks healthy this term</div></div>`;
   setApp(shell(body));
 }
 
@@ -2172,7 +2179,7 @@ function _studentResultsHtml(vis) {
       <div class="li-body">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <span class="li-title">${s.firstName} ${s.lastName}</span>
-          ${riskChip(s.atRiskStatus)}
+          ${qualChips(s)}
         </div>
         <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender} ${quadChip(s.quad)}</div>
         ${termRow('Service', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
@@ -2194,7 +2201,7 @@ function _studentResultsHtml(vis) {
       <td>${quadChip(s.quad)}</td>
       <td>${pct!==null?pct+'%':'—'} <span style="color:var(--ink-faint)">/ ${psvc}</span></td>
       <td>${gp} <span style="color:var(--ink-faint)">/ ${pgp}</span></td>
-      <td>${riskChip(s.atRiskStatus)}</td>
+      <td>${qualChips(s) || '<span style="color:var(--ink-faint)">—</span>'}</td>
       <td><button class="btn btn-ghost btn-sm" onclick="showStudentDetail('${s.id}')">View →</button></td>
     </tr>`;
   }
@@ -2308,7 +2315,7 @@ async function showStudentDetail(id) {
   modal(`
     <div class="mo-title">${s.firstName} ${s.lastName}</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-      ${quadChip(s.quad)} ${riskChip(s.atRiskStatus)}
+      ${quadChip(s.quad)} ${qualChips(s)}
       <span class="chip c-neutral">Gr ${s.grade||'—'}</span>
       <span class="chip c-neutral">${s.gender}</span>
     </div>

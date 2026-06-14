@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { makeAtRiskService } from '../services/atrisk.service';
+import { makeAtRiskService, computeStatus } from '../services/atrisk.service';
 import { makeStudentService } from '../services/student.service';
 import { InMemoryStudentRepository, InMemorySettingsRepository } from '../repositories/in-memory';
 import type { Actor } from '../core/entities/user';
@@ -129,5 +129,19 @@ describe('At-Risk — settings thresholds', () => {
     const bob = list.find(e => e.fullName === 'Bob Jones');
     // 25% > 10% risk threshold but < 75% regular → should now be declining
     expect(bob?.status).toBe('declining');
+  });
+});
+
+describe('computeStatus — stopped requires attending NEITHER stream', () => {
+  const S = { riskRateNumerator: 1, riskRateDenominator: 2, regRateNumerator: 3, regRateDenominator: 4 };
+  it('0 service but attended a lifegroup -> NOT stopped (declining/at-risk)', () => {
+    // svc 0/8, grp 3/6 (50%): attended a group, so not stopped.
+    expect(computeStatus(0, 8, 3, 6, S)).not.toBe('stopped');
+  });
+  it('attended neither (with data) -> stopped', () => {
+    expect(computeStatus(0, 8, 0, 6, S)).toBe('stopped');
+  });
+  it('0 service, no group data -> stopped (attended nothing)', () => {
+    expect(computeStatus(0, 8, 0, 0, S)).toBe('stopped');
   });
 });
