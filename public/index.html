@@ -613,6 +613,12 @@ function isRising(s) {
   return up(s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)
       || up(s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal);
 }
+// Attended at least one service OR lifegroup in the current OR previous term.
+// Students who never attended are hidden from the quick-add picker (still
+// searchable) and excluded from the connected/unconnected counts.
+function _hasAttended(s) {
+  return (s.svcAttended > 0) || (s.grpAttended > 0) || (s.prevSvcAttended > 0) || (s.prevGrpAttended > 0);
+}
 // ── Dynamic per-stream qualifier (this term vs last term) ──
 // 'rising'  = rate up >=5pts vs last term
 // 'declining' = rate down >=5pts vs last term
@@ -971,6 +977,7 @@ async function renderHome() {
 }
 async function _renderHomeInner() {
   const u = S.user;
+  const _pg = S.page;
   let stats, trends, sc = [], lgStats = null, conns = [];
   try {
     [stats, trends, sc, lgStats, conns] = await Promise.all([
@@ -981,6 +988,7 @@ async function _renderHomeInner() {
       API.get('/connections').catch(() => []),
     ]);
   } catch {}
+  if (S.page !== _pg) return; // navigated away while awaiting — don't overwrite the new page
   sc = sc || [];
   const _connSet = new Set((conns || []).map(a => a.studentId));
   const _lgQuad = q => (lgStats && lgStats.byQuad || []).find(x => x.quad === q);
@@ -1410,10 +1418,12 @@ function renderConnectView() {
   if (gf.size) visLeaders = visLeaders.filter(l => l.grades?.some(g => gf.has(g)));
   if (df.size) visLeaders = visLeaders.filter(l => !l.gender || df.has(l.gender));
 
-  // Counts
+  // Counts — only students who have attended count toward connected/total; those
+  // who never attended (current/prev term) aren't treated as "unconnected".
   const connectedStudentIds = new Set(Object.keys(allocs).filter(id => allocs[id].length > 0));
-  const totalStudents = students.length;
-  const connectedCount = connectedStudentIds.size;
+  const connectable = students.filter(_hasAttended);
+  const totalStudents = connectable.length;
+  const connectedCount = connectable.filter(s => connectedStudentIds.has(s.id)).length;
 
   // Filters are scoped to the login: grade logins get none (they only see their
   // grade's leaders); quad logins get a grade filter for their bracket but no
@@ -1613,6 +1623,9 @@ function filterPicker() {
       if (s.gender !== 'male' && s.gender !== 'female') return false;
       if (gender && s.gender !== gender) return false;
       if (grades.size > 0 && !grades.has(s.grade)) return false;
+      // Hide students who never attended (current/prev term) unless already
+      // assigned to a leader — they remain findable via search.
+      if (!_hasAttended(s) && !assigned.has(s.id) && !((allocs[s.id] || []).length)) return false;
       return true;
     });
   }
@@ -1808,7 +1821,7 @@ async function renderMyStudents() {
             <div class="li-sub">Yr ${s.grade || '—'} · ${s.gender}${bd ? ' · ' + bd : ''}</div>
             ${termRow('Fridays', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
             ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
-            ${(s.mobile || s.parentPhone) ? `<div style="font-size:12px;margin-top:4px" onclick="event.stopPropagation()">${s.mobile ? phoneLink(s.mobile) : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? phoneLink(s.parentPhone) : ''}</div>` : ''}
+            ${(s.mobile || s.parentPhone) ? `<div style="font-size:12px;margin-top:4px;color:var(--ink-mid)" onclick="event.stopPropagation()">${s.mobile ? `<span style="font-weight:600">Mobile:</span> ${phoneLink(s.mobile)}` : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? `<span style="font-weight:600">Parent:</span> ${phoneLink(s.parentPhone)}` : ''}</div>` : ''}
           </div>
         </div>`;
       }
@@ -2476,12 +2489,14 @@ function _lgGradeBlock(g, showPrev, gsfx, id) {
 async function renderTrends() {
   if (!_allCached('/students')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
   const u = S.user;
+  const _pg = S.page;
   const [students, overview, trends, lgStats] = await Promise.all([
     API.get('/students').catch(() => []),
     API.get('/overview').catch(() => null),
     API.get('/trends').catch(() => null),
     API.get('/lifegroups/stats').catch(() => null),
   ]);
+  if (S.page !== _pg) return; // navigated away while awaiting — don't overwrite the new page
 
   const canExport = ['quad','director','admin'].includes(u.role);
   const QUAD_LABELS_LOCAL = { g79:'Girls Yr 7–9', b79:'Boys Yr 7–9', g1012:'Girls Yr 10–12', b1012:'Boys Yr 10–12' };

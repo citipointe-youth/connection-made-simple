@@ -112,6 +112,38 @@ describe('Lifegroup Stats Service', () => {
     expect(data.byQuad).toHaveLength(0); // grade logins don't get a quad breakdown
   });
 
+  it('group average divides by VALID SERVICES in the term, not weeks the group ran', async () => {
+    const r = makeRepos();
+    await Promise.all([
+      r.students.init(), r.sessions.init(), r.attendance.init(), r.imports.init(), r.settings.init(),
+      r.lifegroups.init(), r.lifegroupWeeks.init(), r.lifegroupAttendance.init(), r.leaders.init(),
+    ]);
+    await r.settings.updateSettings({ serviceMinAttendance: 1 });
+    const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+    // 4 valid Fridays this term; 3 girls attend them all.
+    await svc.importServiceCsv(ADMIN, [
+      { first_name: 'A', last_name: 'A', gender: 'female', grade: 9, '2026-04-03': true, '2026-04-10': true, '2026-04-17': true, '2026-04-24': true },
+      { first_name: 'B', last_name: 'B', gender: 'female', grade: 9, '2026-04-03': true, '2026-04-10': true, '2026-04-17': true, '2026-04-24': true },
+      { first_name: 'C', last_name: 'C', gender: 'female', grade: 9, '2026-04-03': true, '2026-04-10': true, '2026-04-17': true, '2026-04-24': true },
+    ], 'svc.csv');
+    // The lifegroup only ran 2 of those 4 weeks; all 3 attend both.
+    await svc.importGroupCsv(DIR, {
+      groups: [{ name: 'Grade 9 Girls Lifegroup', meetings: ['2026-04-13', '2026-04-20'], members: [
+        { first_name: 'A', last_name: 'A', attendance: [true, true] },
+        { first_name: 'B', last_name: 'B', attendance: [true, true] },
+        { first_name: 'C', last_name: 'C', attendance: [true, true] },
+      ] }],
+    }, 'grp.csv');
+
+    const statsSvc = makeLifegroupStatsService(r.students, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.sessions, r.settings);
+    const lg = (await statsSvc.get(ADMIN)).byGrade.find(g => g.grade === 9)!.lifegroups[0]!;
+    // total visits = 6 (3 each over 2 weeks). weeks ran = 2.
+    expect(lg.current.weeksRan).toBe(2);
+    expect(lg.current.totalVisits).toBe(6);
+    // NEW: divide by 4 valid services -> round(6/4)=2 (old behaviour /2 weeks ran = 3).
+    expect(lg.current.avgPerWeek).toBe(2);
+  });
+
   it('per-quad grade breakdown is GENDERED (g79 grade 9 excludes the boys group)', async () => {
     const r = makeRepos();
     await Promise.all([

@@ -106,6 +106,17 @@ export function makeLifegroupStatsService(
       const boundarySource = validDates.length > 0 ? validDates : [...weekStartById.values()];
       const terms = computeTerms(boundarySource, settings.termGapDays);
 
+      // Number of VALID services (Fridays meeting the floor) per term — the group
+      // averages divide by this (not by the weeks lifegroups ran), so group avg/wk
+      // is normalised to the same calendar as the service average.
+      let validSvcCurrent = 0, validSvcPrevious = 0;
+      for (const s of sessions) {
+        if (!s.isValid) continue;
+        const t = classifyDate(mondayOf(s.sessionDate), terms);
+        if (t === 'current') validSvcCurrent++;
+        else if (t === 'previous') validSvcPrevious++;
+      }
+
       // Visibility — which lifegroups/students this login may see.
       const lifegroupVisible = (lgId: string): boolean => {
         const lg = lifegroupById.get(lgId);
@@ -168,9 +179,13 @@ export function makeLifegroupStatsService(
         let sum = 0;
         for (const w of weeksRan) sum += attendersByWeek.get(w)?.size ?? 0;
         const n = weeksRan.size;
+        // Average divides by the VALID SERVICES in the term (falls back to the
+        // weeks the scope ran if there's no service data for the term).
+        const validSvc = term === 'current' ? validSvcCurrent : validSvcPrevious;
+        const denom = validSvc > 0 ? validSvc : n;
         return {
           uniqueAttenders: unique.size,
-          avgPerWeek: n > 0 ? Math.round(sum / n) : 0,
+          avgPerWeek: denom > 0 ? Math.round(sum / denom) : 0,
           weeksRan: n,
           members: members.size,
           totalVisits: sum,

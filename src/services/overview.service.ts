@@ -63,6 +63,13 @@ export function makeOverviewService(
 
       const connectedIds = new Set(allConns.map((a) => a.studentId));
 
+      // Connection metrics only count students who have ATTENDED a service or
+      // lifegroup in the current or previous term — students who never attended
+      // are not treated as "unconnected" (and shouldn't inflate the total).
+      const attended = (s: { svcAttended: number; grpAttended: number; prevSvcAttended: number; prevGrpAttended: number }) =>
+        s.svcAttended > 0 || s.grpAttended > 0 || s.prevSvcAttended > 0 || s.prevGrpAttended > 0;
+      const connectable = scoped.filter(attended);
+
       // Leader-to-quad mapping: a leader belongs to a quad if their grade + gender aligns.
       // We use student quad membership (derived from grade+gender) so gender is unambiguous.
       const leaderQuadCounts: Record<Quad, number> = { g79: 0, b79: 0, g1012: 0, b1012: 0 };
@@ -87,33 +94,33 @@ export function makeOverviewService(
       }
 
       const byQuad: QuadStat[] = QUADS.map((quad) => {
-        const qStudents = scoped.filter((s) => s.quad === quad);
+        const qConn = connectable.filter((s) => s.quad === quad);
         return {
           quad,
           label: QUAD_LABELS[quad],
-          totalStudents: qStudents.length,
-          connectedStudents: qStudents.filter((s) => connectedIds.has(s.id)).length,
-          unconnectedStudents: qStudents.filter((s) => !connectedIds.has(s.id)).length,
+          totalStudents: qConn.length,
+          connectedStudents: qConn.filter((s) => connectedIds.has(s.id)).length,
+          unconnectedStudents: qConn.filter((s) => !connectedIds.has(s.id)).length,
           leaderCount: leaderQuadCounts[quad] ?? 0,
-          atRiskCount: qStudents.filter((s) => AT_RISK.has(s.atRiskStatus ?? '')).length,
+          atRiskCount: scoped.filter((s) => s.quad === quad && AT_RISK.has(s.atRiskStatus ?? '')).length,
         };
       });
 
       const byGrade: GradeStat[] = [7, 8, 9, 10, 11, 12].map((grade) => {
-        const gStudents = scoped.filter((s) => s.grade === grade);
+        const gConn = connectable.filter((s) => s.grade === grade);
         return {
           grade,
-          totalStudents: gStudents.length,
-          connectedStudents: gStudents.filter((s) => connectedIds.has(s.id)).length,
-          unconnectedStudents: gStudents.filter((s) => !connectedIds.has(s.id)).length,
-          atRiskCount: gStudents.filter((s) => AT_RISK.has(s.atRiskStatus ?? '')).length,
+          totalStudents: gConn.length,
+          connectedStudents: gConn.filter((s) => connectedIds.has(s.id)).length,
+          unconnectedStudents: gConn.filter((s) => !connectedIds.has(s.id)).length,
+          atRiskCount: scoped.filter((s) => s.grade === grade && AT_RISK.has(s.atRiskStatus ?? '')).length,
         };
       });
 
       return {
-        ministryTotal: scoped.length,
-        connectedTotal: scoped.filter((s) => connectedIds.has(s.id)).length,
-        unconnectedTotal: scoped.filter((s) => !connectedIds.has(s.id)).length,
+        ministryTotal: connectable.length,
+        connectedTotal: connectable.filter((s) => connectedIds.has(s.id)).length,
+        unconnectedTotal: connectable.filter((s) => !connectedIds.has(s.id)).length,
         leaderCount: allLeaders.length,
         atRiskTotal: scoped.filter((s) => AT_RISK.has(s.atRiskStatus ?? '')).length,
         byQuad,
