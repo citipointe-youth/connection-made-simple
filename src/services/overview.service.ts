@@ -1,4 +1,4 @@
-import { assertCan, canAccessGrade, canAccessGender } from './access-control';
+import { assertCan, canAccessStudent } from './access-control';
 import type {
   IStudentRepository,
   ILeaderRepository,
@@ -55,13 +55,11 @@ export function makeOverviewService(
       const allLeaders = await leaderRepo.findActive();
       const allConns = await connRepo.findAll();
 
-      const scoped = allStudents.filter((s) => {
-        if (actor.role === 'grade') return s.grade === actor.grade;
-        if (actor.role === 'quad') {
-          return canAccessGrade(actor, s.grade) && canAccessGender(actor, s.gender);
-        }
-        return true;
-      });
+      const scoped = allStudents.filter((s) =>
+        (actor.role === 'grade' || actor.role === 'quad')
+          ? canAccessStudent(actor, s.grade, s.gender)
+          : true,
+      );
 
       const connectedIds = new Set(allConns.map((a) => a.studentId));
 

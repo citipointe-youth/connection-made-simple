@@ -2544,6 +2544,17 @@ async function renderTrends() {
       body += `<div class="sh">Grade ${u.grade}</div><div class="card">`;
       body += statCard([c.uniq, c.avg], ['Unique attenders','Avg students/week'], _svcPrevSub(p));
       body += '</div>';
+      // Weekly attendance bar graph for this grade (already gender-scoped server-side).
+      const gtr = (trends && trends.byGrade || []).find(x => x.grade === u.grade);
+      const gvalid = gtr && Array.isArray(gtr.sessions) ? gtr.sessions.filter(s => !s.isOutlier) : [];
+      if (gvalid.length) {
+        const peak = Math.max(1, ...gvalid.map(s => s.totalAttended));
+        const cs = gvalid.map(s => ({ date: s.sessionDate, pct: Math.round(s.totalAttended / peak * 100), att: s.totalAttended, tot: s.totalPresent }));
+        body += `<div class="sh">Weekly Attendance</div><div class="card">`;
+        body += `<div style="font-size:12px;color:var(--ink-mid);margin-bottom:10px">${gvalid.length} valid services this term</div>`;
+        body += colChart(cs, 56);
+        body += '</div>';
+      }
     } else if (u.role === 'quad') {
       const ql = students.filter(s => s.quad === u.quad);
       const c = _svcAgg(ql, false), p = _svcAgg(ql, true);

@@ -5,6 +5,22 @@ import type { Actor, User, SafeUser } from '../core/entities/user';
 import type { Grade, Quad } from '../core/types/enums';
 import { UnauthorizedError } from '../core/errors/app-error';
 import { LoginInputSchema } from '../core/validation/auth.schema';
+import { quadGenderOf } from './access-control';
+
+// Derive a grade/quad login's gender scope. Quad logins come from their quad;
+// grade logins from the email convention (grade7g -> female, grade7b -> male,
+// or a "girls"/"boys" word). Anything else (incl. an ungendered grade account
+// or director/admin) returns null = no gender restriction.
+export function deriveActorGender(user: User): 'male' | 'female' | null {
+  if (user.role === 'quad') return quadGenderOf(user.quad);
+  if (user.role === 'grade') {
+    const local = (user.email || '').split('@')[0]?.toLowerCase() ?? '';
+    if (!local.startsWith('grade')) return null;
+    if (/^grade\s*\d+\s*g$/.test(local) || local.includes('girl')) return 'female';
+    if (/^grade\s*\d+\s*b$/.test(local) || local.includes('boy') || local.includes('guy')) return 'male';
+  }
+  return null;
+}
 
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const INSECURE_FALLBACK = 'cms-dev-secret-change-in-production';
@@ -51,6 +67,7 @@ export function toActor(user: User): Actor {
     displayName: user.displayName,
     grade: (user.grade ?? null) as Grade | null,
     quad: (user.quad ?? null) as Quad | null,
+    gender: deriveActorGender(user),
   };
 }
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
-import { assertCan, canAccessGrade, canAccessGender } from './access-control';
+import { assertCan, canAccessStudent } from './access-control';
 import type {
   IConnectionRepository,
   IStudentRepository,
@@ -147,10 +147,7 @@ export function makeConnectionService(
       const filtered = all.filter((a) => {
         const student = studentsById.get(a.studentId);
         if (!student) return false;
-        if (actor.role === 'grade' && student.grade !== actor.grade) return false;
-        if (actor.role === 'quad') {
-          if (!canAccessGrade(actor, student.grade) || !canAccessGender(actor, student.gender)) return false;
-        }
+        if ((actor.role === 'grade' || actor.role === 'quad') && !canAccessStudent(actor, student.grade, student.gender)) return false;
         return true;
       });
       return enrichWith(filtered, studentsById, leadersById);
@@ -222,10 +219,7 @@ export function makeConnectionService(
         const student = studentsById.get(a.studentId);
         const leader = leadersById.get(a.leaderId);
         if (!student || !leader) continue;
-        if (actor.role === 'grade' && student.grade !== actor.grade) continue;
-        if (actor.role === 'quad') {
-          if (!canAccessGrade(actor, student.grade) || !canAccessGender(actor, student.gender)) continue;
-        }
+        if ((actor.role === 'grade' || actor.role === 'quad') && !canAccessStudent(actor, student.grade, student.gender)) continue;
         const pct = student.svcTotal > 0
           ? Math.round((student.svcAttended / student.svcTotal) * 100) + '%'
           : '—';

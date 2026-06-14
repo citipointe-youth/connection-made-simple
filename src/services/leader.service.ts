@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
-import { assertCan, canAccessGrade, quadGenderOf, quadGradesOf } from './access-control';
+import { assertCan, canAccessGrade, canAccessGender, quadGenderOf, quadGradesOf } from './access-control';
 import type { ILeaderRepository } from '../repositories/interfaces/entity-repositories';
 import type { Leader } from '../core/entities/leader';
 import type { Actor } from '../core/entities/user';
@@ -39,12 +39,14 @@ export function makeLeaderService(repo: ILeaderRepository): LeaderService {
       const all = await repo.findActive();
 
       if (actor.role === 'grade') {
-        // Grade login sees only leaders they created (or assigned to their grade)
+        // Grade login sees only leaders of their own GENDER that are for their
+        // grade (or all-grades / created by them).
         return all.filter(
           (l) =>
-            l.createdByGrade === actor.grade ||
-            l.grades.length === 0 ||
-            l.grades.includes(actor.grade as Grade),
+            (l.gender == null || canAccessGender(actor, l.gender)) &&
+            (l.createdByGrade === actor.grade ||
+              l.grades.length === 0 ||
+              l.grades.includes(actor.grade as Grade)),
         );
       }
       if (actor.role === 'quad') {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
-import { assertCan, can, canAccessGrade, canAccessGender } from './access-control';
+import { assertCan, can, canAccessGender, canAccessStudent } from './access-control';
 import type { IStudentRepository } from '../repositories/interfaces/entity-repositories';
 import type { Student } from '../core/entities/student';
 import type { Actor } from '../core/entities/user';
@@ -41,13 +41,9 @@ export function makeStudentService(repo: IStudentRepository): StudentService {
       assertCan(actor, 'student:read');
       let students = await repo.findAll();
 
-      // Role-based scoping
-      if (actor.role === 'grade') {
-        students = students.filter((s) => s.grade === actor.grade);
-      } else if (actor.role === 'quad') {
-        students = students.filter(
-          (s) => canAccessGrade(actor, s.grade) && canAccessGender(actor, s.gender),
-        );
+      // Role-based scoping (grade -> own grade + own gender; quad -> bracket + gender)
+      if (actor.role === 'grade' || actor.role === 'quad') {
+        students = students.filter((s) => canAccessStudent(actor, s.grade, s.gender));
       }
 
       // Optional filters
@@ -76,14 +72,13 @@ export function makeStudentService(repo: IStudentRepository): StudentService {
       const s = await repo.findById(id);
       if (!s) throw new NotFoundError('Student not found');
 
-      if (actor.role === 'grade' && s.grade !== actor.grade) {
-        // Cross-grade access allowed for allocation purposes — no gender restriction at fetch layer.
-        // The allocation layer enforces the leader gender match rule.
+      // Grade logins may fetch a student of ANY grade (the cross-grade connect
+      // exception) but only of their OWN gender.
+      if (actor.role === 'grade' && !canAccessGender(actor, s.gender)) {
+        throw new NotFoundError('Student not found');
       }
-      if (actor.role === 'quad') {
-        if (!canAccessGrade(actor, s.grade) || !canAccessGender(actor, s.gender)) {
-          throw new NotFoundError('Student not found');
-        }
+      if (actor.role === 'quad' && !canAccessStudent(actor, s.grade, s.gender)) {
+        throw new NotFoundError('Student not found');
       }
 
       if (!can(actor, 'student:read:sensitive')) {
@@ -165,8 +160,8 @@ export function makeStudentService(repo: IStudentRepository): StudentService {
       if (!query.trim()) throw new BadRequestError('Search query required');
       let results = await repo.search(query);
 
-      // Quad is gender-scoped
-      if (actor.role === 'quad') {
+      // Gender-scoped for grade + quad (cross-grade allowed — the connect exception).
+      if (actor.role === 'quad' || actor.role === 'grade') {
         results = results.filter((s) => canAccessGender(actor, s.gender));
       }
 

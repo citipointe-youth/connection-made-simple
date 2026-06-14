@@ -1,4 +1,4 @@
-import { assertCan, canAccessGrade, canAccessGender, quadGenderOf, quadGradesOf } from './access-control';
+import { assertCan, canAccessGrade, canAccessGender, canAccessStudent, quadGenderOf, quadGradesOf } from './access-control';
 import type {
   IStudentRepository,
   ILifegroupRepository,
@@ -109,15 +109,16 @@ export function makeLifegroupStatsService(
         const lg = lifegroupById.get(lgId);
         if (!lg) return false;
         if (!canAccessGrade(actor, lg.grade)) return false;
-        if (actor.role === 'quad' && lg.gender) return canAccessGender(actor, lg.gender);
+        // Gender-scope for grade AND quad logins (admin/director see all).
+        if (lg.gender && !canAccessGender(actor, lg.gender)) return false;
         return true;
       };
       const studentVisible = (sid: string): boolean => {
         const s = studentById.get(sid);
         if (!s) return false;
-        if (actor.role === 'grade') return s.grade === actor.grade;
-        if (actor.role === 'quad') return canAccessGrade(actor, s.grade) && canAccessGender(actor, s.gender);
-        return true;
+        return (actor.role === 'grade' || actor.role === 'quad')
+          ? canAccessStudent(actor, s.grade, s.gender)
+          : true;
       };
 
       // Join rows once (visible groups only).

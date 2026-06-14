@@ -24,4 +24,8 @@ export interface Actor {
   displayName: string;
   grade: Grade | null;
   quad: Quad | null;
+  // Gender scope, derived at sign-in: quad logins from their quad; grade logins
+  // from their email convention (grade7g -> female, grade7b -> male). null/absent
+  // = no gender restriction (director/admin, or an ungendered grade login).
+  gender?: 'male' | 'female' | null;
 }

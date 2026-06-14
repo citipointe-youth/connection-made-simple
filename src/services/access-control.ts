@@ -123,13 +123,29 @@ export function quadGradesOf(quad: string | null | undefined): number[] {
   return [];
 }
 
+/** Normalise a gender string to 'male' | 'female' | other. */
+function normGender(g: string | null | undefined): string | null {
+  if (!g) return null;
+  const s = g.toLowerCase();
+  if (s === 'f' || s === 'female') return 'female';
+  if (s === 'm' || s === 'male') return 'male';
+  return s;
+}
+
+/** The gender an actor is scoped to (null = no restriction). */
+export function genderScopeOf(actor: Actor): 'male' | 'female' | null {
+  if (actor.role === 'quad') return quadGenderOf(actor.quad);
+  if (actor.role === 'grade') return actor.gender ?? null; // ungendered grade login = both
+  return null; // director/admin
+}
+
 export function canAccessGender(actor: Actor, gender: string): boolean {
-  if (actor.role === 'admin' || actor.role === 'director' || actor.role === 'grade') return true;
-  if (actor.role === 'quad') {
-    if (!actor.quad) return false;
-    const femaleQuads = new Set(['g79', 'g1012']);
-    const isFemale = gender.toLowerCase() === 'female' || gender.toLowerCase() === 'f';
-    return femaleQuads.has(actor.quad) ? isFemale : !isFemale;
-  }
-  return false;
+  const scope = genderScopeOf(actor);
+  if (scope == null) return true;
+  return normGender(gender) === scope;
+}
+
+/** Combined grade + gender access — the canonical student-visibility check. */
+export function canAccessStudent(actor: Actor, grade: number | null, gender: string): boolean {
+  return canAccessGrade(actor, grade) && canAccessGender(actor, gender);
 }

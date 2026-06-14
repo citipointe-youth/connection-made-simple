@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { can, assertCan, canAccessGrade, canAccessGender } from '../services/access-control';
-import type { Actor } from '../core/entities/user';
+import { can, assertCan, canAccessGrade, canAccessGender, canAccessStudent } from '../services/access-control';
+import { deriveActorGender } from '../services/auth.service';
+import type { Actor, User } from '../core/entities/user';
 import { ForbiddenError } from '../core/errors/app-error';
 
 // Test helpers
-function actor(role: string, opts: { grade?: number; quad?: string } = {}): Actor {
-  return { id: 'test', role: role as any, displayName: 'Test', grade: (opts.grade ?? null) as any, quad: (opts.quad ?? null) as any };
+function actor(role: string, opts: { grade?: number; quad?: string; gender?: 'male' | 'female' | null } = {}): Actor {
+  return { id: 'test', role: role as any, displayName: 'Test', grade: (opts.grade ?? null) as any, quad: (opts.quad ?? null) as any, gender: opts.gender ?? null };
 }
 
 describe('RBAC — can()', () => {
@@ -32,6 +33,31 @@ describe('RBAC — can()', () => {
   // TC05 — quad login CAN write leaders (scoped to gender + bracket; see leader.service.test)
   it('TC05: quad can write leaders', () => {
     expect(can(actor('quad', { quad: 'g79' }), 'leader:write')).toBe(true);
+  });
+
+  // Gendered grade login: own grade + own gender only.
+  it('gendered grade login sees only its own gender; ungendered sees both', () => {
+    const g7girls = actor('grade', { grade: 7, gender: 'female' });
+    expect(canAccessStudent(g7girls, 7, 'female')).toBe(true);
+    expect(canAccessStudent(g7girls, 7, 'male')).toBe(false);   // wrong gender
+    expect(canAccessStudent(g7girls, 8, 'female')).toBe(false); // wrong grade
+    expect(canAccessGender(g7girls, 'female')).toBe(true);
+    expect(canAccessGender(g7girls, 'male')).toBe(false);
+    // Ungendered grade login (no gender derived) still sees both genders.
+    const g7 = actor('grade', { grade: 7, gender: null });
+    expect(canAccessStudent(g7, 7, 'male')).toBe(true);
+    expect(canAccessStudent(g7, 7, 'female')).toBe(true);
+  });
+
+  // deriveActorGender from the email convention.
+  it('deriveActorGender reads grade email g/b suffix and quad gender', () => {
+    const mk = (role: string, email: string, quad?: string): User =>
+      ({ id: 'u', displayName: 'X', email, role: role as any, grade: 7 as any, quad: (quad ?? null) as any, status: 'active', createdAt: '', updatedAt: '' });
+    expect(deriveActorGender(mk('grade', 'grade7g@youth.ministry'))).toBe('female');
+    expect(deriveActorGender(mk('grade', 'grade7b@youth.ministry'))).toBe('male');
+    expect(deriveActorGender(mk('grade', 'grade7@youth.ministry'))).toBeNull(); // no suffix
+    expect(deriveActorGender(mk('quad', 'b1012@youth.ministry', 'b1012'))).toBe('male');
+    expect(deriveActorGender(mk('admin', 'admin@youth.ministry'))).toBeNull();
   });
 
   // TC06 — quad login can allocate

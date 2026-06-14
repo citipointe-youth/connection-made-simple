@@ -1,4 +1,4 @@
-import { assertCan, canAccessGrade, canAccessGender } from './access-control';
+import { assertCan, canAccessStudent } from './access-control';
 import type { IStudentRepository, ISettingsRepository } from '../repositories/interfaces/entity-repositories';
 import type { Actor } from '../core/entities/user';
 import type { Student } from '../core/entities/student';
@@ -123,13 +123,9 @@ export function makeAtRiskService(
       const settings = await settingsRepo.getSettings();
       let students = await studentRepo.findAll();
 
-      // Scope by role
-      if (actor.role === 'grade') {
-        students = students.filter((s) => s.grade === actor.grade);
-      } else if (actor.role === 'quad') {
-        students = students.filter(
-          (s) => canAccessGrade(actor, s.grade) && canAccessGender(actor, s.gender),
-        );
+      // Scope by role (grade -> own grade + own gender; quad -> bracket + gender)
+      if (actor.role === 'grade' || actor.role === 'quad') {
+        students = students.filter((s) => canAccessStudent(actor, s.grade, s.gender));
       }
 
       // Apply optional filters

@@ -1,4 +1,4 @@
-import { assertCan, canAccessGrade, canAccessGender } from './access-control';
+import { assertCan, canAccessStudent } from './access-control';
 import type {
   IStudentRepository,
   IServiceSessionRepository,
@@ -104,14 +104,12 @@ export function makeTrendsService(
       const allSessions = await sessionRepo.findAll();
       const allAttendance = await attendanceRepo.findAll();
 
-      // Scope students to actor
-      const scopedStudents = allStudents.filter((s) => {
-        if (actor.role === 'grade') return s.grade === actor.grade;
-        if (actor.role === 'quad') {
-          return canAccessGrade(actor, s.grade) && canAccessGender(actor, s.gender);
-        }
-        return true;
-      });
+      // Scope students to actor (grade -> own grade + own gender; quad -> bracket + gender)
+      const scopedStudents = allStudents.filter((s) =>
+        (actor.role === 'grade' || actor.role === 'quad')
+          ? canAccessStudent(actor, s.grade, s.gender)
+          : true,
+      );
 
       const scopedIds = new Set(scopedStudents.map((s) => s.id));
 
