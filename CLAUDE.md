@@ -76,18 +76,25 @@ Seed data only runs when `PERSISTENCE=memory`. Production uses `PERSISTENCE=supa
 
 There is always exactly one `admin` account. It cannot be deleted.
 
-**Scoping reality (don't assume from the table above):**
-- `Actor` has **no gender field**; the seed has **one login per grade** (`grade7`…`grade12`),
-  so a `grade` login sees its **whole grade (both genders)** — the "own gender" column is
-  aspirational, not implemented. Don't add gender scoping for `grade` without first adding
-  a gender field to `User`/`Actor`/token.
-- `quad` is scoped to its **gender + year bracket** across overview/trends/at-risk/students/
-  lifegroup-stats AND `leader.service.list` (the latter was leaking opposite-gender leaders;
-  now fixed). UI leader filters: `grade` → none, `quad` → grade-only (own bracket),
-  `director`/`admin` → grade + gender.
-- Connect exception: a `grade` login may connect a student from **another grade** only when
-  that student's gender matches the leader's (`connection.assign`); the picker also keeps
-  searches within the leader's gender.
+**Scoping reality:**
+- `Actor.gender` is **derived at sign-in** (`auth.service.deriveActorGender`): quad logins
+  from their quad; grade logins from the **email convention** (`grade7g`→female, `grade7b`→male,
+  or a "girls"/"boys" word). An ungendered grade account (`grade7@`) → `gender: null` → sees
+  **both** genders (back-compat). `access-control` exposes `genderScopeOf` + `canAccessStudent`
+  (`canAccessGrade && canAccessGender`); every read path (students, at-risk, trends,
+  lifegroup-stats, overview, connections, leaders) scopes grade+quad via `canAccessStudent`.
+- So a gendered grade login sees **only its grade + gender** across home, leaders/connect,
+  my-students, trends, at-risk and search. `director`/`admin` = all. UI leader filters:
+  `grade` → none, `quad` → grade-only (own bracket), `director`/`admin` → grade + gender.
+- Connect exception: a `grade`/`quad` login may connect/search a student of **another grade**
+  but only of **their own gender** (`student.get`/`search` are gender-only; `connection.assign`
+  enforces the leader-gender match; the picker keeps searches within the leader's gender).
+
+**Status model:** `atRiskStatus` (`computeStatus`) is kept ONLY for the My Students threshold
+highlight; "stopped" now means attended **neither** service nor lifegroup this term. Student
+search + the At-Risk screen use **dynamic per-stream qualifiers** computed client-side
+(`attendQual`/`qualChips` in the SPA): rising/declining (±5pts vs last term), stopped (0 this
+term), combined into rising / mixed / declining / stopped.
 
 ## Quads
 
