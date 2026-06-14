@@ -759,14 +759,14 @@ function icEmpty(k){ return `<svg class="empty-icon" viewBox="0 0 24 24">${IC[k]
 
 function navItems() {
   const u = S.user; if (!u) return [];
-  // Grade: Home | My Students | Trends | At Risk  (Leaders & Connect + Student Search in quick actions)
+  // Grade: Home | My Students | Leaders & Connect | At Risk  (Trends + Student Search in quick actions)
   if (u.role === 'grade') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
-    { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
+    { id:'leaders',    ic:'users',    label:'Leaders & Connect', mbl:'<span class="ni-lbl"><span>Leaders</span><span style="opacity:.75;font-size:8px">&amp; Connect</span></span>' },
     { id:'at-risk',    ic:'alert',    label:'At Risk',           mbl:'At Risk' },
     // quick actions:
-    { id:'leaders',    ic:'users',    label:'Leaders & Connect', mbl:'Leaders & Connect' },
+    { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
   ];
   // Quad: Home | Leaders & Connect | Trends | At Risk
