@@ -208,6 +208,13 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 
 /* Quad overview cards */
 .qcard{background:var(--paper-card);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);border-left:4px solid var(--accent)}
+/* Generic collapsible: contents are rendered up-front but hidden, and toggled in
+   the DOM (no page re-render). Direct-child selectors so nesting works. */
+.drop > .drop-body{display:none}
+.drop.open > .drop-body{display:block}
+.drop-chev{display:inline-block;transition:transform .2s}
+.drop.open > .drop-head .drop-chev{transform:rotate(90deg)}
+.qcard.drop.open{grid-column:1/-1;max-width:480px;width:100%}
 .qcard.g79{border-color:#ec4899}.qcard.b79{border-color:#3b82f6}
 .qcard.g1012{border-color:#8b5cf6}.qcard.b1012{border-color:#10b981}
 
@@ -830,6 +837,9 @@ function restoreConnectFilters() {
 // Returns true if all listed GET endpoints are in the cache (so we can skip the spinner).
 function _allCached(...paths) { return paths.every(p => Cache.get(p) !== null); }
 
+// Toggle a pre-rendered collapsible (.drop) in place — no re-render, no fetch.
+function _drop(id) { const el = document.getElementById(id); if (el) el.classList.toggle('open'); }
+
 // ============================================================
 // AUTH
 // ============================================================
@@ -884,7 +894,7 @@ async function doLogin() {
 async function doLogout() {
   try { await API.post('/auth/logout', { token: API.token }); } catch {}
   API.setToken(null); S.user = null; S.page = 'home';
-  _msLeader = null; _trTab = 'svc'; _trGradeOpen = null; _trQuadOpen = null;
+  _msLeader = null; _trTab = 'svc';
   _arFilter = { grade: null, gender: null };
   render();
 }
@@ -892,10 +902,8 @@ async function doLogout() {
 // ============================================================
 // HOME (aligned to connection-platform demo: attendance hero + tiles)
 // ============================================================
-let _homeQuadOpen = null;
-let _homeLgQuad = null, _homeLgGrade = null; // Home lifegroup section expand-state
-function toggleHomeQuad(q) { _homeQuadOpen = (_homeQuadOpen === q) ? null : q; renderHome(); }
-function toggleHomeLgQuad(q) { _homeLgQuad = (_homeLgQuad === q) ? null : q; _homeLgGrade = null; renderHome(); }
+// Home/trends quad+grade dropdowns are pre-rendered collapsibles toggled in-DOM
+// via _drop() (see .drop CSS) — no expand-state vars / re-render needed.
 function _hQuadGrades(q) { return (q === 'g79' || q === 'b79') ? [7, 8, 9] : [10, 11, 12]; }
 function _hGradeAvg(trends, g) { const x = ((trends && trends.byGrade) || []).find(y => y.grade === g); return x ? Math.round(x.averageAttendance) : 0; }
 function _hQuadAvg(trends, q) { const x = ((trends && trends.byQuad) || []).find(y => y.quad === q); return x ? Math.round(x.averageAttendance) : 0; }
@@ -930,23 +938,25 @@ function _hAttTile(label, studs, avgWk, opts) {
   // Group average = individuals from this scope attending a lifegroup each week
   // (avg/wk), supplied from /lifegroups/stats; falls back to 0 if absent.
   const grpAvg = (opts.grpAvgWk != null) ? opts.grpAvgWk : 0;
-  const chev = (opts.chev !== undefined)
-    ? `<span style="display:inline-block;transition:transform .2s;transform:rotate(${opts.chev ? '90' : '0'}deg);color:var(--ink-faint);font-weight:800">›</span>` : '';
-  let h = `<div class="qcard" style="${opts.span ? 'grid-column:1/-1;max-width:480px;width:100%;' : ''}${opts.click ? 'cursor:pointer;' : ''}padding:11px"${opts.click ? ` onclick="${opts.click}"` : ''}>`;
-  h += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${chev}<div style="font-size:11px;font-weight:700;color:var(--ink-mid)">${label}</div></div>`;
-  h += `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center;margin-bottom:3px">
+  const drop = !!opts.dropId;
+  const chev = drop ? `<span class="drop-chev" style="display:inline-block;color:var(--ink-faint);font-weight:800">›</span>` : '';
+  const inner = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${chev}<div style="font-size:11px;font-weight:700;color:var(--ink-mid)">${label}</div></div>`
+    + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center;margin-bottom:3px">
     <div style="font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px">Youth</div>
     <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800">${svcUniq}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
     <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800">${avgWk}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Avg/wk</div></div>
-  </div>`;
-  h += `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center">
+  </div>`
+    + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center">
     <div style="font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px;opacity:.8">Groups</div>
     <div style="text-align:center;background:rgba(0,0,0,.04);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800;opacity:.8">${grpUniq}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
     <div style="text-align:center;background:rgba(0,0,0,.04);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800;opacity:.8">${grpAvg}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Avg/wk</div></div>
   </div>`;
-  if (opts.gradeRows) h += opts.gradeRows;
-  h += '</div>';
-  return h;
+  if (drop) {
+    return `<div class="qcard drop" id="${opts.dropId}" style="padding:11px">`
+      + `<div class="drop-head" style="cursor:pointer" onclick="_drop('${opts.dropId}')">${inner}</div>`
+      + `<div class="drop-body" style="margin-top:8px">${opts.gradeRows || ''}</div></div>`;
+  }
+  return `<div class="qcard" style="padding:11px">${inner}</div>`;
 }
 
 async function renderHome() {
@@ -1067,20 +1077,15 @@ async function _renderHomeInner() {
         if (vq.length) {
           body += '<div class="sh">Attendance by Quad</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">';
           for (const q of vq) {
-            const open = _homeQuadOpen === q.quad;
             const qStud = sc.filter(s => s.quad === q.quad);
             const qLg = _lgQuad(q.quad);
+            // Gendered per-grade rows, rendered up-front (hidden until expanded).
             let gradeRows = '';
-            if (open) {
-              gradeRows = '<div style="margin-top:8px">';
-              // Gendered per-grade group stat from this quad's own breakdown.
-              for (const gr of _hQuadGrades(q.quad)) {
-                const qgLg = (qLg && qLg.grades || []).find(x => x.grade === gr);
-                gradeRows += _hGradeMini('Yr ' + gr + _gsfx(quadGender(q.quad)), qStud.filter(s => s.grade === gr), _hGradeAvg(trends, gr), qgLg);
-              }
-              gradeRows += '</div>';
+            for (const gr of _hQuadGrades(q.quad)) {
+              const qgLg = (qLg && qLg.grades || []).find(x => x.grade === gr);
+              gradeRows += _hGradeMini('Yr ' + gr + _gsfx(quadGender(q.quad)), qStud.filter(s => s.grade === gr), _hGradeAvg(trends, gr), qgLg);
             }
-            body += _hAttTile(q.label, qStud, _hQuadAvg(trends, q.quad), { click: `toggleHomeQuad('${q.quad}')`, chev: open, span: open, gradeRows, grpAvgWk: qLg ? qLg.current.avgPerWeek : 0 });
+            body += _hAttTile(q.label, qStud, _hQuadAvg(trends, q.quad), { dropId: 'hq-' + q.quad, gradeRows, grpAvgWk: qLg ? qLg.current.avgPerWeek : 0 });
           }
           body += '</div>';
         }
@@ -1098,18 +1103,18 @@ async function _renderHomeInner() {
         if (quads.length) {
           body += '<div class="sh">Lifegroups by Quad</div><div style="margin-bottom:16px">';
           for (const q of quads) {
-            const open = _homeLgQuad === q.quad;
-            body += `<div class="card" style="margin-bottom:8px;padding:11px">
-              <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="toggleHomeLgQuad('${q.quad}')">
-                <span style="font-size:12px;transition:.2s;display:inline-block;transform:${open?'rotate(90deg)':'rotate(0deg)'};color:var(--ink-faint);font-weight:800">›</span>
+            const qid = 'hlq-' + q.quad;
+            body += `<div class="card drop" id="${qid}" style="margin-bottom:8px;padding:11px">
+              <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('${qid}')">
+                <span class="drop-chev" style="font-size:12px;color:var(--ink-faint);font-weight:800">›</span>
                 <div style="flex:1;font-size:13px;font-weight:700">${q.label}</div>
                 <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${q.current.uniqueAttenders} uniq · ${q.current.avgPerWeek} avg/wk</span>
-              </div>`;
-            if (open) for (const gr of _hQuadGrades(q.quad)) {
+              </div><div class="drop-body">`;
+            for (const gr of _hQuadGrades(q.quad)) {
               const g = (q.grades || []).find(x => x.grade === gr);
-              if (g) body += _lgGradeBlock(g, false, 'home', _gsfx(quadGender(q.quad)));
+              if (g) body += _lgGradeBlock(g, false, _gsfx(quadGender(q.quad)), 'hlqg-' + q.quad + '-' + gr);
             }
-            body += '</div>';
+            body += '</div></div>';
           }
           body += '</div>';
         }
@@ -1117,7 +1122,7 @@ async function _renderHomeInner() {
         const grades = (lgStats.byGrade || []).filter(g => g.current.weeksRan > 0 || g.current.uniqueAttenders > 0);
         if (grades.length) {
           body += '<div class="sh">Lifegroups by Grade</div><div class="card" style="margin-bottom:16px">';
-          for (const g of grades) body += _lgGradeBlock(g, false, 'home', _gsfx(_loginGender(u)));
+          for (const g of grades) body += _lgGradeBlock(g, false, _gsfx(_loginGender(u)), 'hlg-' + g.grade);
           body += '</div>';
         }
       }
@@ -2018,7 +2023,7 @@ async function switchMQTab(tab) {
 // AT RISK
 // ============================================================
 let _arFilter = { grade:null, gender:null };
-let _trTab = 'svc', _trGradeOpen = null, _trQuadOpen = null;
+let _trTab = 'svc';
 
 function saveArFilter() {
   try { sessionStorage.setItem('yap_ar_filter', JSON.stringify(_arFilter)); } catch {}
@@ -2451,27 +2456,21 @@ function _lgGroupRow(lg, showPrev) {
     ${showPrev ? _lgPrevBits(lg.previous) : ''}
   </div>`;
 }
-// A grade block: summary line + (when open) its lifegroups. `mode` selects which
-// page owns the open-state + re-render ('trends' → _trGradeOpen/renderTrends;
-// 'home' → _homeLgGrade/renderHome).
-function _lgGradeBlock(g, showPrev, mode, gsfx) {
-  mode = mode || 'trends';
+// A grade block as a pre-rendered collapsible (.drop). `id` must be unique on the
+// page; the lifegroups are rendered hidden and toggled in-DOM (no re-render).
+function _lgGradeBlock(g, showPrev, gsfx, id) {
   gsfx = gsfx || '';
-  const isOpen = (mode === 'home' ? _homeLgGrade : _trGradeOpen) === g.grade;
-  const setvar = mode === 'home' ? '_homeLgGrade' : '_trGradeOpen';
-  const rerender = mode === 'home' ? 'renderHome()' : 'renderTrends()';
-  let h = `<div style="border-top:1px solid var(--paper-dark)">
-    <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 0" onclick="${setvar}=${isOpen?'null':g.grade};${rerender}">
-      <span style="font-size:12px;transition:.2s;display:inline-block;transform:${isOpen?'rotate(90deg)':'rotate(0deg)'}">›</span>
+  let h = `<div class="drop" id="${id}">
+    <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 0;border-top:1px solid var(--paper-dark)" onclick="_drop('${id}')">
+      <span class="drop-chev" style="font-size:12px">›</span>
       <div style="flex:1;font-size:13px;font-weight:700">Year ${g.grade}${gsfx}</div>
       <span style="font-size:12px;color:var(--ink-mid)">${g.current.uniqueAttenders} uniq · ${g.current.avgPerWeek} avg/wk</span>
     </div>`;
   if (showPrev && g.previous.weeksRan > 0) h += `<div style="font-size:11px;color:var(--ink-faint);padding:0 0 4px 20px">prev term: ${g.previous.uniqueAttenders} uniq · ${g.previous.avgPerWeek} avg/wk · ${g.previous.weeksRan} wks</div>`;
-  if (isOpen) {
-    if (g.lifegroups && g.lifegroups.length) for (const lg of g.lifegroups) h += _lgGroupRow(lg, showPrev);
-    else h += `<div style="font-size:12px;color:var(--ink-faint);padding:4px 0 6px 20px">No lifegroups ran this term</div>`;
-  }
-  h += '</div>';
+  h += `<div class="drop-body">`;
+  if (g.lifegroups && g.lifegroups.length) for (const lg of g.lifegroups) h += _lgGroupRow(lg, showPrev);
+  else h += `<div style="font-size:12px;color:var(--ink-faint);padding:4px 0 6px 20px">No lifegroups ran this term</div>`;
+  h += `</div></div>`;
   return h;
 }
 
@@ -2527,8 +2526,8 @@ async function renderTrends() {
 
   // Tab bar
   body += `<div class="tbbar">
-    <button class="tbbtn ${_trTab==='svc'?'on':''}" onclick="_trTab='svc';_trGradeOpen=null;_trQuadOpen=null;renderTrends()">Fridays</button>
-    <button class="tbbtn ${_trTab==='grp'?'on':''}" onclick="_trTab='grp';_trGradeOpen=null;_trQuadOpen=null;renderTrends()">Lifegroups</button>
+    <button class="tbbtn ${_trTab==='svc'?'on':''}" onclick="_trTab='svc';renderTrends()">Fridays</button>
+    <button class="tbbtn ${_trTab==='grp'?'on':''}" onclick="_trTab='grp';renderTrends()">Lifegroups</button>
   </div>`;
 
   // Term label for the "this term" sub-heading (uses the trends term range).
@@ -2602,19 +2601,18 @@ async function renderTrends() {
         if (!q.count) continue;
         const ql = students.filter(s => s.quad === q.quad);
         const c = _svcAgg(ql, false), p = _svcAgg(ql, true);
-        const isQOpen = _trQuadOpen === q.quad;
-        body += `<div class="card" style="margin-bottom:8px;border-left:4px solid ${QUAD_COLORS[q.quad]}">`;
-        body += `<div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_trQuadOpen=${isQOpen?'null':`'${q.quad}'`};_trGradeOpen=null;renderTrends()">
-          <span style="font-size:12px;transition:.2s;display:inline-block;transform:${isQOpen?'rotate(90deg)':'rotate(0deg)'}">›</span>
+        const qid = 'tfq-' + q.quad;
+        body += `<div class="card drop" id="${qid}" style="margin-bottom:8px;border-left:4px solid ${QUAD_COLORS[q.quad]}">`;
+        body += `<div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('${qid}')">
+          <span class="drop-chev" style="font-size:12px">›</span>
           <div style="flex:1;font-weight:700;font-size:14px">${q.label}</div>
           <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${c.uniq} uniq · ${c.avg} avg/wk</span>
         </div>`;
         if (p.weeks>0) body += `<div style="font-size:11px;color:var(--ink-faint);padding-left:20px;margin-top:2px">prev term: ${p.uniq} uniq · ${p.avg} avg/wk</div>`;
-        if (isQOpen) {
+        body += `<div class="drop-body">`;
+        {
           const grades = q.quad==='g79'||q.quad==='b79' ? [7,8,9] : [10,11,12];
           for (const gr of grades) {
-            // Scope to this quad (gender + bracket), not just the grade, so the
-            // breakdown under a gendered quad doesn't combine both genders.
             const gl2 = students.filter(s => s.grade === gr && s.quad === q.quad);
             if (!gl2.length) continue;
             const gc = _svcAgg(gl2, false), gp = _svcAgg(gl2, true);
@@ -2624,7 +2622,7 @@ async function renderTrends() {
               </div>`;
           }
         }
-        body += '</div>';
+        body += '</div></div>';
       }
     }
 
@@ -2660,28 +2658,27 @@ async function renderTrends() {
       } else if (u.role === 'quad') {
         body += `<div class="sh">By Grade</div><div class="card">`;
         const grades = (lgStats.byGrade || []);
-        if (grades.length) for (const g of grades) body += _lgGradeBlock(g, true, 'trends', _gsfx(_loginGender(u)));
+        if (grades.length) for (const g of grades) body += _lgGradeBlock(g, true, _gsfx(_loginGender(u)), 'tlg-' + g.grade);
         else body += `<div style="color:var(--ink-faint);font-size:13px">No lifegroup data yet</div>`;
         body += '</div>';
       } else {
         body += `<div class="sh">By Quad</div>`;
         const quads = (lgStats.byQuad || []);
         for (const q of quads) {
-          const isQOpen = _trQuadOpen === q.quad;
-          body += `<div class="card" style="margin-bottom:8px;border-left:4px solid ${QUAD_COLORS[q.quad]}">`;
-          body += `<div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_trQuadOpen=${isQOpen?'null':`'${q.quad}'`};_trGradeOpen=null;renderTrends()">
-            <span style="font-size:12px;transition:.2s;display:inline-block;transform:${isQOpen?'rotate(90deg)':'rotate(0deg)'}">›</span>
+          const qid = 'tlq-' + q.quad;
+          body += `<div class="card drop" id="${qid}" style="margin-bottom:8px;border-left:4px solid ${QUAD_COLORS[q.quad]}">`;
+          body += `<div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('${qid}')">
+            <span class="drop-chev" style="font-size:12px">›</span>
             <div style="flex:1;font-weight:700;font-size:14px">${q.label}</div>
             <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${q.current.uniqueAttenders} uniq · ${q.current.avgPerWeek} avg/wk</span>
           </div>`;
           if (q.previous.weeksRan>0) body += `<div style="font-size:11px;color:var(--ink-faint);padding-left:20px;margin-top:2px">prev term: ${q.previous.uniqueAttenders} uniq · ${q.previous.avgPerWeek} avg/wk</div>`;
-          if (isQOpen) {
-            // Use the quad's own GENDERED per-grade breakdown (not the combined byGrade).
-            const gradeStats = q.grades || [];
-            if (gradeStats.length) for (const g of gradeStats) body += _lgGradeBlock(g, true, 'trends', _gsfx(quadGender(q.quad)));
-            else body += `<div style="font-size:12px;color:var(--ink-faint);padding:6px 0 4px 20px">No lifegroups ran this term</div>`;
-          }
-          body += '</div>';
+          body += `<div class="drop-body">`;
+          // Use the quad's own GENDERED per-grade breakdown (not the combined byGrade).
+          const gradeStats = q.grades || [];
+          if (gradeStats.length) for (const g of gradeStats) body += _lgGradeBlock(g, true, _gsfx(quadGender(q.quad)), 'tlqg-' + q.quad + '-' + g.grade);
+          else body += `<div style="font-size:12px;color:var(--ink-faint);padding:6px 0 4px 20px">No lifegroups ran this term</div>`;
+          body += '</div></div>';
         }
         if (!quads.length) body += `<div class="card"><div style="color:var(--ink-faint);font-size:13px">No lifegroup data yet</div></div>`;
       }
