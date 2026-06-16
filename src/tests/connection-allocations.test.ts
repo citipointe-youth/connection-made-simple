@@ -87,13 +87,15 @@ describe('planAllocationSync', () => {
   });
 
   it('leaves students absent from the file untouched', () => {
-    const parsed = [row(1, 'Mary', 'Jones', 'Jane Doe')];
-    const existing = [{ studentId: 's2', leaderId: 'l1' }, { studentId: 's2', leaderId: 'l2' }];
-    // Note: Mary IS in the file, so her l2 would normally be removed.
-    // Assert a DIFFERENT student (not in file) is never touched by using only Mary in file:
-    const plan = planAllocationSync([], STUDENTS, LEADERS, existing);
-    expect(plan.toRemove).toHaveLength(0);
-    expect(plan.report.studentsInFile).toBe(0);
+    const parsed = [row(1, 'Mary', 'Jones', 'Jane Doe')]; // only Mary (s2) is in the file
+    const existing = [
+      { studentId: 's2', leaderId: 'l1' }, // Mary -> Jane Doe (matches desired; unchanged)
+      { studentId: 's1', leaderId: 'l2' }, // John Smith (s1) is NOT in the file -> must be untouched
+    ];
+    const plan = planAllocationSync(parsed, STUDENTS, LEADERS, existing);
+    expect(plan.toRemove).toHaveLength(0);       // s1's connection is never removed
+    expect(plan.toAdd).toHaveLength(0);          // Mary already connected to Jane Doe
+    expect(plan.report.studentsInFile).toBe(1);  // only Mary is in the file
   });
 
   it('typo-safety: an unmatched leader skips that student’s removals but keeps adds', () => {
