@@ -159,6 +159,7 @@ export function makeLifegroupStatsService(
         groupScope: (lgId: string) => boolean,
         studentFilter: (row: JoinedRow) => boolean,
         term: 'current' | 'previous',
+        divideByWeeksRan = false,
       ): TermAgg => {
         const weeksRan = new Set<string>();
         const attendersByWeek = new Map<string, Set<string>>();
@@ -179,10 +180,15 @@ export function makeLifegroupStatsService(
         let sum = 0;
         for (const w of weeksRan) sum += attendersByWeek.get(w)?.size ?? 0;
         const n = weeksRan.size;
-        // Average divides by the VALID SERVICES in the term (falls back to the
-        // weeks the scope ran if there's no service data for the term).
+        // Denominator depends on the scope:
+        //  - grade / quad / overall normalise to the VALID SERVICES in the term
+        //    (valid Fridays), falling back to the weeks the scope ran when there
+        //    is no service data — keeps those averages on the service calendar.
+        //  - an INDIVIDUAL lifegroup divides by the number of times THAT group
+        //    actually met (`divideByWeeksRan`), so its average reflects its own
+        //    cadence rather than the service calendar.
         const validSvc = term === 'current' ? validSvcCurrent : validSvcPrevious;
-        const denom = validSvc > 0 ? validSvc : n;
+        const denom = divideByWeeksRan ? n : (validSvc > 0 ? validSvc : n);
         return {
           uniqueAttenders: unique.size,
           avgPerWeek: denom > 0 ? Math.round(sum / denom) : 0,
@@ -201,8 +207,9 @@ export function makeLifegroupStatsService(
           name: lg.shortName || lg.fullName,
           grade: lg.grade,
           gender: lg.gender,
-          current: termAgg(scope, () => true, 'current'),
-          previous: termAgg(scope, () => true, 'previous'),
+          // Per-group average divides by the weeks THIS group met (not valid services).
+          current: termAgg(scope, () => true, 'current', true),
+          previous: termAgg(scope, () => true, 'previous', true),
         };
       };
 

@@ -137,10 +137,13 @@ is the default, previous is shown as a comparison.
   grade / quad / overall source — current + previous term, role-scoped. Each
   `TermAgg` has `uniqueAttenders`, `avgPerWeek`, `weeksRan`, `members` (enrolled =
   distinct students the scope ran for), `totalVisits` (Σ weekly attenders). Notes:
-  - **Average denominator = VALID SERVICES in the term** (not weeks lifegroups ran):
-    `avgPerWeek = totalVisits / (valid Fridays meeting the floor that term)`, falling
-    back to `weeksRan` when there's no service data. Normalises group avg/wk to the
-    service calendar.
+  - **Average denominator depends on scope:** grade / quad / overall use **VALID
+    SERVICES in the term** — `avgPerWeek = totalVisits / (valid Fridays meeting the
+    floor that term)`, falling back to `weeksRan` when there's no service data —
+    which normalises those averages to the service calendar. An **individual
+    lifegroup** instead divides by the **weeks THAT group met** (`weeksRan`), so its
+    average reflects its own cadence. (`termAgg`'s `divideByWeeksRan` flag, set by
+    `statForGroup`.)
   - Each `QuadLifegroupStat` carries a **gendered** per-grade breakdown (`q.grades`);
     the SPA uses that for the director drilldowns (not the combined top-level `byGrade`).
   - **Deliberate attribution:** per-LIFEGROUP counts ALL its attenders; per-grade /

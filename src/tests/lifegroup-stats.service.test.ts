@@ -112,7 +112,7 @@ describe('Lifegroup Stats Service', () => {
     expect(data.byQuad).toHaveLength(0); // grade logins don't get a quad breakdown
   });
 
-  it('group average divides by VALID SERVICES in the term, not weeks the group ran', async () => {
+  it('individual lifegroup average divides by the weeks THAT group met, while the grade average divides by valid services', async () => {
     const r = makeRepos();
     await Promise.all([
       r.students.init(), r.sessions.init(), r.attendance.init(), r.imports.init(), r.settings.init(),
@@ -136,12 +136,17 @@ describe('Lifegroup Stats Service', () => {
     }, 'grp.csv');
 
     const statsSvc = makeLifegroupStatsService(r.students, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.sessions, r.settings);
-    const lg = (await statsSvc.get(ADMIN)).byGrade.find(g => g.grade === 9)!.lifegroups[0]!;
-    // total visits = 6 (3 each over 2 weeks). weeks ran = 2.
+    const data = await statsSvc.get(ADMIN);
+    const grade9 = data.byGrade.find(g => g.grade === 9)!;
+    const lg = grade9.lifegroups[0]!;
+    // total visits = 6 (3 each over 2 weeks). The group met 2 weeks.
     expect(lg.current.weeksRan).toBe(2);
     expect(lg.current.totalVisits).toBe(6);
-    // NEW: divide by 4 valid services -> round(6/4)=2 (old behaviour /2 weeks ran = 3).
-    expect(lg.current.avgPerWeek).toBe(2);
+    // Individual lifegroup: divide by the 2 weeks THAT group met -> round(6/2) = 3.
+    expect(lg.current.avgPerWeek).toBe(3);
+    // Grade average still normalises to the 4 valid services -> round(6/4) = 2.
+    expect(grade9.current.totalVisits).toBe(6);
+    expect(grade9.current.avgPerWeek).toBe(2);
   });
 
   it('per-quad grade breakdown is GENDERED (g79 grade 9 excludes the boys group)', async () => {
