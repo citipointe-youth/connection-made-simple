@@ -166,3 +166,63 @@ describe('buildAllocationExportRows', () => {
     ]);
   });
 });
+
+import { makeConnectionService } from '../services/connection.service';
+import { makeStudentService } from '../services/student.service';
+import { makeLeaderService } from '../services/leader.service';
+import {
+  InMemoryStudentRepository,
+  InMemoryLeaderRepository,
+  InMemoryConnectionRepository,
+  InMemorySettingsRepository,
+} from '../repositories/in-memory';
+import { ForbiddenError } from '../core/errors/app-error';
+
+const ADMIN: Actor = { id: 'admin', role: 'admin' as any, displayName: 'Admin', grade: null as any, quad: null as any };
+const DIRECTOR: Actor = { id: 'dir', role: 'director' as any, displayName: 'Dir', grade: null as any, quad: null as any };
+
+async function buildAllocSvc() {
+  const studentRepo = new InMemoryStudentRepository();
+  const leaderRepo = new InMemoryLeaderRepository();
+  const connRepo = new InMemoryConnectionRepository();
+  const settingsRepo = new InMemorySettingsRepository();
+  await studentRepo.init(); await leaderRepo.init(); await connRepo.init(); await settingsRepo.init();
+  const studentSvc = makeStudentService(studentRepo);
+  const leaderSvc = makeLeaderService(leaderRepo);
+  const connSvc = makeConnectionService(connRepo, studentRepo, leaderRepo, settingsRepo);
+  const alice = await studentSvc.create(ADMIN, { firstName: 'Alice', lastName: 'Smith', gender: 'female', grade: 9 });
+  const emma = await leaderSvc.create(ADMIN, { fullName: 'Emma Leader', gender: 'female', grades: [9] });
+  return { connSvc, alice, emma };
+}
+
+describe('ConnectionService allocations', () => {
+  it('exportAllocations emits a blank-leader row for an unconnected student', async () => {
+    const { connSvc, alice } = await buildAllocSvc();
+    const rows = await connSvc.exportAllocations(ADMIN);
+    expect(rows).toEqual([{ firstName: 'Alice', lastName: 'Smith', grade: 9, gender: 'female', leader: '' }]);
+    void alice;
+  });
+
+  it('importAllocations adds a matched connection and round-trips to a no-op', async () => {
+    const { connSvc } = await buildAllocSvc();
+    const r1 = await connSvc.importAllocations(ADMIN, [
+      { 'first name': 'Alice', 'last name': 'Smith', leader: 'Emma Leader' },
+    ]);
+    expect(r1.connectionsAdded).toBe(1);
+    const rows = await connSvc.exportAllocations(ADMIN);
+    expect(rows).toEqual([{ firstName: 'Alice', lastName: 'Smith', grade: 9, gender: 'female', leader: 'Emma Leader' }]);
+    // Re-import the same data -> no changes.
+    const r2 = await connSvc.importAllocations(ADMIN, [
+      { 'first name': 'Alice', 'last name': 'Smith', leader: 'Emma Leader' },
+    ]);
+    expect(r2.connectionsAdded).toBe(0);
+    expect(r2.connectionsRemoved).toBe(0);
+    expect(r2.connectionsUnchanged).toBe(1);
+  });
+
+  it('rejects non-admin callers', async () => {
+    const { connSvc } = await buildAllocSvc();
+    await expect(connSvc.exportAllocations(DIRECTOR)).rejects.toThrow(ForbiddenError);
+    await expect(connSvc.importAllocations(DIRECTOR, [])).rejects.toThrow(ForbiddenError);
+  });
+});

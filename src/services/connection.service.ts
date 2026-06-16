@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
 import { assertCan, canAccessStudent } from './access-control';
+import {
+  parseAllocationRows,
+  planAllocationSync,
+  buildAllocationExportRows,
+  type AllocationExportRow,
+  type AllocationImportReport,
+} from './connection-allocations';
 import type {
   IConnectionRepository,
   IStudentRepository,
@@ -42,6 +49,8 @@ export interface ConnectionService {
   unassign(actor: Actor, studentId: string, leaderId: string): Promise<void>;
   leaderSummary(actor: Actor, leaderId: string): Promise<{ students: ReturnType<typeof summariseStudent>[]; leader: { id: string; fullName: string } }>;
   exportCsv(actor: Actor): Promise<ExportRow[]>;
+  exportAllocations(actor: Actor): Promise<AllocationExportRow[]>;
+  importAllocations(actor: Actor, rows: unknown): Promise<AllocationImportReport>;
 }
 
 function summariseStudent(s: {
@@ -237,6 +246,42 @@ export function makeConnectionService(
         });
       }
       return rows.sort((a, b) => a.leaderName.localeCompare(b.leaderName) || a.studentName.localeCompare(b.studentName));
+    },
+
+    async exportAllocations(actor) {
+      assertCan(actor, 'connection:import');
+      const [students, leaders, connections] = await Promise.all([
+        studentRepo.findAll(),
+        leaderRepo.findAll(),
+        connRepo.findAll(),
+      ]);
+      return buildAllocationExportRows(students, leaders, connections);
+    },
+
+    async importAllocations(actor, rows) {
+      assertCan(actor, 'connection:import');
+      const inputRows = Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
+      const parsed = parseAllocationRows(inputRows);
+      const [students, leaders, connections] = await Promise.all([
+        studentRepo.findAll(),
+        leaderRepo.findAll(),
+        connRepo.findAll(),
+      ]);
+      const plan = planAllocationSync(parsed, students, leaders, connections);
+      const now = new Date().toISOString();
+      for (const pair of plan.toAdd) {
+        await connRepo.save({
+          id: generateId(),
+          studentId: pair.studentId,
+          leaderId: pair.leaderId,
+          assignedByRole: actor.role,
+          createdAt: now,
+        });
+      }
+      for (const pair of plan.toRemove) {
+        await connRepo.deleteByStudentAndLeader(pair.studentId, pair.leaderId);
+      }
+      return plan.report;
     },
   };
 }
