@@ -2896,6 +2896,84 @@ async function readXlsx(buf){
 }
 function rowsToCsv(rows){return rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')).join('\r\n');}
 
+// Generic CSV -> array of objects keyed by lowercased header. Unlike parseCSV
+// (which is tailored to the attendance import and drops unknown columns), this
+// preserves every column — needed so the "Leader" column survives for the
+// allocation import. Server does the agnostic header detection.
+function parseAllocationCSV(csv) {
+  const lines = csv.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = splitCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, '').toLowerCase().trim());
+  return lines.slice(1).map(line => {
+    const vals = splitCSVLine(line).map(v => v.replace(/^"|"$/g, ''));
+    const obj = {};
+    headers.forEach((h, i) => { if (h) obj[h] = (vals[i] || '').trim(); });
+    return obj;
+  }).filter(o => Object.values(o).some(v => v));
+}
+
+async function exportAllocationsCSV() {
+  try {
+    const { csv, rowCount } = await API.get('/connections/allocations/export');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'allocations.csv'; a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${rowCount} rows`);
+  } catch (e) { toast('Export failed: ' + e.message); }
+}
+
+function handleAllocationImportFile(input) { const f = input.files[0]; if (f) processAllocationImport(f); }
+
+function processAllocationImport(file) {
+  const statusEl = document.getElementById('alloc-import-status');
+  const isExcel = /\.xlsx?$/i.test(file.name);
+  statusEl.innerHTML = `<div class="alert al-info"><div class="spin" style="margin-right:8px"></div>Parsing ${isExcel ? 'Excel' : 'CSV'}…</div>`;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    let rows;
+    try {
+      rows = isExcel ? parseAllocationCSV(rowsToCsv(await readXlsx(e.target.result))) : parseAllocationCSV(e.target.result);
+    } catch (err) { statusEl.innerHTML = `<div class="alert al-err">${(err && err.message) || 'Could not read this file'}</div>`; return; }
+    if (!rows.length) { statusEl.innerHTML = '<div class="alert al-err">No rows found</div>'; return; }
+    statusEl.innerHTML = `<div class="alert al-info">Found ${rows.length} rows. Importing…</div>`;
+    try {
+      const report = await API.post('/connections/allocations/import', { rows }, 90000);
+      Cache.clear();
+      statusEl.innerHTML = `<div class="alert al-ok" style="display:flex;align-items:center;gap:6px">${icS('check')} Imported: ${report.connectionsAdded} added, ${report.connectionsRemoved} removed, ${report.connectionsUnchanged} unchanged</div>`;
+      showAllocationReport(report);
+    } catch (err) { statusEl.innerHTML = `<div class="alert al-err">Import failed: ${err.message}</div>`; }
+  };
+  if (isExcel) reader.readAsArrayBuffer(file); else reader.readAsText(file);
+}
+
+// Result modal — counts plus collapsible lists of anything not fully applied.
+function showAllocationReport(r) {
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const sec = (id, title, items, render) => {
+    if (!items.length) return '';
+    return `<div class="card drop" id="${id}" style="margin-bottom:8px;padding:11px">
+      <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('${id}')">
+        <span class="drop-chev" style="font-size:12px;color:var(--ink-faint);font-weight:800">›</span>
+        <div style="flex:1;font-size:13px;font-weight:700">${title} (${items.length})</div>
+      </div>
+      <div class="drop-body"><div style="font-size:12px;color:var(--ink-mid);padding-top:6px">${items.map(render).join('')}</div></div>
+    </div>`;
+  };
+  let h = `<div class="mo-title" style="font-size:16px;font-weight:800;margin-bottom:8px">Allocation import result</div>`;
+  h += `<div style="font-size:13px;color:var(--ink-mid);margin-bottom:12px">${r.studentsInFile} students in file · <b>${r.connectionsAdded}</b> added · <b>${r.connectionsRemoved}</b> removed · ${r.connectionsUnchanged} unchanged</div>`;
+  h += sec('ar-us', 'Unmatched students', r.unmatchedStudents, x => `<div>Row ${x.row}: ${esc(x.name)}</div>`);
+  h += sec('ar-ul', 'Unmatched leaders', r.unmatchedLeaders, x => `<div>Row ${x.row}: ${esc(x.name)} <span style="color:var(--ink-faint)">(student: ${esc(x.student)})</span></div>`);
+  h += sec('ar-as', 'Ambiguous students', r.ambiguousStudents, x => `<div>Row ${x.row}: ${esc(x.name)}</div>`);
+  h += sec('ar-al', 'Ambiguous leaders', r.ambiguousLeaders, x => `<div>Row ${x.row}: ${esc(x.name)}</div>`);
+  h += sec('ar-sr', 'Students with removals skipped (had an unmatched leader)', r.studentsWithSkippedRemovals.map(name => ({ name })), x => `<div>${esc(x.name)}</div>`);
+  const clean = !r.unmatchedStudents.length && !r.unmatchedLeaders.length && !r.ambiguousStudents.length && !r.ambiguousLeaders.length && !r.studentsWithSkippedRemovals.length;
+  if (clean) h += `<div class="alert al-ok" style="display:flex;align-items:center;gap:6px">${icS('check')} Every row matched cleanly.</div>`;
+  h += `<button class="btn btn-primary btn-full" style="margin-top:12px" onclick="closeModal()">Done</button>`;
+  modal(h);
+}
+
 function handleImportDrop(e) { const f = e.dataTransfer.files[0]; if (f) processImport(f); }
 function handleImportFile(input) { const f = input.files[0]; if (f) processImport(f); }
 function handleGroupImportDrop(e) { const f = e.dataTransfer.files[0]; if (f) processGroupImport(f); }
@@ -3174,6 +3252,15 @@ async function renderAdminView(settings, users) {
   }
 
   if (_adminTab === 'data') {
+    body += `<div class="card">
+      <div class="sh" style="margin-top:0">Connection Allocations</div>
+      <div class="help-text" style="margin-bottom:10px">Export every student–leader allocation as a CSV (one leader per row, grouped by student), edit it, then re-import. Import matches students and leaders by name and reports anything it can't match. Students missing from the file are left untouched.</div>
+      <button class="btn btn-secondary btn-full" style="margin-bottom:8px" onclick="exportAllocationsCSV()">Export Allocations</button>
+      <label class="btn btn-secondary btn-full" style="cursor:pointer">Import Allocations
+        <input type="file" accept=".csv,.xlsx" style="display:none" onchange="handleAllocationImportFile(this)">
+      </label>
+      <div id="alloc-import-status" style="margin-top:8px"></div>
+    </div>`;
     // Change 12: Visual separation of destructive actions
     body += `<div class="card" style="display:flex;flex-direction:column;gap:10px">
       <div>

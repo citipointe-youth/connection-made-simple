@@ -48,5 +48,23 @@ export function makeConnectionController(deps: { connection: ConnectionService }
       );
       return { csv: [header, ...lines].join('\n'), rowCount: rows.length };
     },
+
+    async exportAllocations(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      const rows = await deps.connection.exportAllocations(req.ctx);
+      const header = 'First Name,Last Name,Grade,Gender,Leader';
+      const lines = rows.map((r) =>
+        [r.firstName, r.lastName, r.grade ?? '', r.gender, r.leader]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .join(','),
+      );
+      return { csv: [header, ...lines].join('\n'), rowCount: rows.length };
+    },
+
+    async importAllocations(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      const rows = (req.body as { rows?: unknown })?.rows;
+      return deps.connection.importAllocations(req.ctx, rows);
+    },
   };
 }

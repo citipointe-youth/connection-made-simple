@@ -55,7 +55,7 @@ Seed data only runs when `PERSISTENCE=memory`. Production uses `PERSISTENCE=supa
 | Auth | `POST /auth/login`, `GET /auth/me`, `POST /auth/logout` |
 | Students | `GET/POST /students`, `GET /students/search`, `GET/PATCH/DELETE /students/:id` |
 | Leaders | `GET/POST /leaders`, `GET/PATCH/DELETE /leaders/:id` |
-| Connections | `GET/POST /connections`, `GET /connections/export`, `GET /connections/student/:id`, `GET /connections/leader/:id`, `DELETE /connections/:studentId/:leaderId` |
+| Connections | `GET/POST /connections`, `GET /connections/export`, `GET /connections/student/:id`, `GET /connections/leader/:id`, `DELETE /connections/:studentId/:leaderId`, `GET /connections/allocations/export`, `POST /connections/allocations/import` (admin-only allocation CSV round-trip) |
 | Overview | `GET /overview` |
 | At-risk | `GET /at-risk`, `POST /at-risk/recompute` |
 | Trends | `GET /trends` |
@@ -197,6 +197,14 @@ CORS_ORIGINS=*
 `public/index.html` — phone-first SPA that calls the Express backend via relative API paths. Kept aligned to `../youth app demo/allocation-platform.html` (the canonical offline demo, deployed at https://yc-camp-demo.vercel.app). See `../youth app demo/CLAUDE.md` for demo UI conventions.
 
 **Connection Audit module** is ported into the SPA as a delimited block (`/* ── CA MODULE … ── */`); remove = delete blocks + grep-delete `/*CA-HOOK*/` lines. Data via `CA.load()` → `/students` + `/trends` + `/settings` + `/lifegroups/stats`. Lifegroup Health is a **per-lifegroup** table (quad filter buttons; columns enrolled/unique/visits-per-unique/run/avg-this/avg-last) built from `/lifegroups/stats`; the per-quad funnel is the integration ladder; audit uploads start EMPTY (no demo seed) and are cleared by Full Reset AND Clear Service/Group Data via `/*CA-HOOK*/`.
+
+- **Connection allocations** (admin only): Admin → Data tab exports/imports a student↔leader
+  allocation CSV (`First Name,Last Name,Grade,Gender,Leader`, one pair per row, grouped by
+  student). Import is name-matched and column-agnostic to grade/gender, syncs per student
+  (students absent from the file are untouched), skips a student's removals if any of their
+  leader names is unmatched, and returns a report of unmatched/ambiguous names. Logic lives in
+  the pure `src/services/connection-allocations.ts`; `parseAllocationCSV` in the SPA preserves
+  all columns (unlike attendance `parseCSV`).
 
 ### SPA architecture
 

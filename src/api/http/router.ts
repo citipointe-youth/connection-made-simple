@@ -64,6 +64,8 @@ export function buildRoutes(services: Services): Route[] {
     { method: 'GET',    path: '/connections',                          auth: true, handler: (r) => connection.listAll(r) },
     { method: 'POST',   path: '/connections',                          auth: true, handler: (r) => connection.assign(r) },
     { method: 'GET',    path: '/connections/export',                   auth: true, handler: (r) => connection.exportCsv(r) },
+    { method: 'GET',  path: '/connections/allocations/export', auth: true, handler: (r) => connection.exportAllocations(r) },
+    { method: 'POST', path: '/connections/allocations/import', auth: true, handler: (r) => connection.importAllocations(r) },
     { method: 'GET',    path: '/connections/student/:studentId',       auth: true, handler: (r) => connection.listByStudent(r) },
     { method: 'GET',    path: '/connections/leader/:leaderId',         auth: true, handler: (r) => connection.listByLeader(r) },
     { method: 'GET',    path: '/connections/leader/:leaderId/summary', auth: true, handler: (r) => connection.leaderSummary(r) },

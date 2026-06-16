@@ -13,6 +13,7 @@ export type Action =
   | 'overview:read'           // view ministry-wide overview stats
   | 'atrisk:read'             // view at-risk data
   | 'import:run'              // upload CSV data
+  | 'connection:import'       // admin-only: bulk import/export of connection allocations
   | 'admin:manage';           // settings, accounts, year-rollover
 
 const ROLE_PERMISSIONS: Record<UserRole, Set<Action>> = {
@@ -59,6 +60,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Set<Action>> = {
     'overview:read',
     'atrisk:read',
     'import:run',
+    'connection:import',
     'admin:manage',
   ]),
 };
