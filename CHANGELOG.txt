@@ -1,0 +1,353 @@
+CONNECTION MADE SIMPLE — CHANGELOG
+===================================
+All changes since the project was first uploaded to GitHub (2026-06-12).
+Original codebase was copied from the youth-allocation-platform project.
+
+-------------------------------------------------------------------------------
+PHASE 1: INITIAL SETUP & REBRAND  (2026-06-12)
+-------------------------------------------------------------------------------
+- Forked codebase from youth-allocation-platform
+- Renamed Allocation to Connection throughout: entities, services, repositories,
+  API routes (/allocations to /connections), UI labels, and package name
+- Renamed AllocationService to ConnectionService, allocationLockDate to
+  connectionLockDate, InMemoryAllocationRepository to InMemoryConnectionRepository
+- Added postgres dependency; extended environment config for Supabase
+- Updated CLAUDE.md for Connection Made Simple rebrand
+
+-------------------------------------------------------------------------------
+PHASE 2: SUPABASE PERSISTENCE  (2026-06-12)
+-------------------------------------------------------------------------------
+- Added Supabase migration files: full schema (001) and admin seed account (002)
+- Added Supabase repository implementations for: User, Student, Leader,
+  Connection, ServiceSession/Attendance, LifegroupWeek/Attendance, and Settings
+- Wired all Supabase repositories into the dependency injection container
+- Switched app factory to createAppInstance() pattern (src/app.ts); in-memory
+  mode only seeded when PERSISTENCE=memory
+
+-------------------------------------------------------------------------------
+PHASE 3: VERCEL DEPLOYMENT  (2026-06-12)
+-------------------------------------------------------------------------------
+- Added Vercel serverless handler (api/index.ts) and vercel.json configuration
+- Extensive debugging and fixes for ESM/CJS module format compatibility with
+  @vercel/node, ultimately settling on CommonJS output + @vercel/node bundling
+- Routes only API paths to the Lambda; static assets (HTML/CSS/JS) served by
+  Vercel CDN for instant load
+- Added .vercelignore and .env.example
+- Replaced in-memory token store with stateless HMAC-signed JWT sessions —
+  tokens survive across serverless invocations
+- Fixed Lambda crashes: unhandledRejection handler, postgres connection
+  timeouts (idle_timeout, connect_timeout, max_lifetime)
+- Set Lambda maxDuration to 30s to accommodate cold starts
+- Pinned function to syd1 region to co-locate with Supabase Sydney
+- Raised DB connection pool from max:1 to max:5, eliminating head-of-line
+  blocking that caused app-wide freezes during slow queries or imports
+- Added import upload timeout of 90s (separate from the 20s default)
+- Added fetch AbortController (20s) and Postgres statement_timeout (15s)
+- Added request coalescing in API.get() to deduplicate concurrent in-flight
+  requests for the same endpoint
+
+-------------------------------------------------------------------------------
+PHASE 4: SECURITY HARDENING  (2026-06-12 to 2026-06-13)
+-------------------------------------------------------------------------------
+- Replaced SHA-256+salt password hashing with bcryptjs (12 rounds)
+- Transparent password upgrade: legacy hashes re-hashed to bcrypt on first
+  successful login — no user action required
+- Added Row-Level Security (RLS) on all 13 Supabase tables (migration 006);
+  anon key connections denied, DATABASE_URL bypasses RLS
+- Added login rate limiting: 10 attempts per IP per 15-minute window,
+  returning 429 + Retry-After header
+- Added HTTP security headers: X-Content-Type-Options, X-Frame-Options,
+  Referrer-Policy, Permissions-Policy
+- Used timingSafeEqual for password comparison to prevent timing-based oracles
+- Error sanitization in production (internals not leaked to clients)
+- Added CORS_ORIGINS wildcard warning on startup in production
+- Added SECURITY-ACTIONS.txt listing manual operator security steps
+- Corrected admin password hash in seed migration (002_seed_admin.sql)
+- Settings singleton: atomic upsert prevents duplicate rows on concurrent
+  cold starts; enforced via migration 003
+
+-------------------------------------------------------------------------------
+PHASE 5: PWA & UI FOUNDATION  (2026-06-12 to 2026-06-13)
+-------------------------------------------------------------------------------
+- Added PWA support: manifest.json (standalone display, blue theme),
+  service worker (sw.js) with cache-first for app shell and network-only
+  for API paths, and app icons (SVG connected-circles on blue background)
+- Blue (#2563eb) accent color replacing indigo
+- Persistent shell pattern: header/nav rendered once; only <main> swapped
+  on navigation — eliminates full-DOM rebuild on every page change
+- 30-second client-side GET cache shared across all API calls; invalidated
+  on every write; skip-spinner on cache hits (zero-delay cached navigations)
+- Background prefetch on login: 7 common API endpoints fetched in parallel
+  so subsequent page loads are instant
+- Replaced all emoji icons throughout the SPA with Feather-style SVG icons
+  (IC object with 15+ paths; icN/icS/icLg size helpers)
+- CSS design tokens: --navy, --muted, --line, --chip variables; navy gradient
+  header (weight 800); responsive font scaling; outlined cards; lift on button
+  hover; rounded chips; modal entrance animation with safe-area padding
+- Locked viewport (no pinch-zoom); clipped horizontal overflow
+- Scroll-to-top on every page navigation; preserved on same-page re-renders
+  (dropdown open no longer jumps to top)
+- Auto-reload page on service worker update (controllerchange event)
+- Service worker switched to network-first for HTML shell so updates are
+  picked up immediately; falls back to cache when offline
+- Bottom nav switched from sticky to position:fixed with bottom padding
+
+-------------------------------------------------------------------------------
+PHASE 6: DATA IMPORT  (2026-06-13)
+-------------------------------------------------------------------------------
+Service Import:
+- Real Elvanto/UCare CSV parsing: normalises column names (First Name to
+  first_name, School Grade to grade), skips Attended/Absent summary columns,
+  extracts dates from descriptive session headers (e.g. "Brisbane - YS - Fri 30/01")
+- Replace semantics: each import is authoritative (full-year export); clears
+  prior sessions/attendance, keeps all students and connections, resets svcAttended
+  to 0 for students absent from the new file
+- Valid service model (migration 008): a session only counts if whole-ministry
+  attendance >= configurable floor (serviceMinAttendance, default 100);
+  holiday/term-break weeks excluded automatically; avg = attended divided by valid services
+- Normalises date_of_birth from DD/MM/YYYY to ISO YYYY-MM-DD before DB write
+- Deduplicates students keyed by ID (last CSV row wins); deduplicates attendance
+  records keyed by studentId:sessionId — prevents ON CONFLICT errors from
+  duplicate CSV rows
+- Settings UI updated: "Valid Session Threshold %" replaced by "Min attendance
+  for a valid service"
+
+Group Import:
+- New POST /import/group-csv endpoint parses Elvanto Group Individual Attendance
+  CSVs: group header rows, "Last, First" name format, DD/MM/YYYY date columns,
+  Y/N/- membership values
+- Monday-week bucketing: attendance keyed to the Monday of each week, so a group
+  meeting twice in one week counts once; per-student grp = weeks attended divided by
+  weeks the group ran
+- 0-attendance members (listed but never attended) are not counted as group members
+- Replace semantics: clears prior lifegroup data, keeps students and connections,
+  resets grp to 0 for students not in the new file
+- Leader row detection: roll entries containing "(leader)", "(leaders)",
+  "(assistant leader)", or "(assistant leaders)" auto-create/update Leader records
+  (grade + gender from group name) and are excluded from youth attendance
+- A leader appearing in multiple grade groups gets all grades assigned (grades
+  unioned; matched by name rather than duplicated)
+- Import tile split into two separate tiles: service and group
+
+Performance:
+- Batch all import saves with Promise.all; saveMany() bulk INSERT replaces
+  N sequential round trips — total DB calls approximately 5 regardless of import size
+- Chunked bulk inserts at 1,000 rows to stay within Postgres bind-param limit
+- Per-group week IDs prevent PK collisions for students in multiple groups
+- Import client timeout extended to 90s
+- TRUNCATE ... CASCADE for deleteAll() replaces row-by-row DELETE (avoids
+  15s statement_timeout on full reset)
+
+-------------------------------------------------------------------------------
+PHASE 7: TERM SPLIT  (2026-06-13)
+-------------------------------------------------------------------------------
+- Term boundaries derived from service-date gaps > termGapDays, Monday-bucketed
+  so Friday services and Monday lifegroups classify into the same term
+- Only the last two terms retained; resilient across calendar-year boundary
+  (last year T4 as previous, this year T1 as current)
+- Holiday-gap group weeks excluded from term calculations
+- Both service and group imports recompute current/previous counts from the
+  authoritative service boundaries (group falls back to its own week gaps when
+  no service data), keeping the split consistent regardless of import order
+- Exposed term boundaries in /trends for display
+
+-------------------------------------------------------------------------------
+PHASE 8: LIFEGROUP STATS & TRENDS  (2026-06-13)
+-------------------------------------------------------------------------------
+- New GET /lifegroups/stats endpoint: per-lifegroup (unique attenders, mean
+  attendees over weeks ran, weeks ran), per-grade (unique + mean per-grade
+  individuals), per-quad (rolled up), and overall — all current + previous term
+- Added to Vercel API route allowlist (was falling through to SPA catch-all
+  and returning HTML instead of JSON)
+- Added to service worker API_RE so it is never cached as a static asset
+- Trends Lifegroups tab rebuilt: quad to grade to lifegroup drill-down from
+  /lifegroups/stats, showing unique attenders, avg/week, weeks ran, current
+  and previous term
+- Trends Fridays tab: every card now shows this-term unique + avg/week with
+  muted previous-term comparison; bar chart labels each bar with attendee count
+- Home: current-term "Lifegroups by Quad/Grade" section with the same drill-down
+- Lifegroup averages use valid-service Fridays as denominator (falls back to
+  weeks-ran when no service data)
+- Prefetch and both fetches include /lifegroups/stats so navigation is instant
+- renderHome/renderTrends abort their final setApp if the user navigated away
+  while awaiting (fixes occasional stuck spinner / stale-page overwrite)
+- Individual lifegroup avgPerWeek divides by that group's own weeksRan, not
+  the global service count (grade/quad/overall still use valid service Fridays)
+
+-------------------------------------------------------------------------------
+PHASE 9: ROLE-BASED ACCESS CONTROL (RBAC) & GENDER SCOPING  (2026-06-13 to 2026-06-14)
+-------------------------------------------------------------------------------
+- Pre-seeded all ministry accounts via migration 005: director, 4 quad accounts,
+  and 12 grade accounts (Yr 7-12 girls/boys), all with default password demo1234
+- Account emails are now editable (admin Edit Account modal includes Email field;
+  service enforces uniqueness)
+- g/b grade email convention: grade7g = girls, grade7b = boys (login screen
+  example updated)
+- Actor gains a derived gender field: quad logins use quad gender; grade
+  logins use the g/b email convention
+- access-control gains genderScopeOf + canAccessStudent; every read path
+  (students, at-risk, trends, lifegroup-stats, overview, connections, leaders)
+  scopes grade logins to their own grade AND gender
+- Cross-grade same-gender connect exception preserved (student get/search
+  remains gender-only for cross-grade lookups)
+- Quad leader list now scoped to own gender + bracket (was leaking
+  opposite-gender leaders)
+- Ungendered grade accounts still see both genders (back-compat)
+- New connection:import RBAC capability (admin-only)
+
+-------------------------------------------------------------------------------
+PHASE 10: HOME SCREEN & HERO  (2026-06-13 to 2026-06-14)
+-------------------------------------------------------------------------------
+- Home quad dropdown: 4 numbers per grade (service unique + avg/wk, group
+  unique + avg/wk); group avg/wk sourced from /lifegroups/stats
+- Director/admin "Connection by Grade" splits each row into girls (left) and
+  boys (right) from /connections
+- Gendered tile labels: grade/quad tiles show gender when role-specific
+  (e.g. "Grade 11 Boys", "Girls Yr7-9"); derived via _loginGender/_gsfx
+- Home hero "Groups Avg/wk" now reads from /lifegroups/stats overall
+  (was hand-rolled, disagreed with Trends); old per-student calc kept as
+  offline fallback only
+- Pre-rendered dropdowns (Attendance by Quad, Lifegroups by Quad/Grade on
+  Home; Fridays By Quad, Lifegroups By Quad/Grade on Trends): contents
+  rendered up-front but hidden, expanded/collapsed via .drop collapsible +
+  _drop() toggle — no DOM rebuild or loading-spinner flash on open
+- Dropped bracketed session/week counts next to Youth/Groups in hero
+- Removed "Last Import" card and its /import/history fetch from home
+
+-------------------------------------------------------------------------------
+PHASE 11: STUDENT & AT-RISK FEATURES  (2026-06-13 to 2026-06-14)
+-------------------------------------------------------------------------------
+- Dynamic per-stream status qualifiers replacing the binary "at risk" label:
+    Rising    — rate +5pts or more improvement vs last term
+    Declining — rate -5pts or more drop vs last term
+    Stopped   — 0 attended this term, 3+ sessions/weeks history (requires
+                attending neither service nor lifegroup; 1+ of either = declining)
+    Mixed     — one stream up + one down
+- Student search and profiles show dynamic qualifier chips (e.g. "Stopped
+  service", "Declining service", "Rising group") instead of "at risk"
+- At-Risk page rebuilt into Rising / Mixed / Declining / Stopped collapsible
+  sections (Rising shown first in green even when no at-risk students); each
+  section starts collapsed with a count badge
+- atRiskStatus / riskChip retained on My Students cards, connect cards, and
+  quad view for threshold highlighting
+- Student search, My Students, and At-Risk: attendance shown as "this term" vs
+  "last term" for both service and lifegroup via shared termRow helper
+- summariseStudent returns prev-term fields so My Students has the data
+- At-Risk: removed manual status-update button; tapping a student opens profile
+- Student profile: phone numbers formatted (space after 4th/7th digit) and
+  tappable — tapping confirms then dials (tel:)
+- "Contact" header removed from student profile
+- Student search excludes leaders from results (fetches /leaders and filters);
+  typing no longer causes caret to jump to start on each keystroke
+- Students with zero attendance in both current and previous terms are hidden
+  from the quick-add picker's default view and excluded from
+  connected/unconnected/total counts (never treated as "unconnected")
+
+-------------------------------------------------------------------------------
+PHASE 12: LEADERS & CONNECT  (2026-06-13 to 2026-06-14)
+-------------------------------------------------------------------------------
+- Leaders & Connect routed to per-leader card view (was a plain list with a
+  single global "Connect Students" button that reloaded itself)
+- Each leader card has its own "Add Students" picker; Add Leader + Edit/Delete
+  buttons on the card view; refreshes after each action
+- Student picker: top-anchored, pinned to visible viewport (keyboard never
+  hides list or Done button); list scrolls, Done stays
+- Picker groups students into: Not assigned / Assigned to another leader /
+  Assigned to this leader — each group sorted by first name
+- Default picker view scoped to leader's own grade(s) + gender; students with
+  no grade/gender hidden until searched by name (name search surfaces everyone)
+- Removed "Unconnected focus" filter and per-leader target bar (now shows
+  total allocated count only)
+- Student picker insets ~1cm top/bottom (iPhone Dynamic Island clearance)
+- Leader filters on Leaders & Connect and My Students scoped to login role:
+  grade = none, quad = grade-only (own bracket), director/admin = grade + gender
+
+-------------------------------------------------------------------------------
+PHASE 13: GRADE NAVIGATION  (2026-06-14)
+-------------------------------------------------------------------------------
+- Grade bottom nav changed: Home | My Students | Leaders & Connect | At Risk
+- Trends moved from grade nav to home quick actions (swapped with Leaders & Connect)
+- Dropped at-risk count from grade Connection Summary and quad "Connection by Grade"
+  (grade: 3-column Total/Connected/Pending; quad: no red at-risk badge per grade)
+
+-------------------------------------------------------------------------------
+PHASE 14: CONNECTION AUDIT (CA)  (2026-06-13 to 2026-06-14)
+-------------------------------------------------------------------------------
+- Lifegroup Health rebuilt as a per-lifegroup table with quad filter buttons;
+  columns: Enrolled, Unique, Visits/unique, Run (weeks), Avg this term, Avg last term
+  (was a per grade x gender cohort table)
+- /lifegroups/stats TermAgg gains members (enrolled) and totalVisits fields
+- Executive deck slide 6 mirrors the per-lifegroup table; ladder rung labels
+  updated; "pp" changed to "%" in overview delta line
+- Per-quad funnels now centered tapered (matching overall funnel) instead of
+  left-aligned bars; new per-quad ladder slide added to executive slidepack
+- Per-quad integration ladder replaces funnel on Funnel tab
+- "In a lifegroup" KPI relabelled "Attended a lifegroup (at least once this term)"
+- Trend chips show "%" instead of "pp"
+- New-person follow-up sorted by most recent term's average days overdue (desc)
+- "Attended a lifegroup this term" and "In a lifegroup" KPI now require gA > 0
+  (this-term attendance), not just group membership (gT > 0)
+- Audit-specific uploads start empty (demo seed removed); store key bumped to
+  ca_audit_v4 to evict seeded localStorage; funnel/lifegroup views still render
+  from live platform roster
+- CA-HOOK resets localStorage audit uploads on both /admin/reset and
+  /admin/new-year (previously only on full reset)
+
+-------------------------------------------------------------------------------
+PHASE 15: ADMIN  (2026-06-13)
+-------------------------------------------------------------------------------
+- New "Clear Service/Group Data" button: clears ALL service + lifegroup data and
+  resets each student's attendance aggregates to 0, but keeps students
+  (grade/age/phone), connections, leaders, and accounts
+- Replaces "New Year" which also deleted students
+- Full Reset unchanged (deletes everything including students and leaders)
+- Help text and confirm dialogs clarified for both actions
+- Endpoint: /admin/clear-service-group (adminService.clearServiceGroupData)
+
+-------------------------------------------------------------------------------
+PHASE 16: CONNECTION ALLOCATION IMPORT/EXPORT  (2026-06-16)
+-------------------------------------------------------------------------------
+- New admin-only round-trip for student-leader allocations via CSV:
+    GET  /connections/allocations/export  — exports current allocations
+    POST /connections/allocations/import  — imports and syncs allocations
+- Long CSV format: one student-leader pair per row, grouped by student,
+  blank-leader rows for unconnected students
+- Pure connection-allocations.ts module with three stages:
+    parseAllocationRows — parse CSV rows into typed structures
+    planAllocations     — per-student sync plan with typo-safety, reporting
+                          unmatched/ambiguous names rather than silently failing
+    buildExportRows     — export-row builder with resilient
+                          gender > grade > name > leader sort
+- Per-student sync: compares import vs current state, applies additions and
+  removals, reports unmatched students/leaders and ambiguous name matches
+- SPA Admin Data tab: new import/export card with result modal showing
+  sync summary (added, removed, unchanged, unmatched, errors)
+- New connection:import RBAC capability (admin-only)
+
+-------------------------------------------------------------------------------
+SUMMARY OF CUMULATIVE CHANGES
+-------------------------------------------------------------------------------
+The project has evolved from a copy of youth-allocation-platform into a
+production PWA for connection ministry management. Key milestones:
+
+  Persistent backend   — Supabase (PostgreSQL) with full schema, RLS, and
+                         migrations; Vercel serverless in the Sydney region
+  Security             — bcrypt, HMAC sessions, rate limiting, security
+                         headers, Row-Level Security
+  Data ingestion       — Elvanto/UCare CSV import for service attendance and
+                         lifegroup attendance; replace semantics;
+                         valid-service thresholding
+  Analytics            — term-aware trends (current + previous), lifegroup
+                         stats endpoint, valid-services denominator for all
+                         averages
+  RBAC                 — gender-scoped grade logins, quad scoping,
+                         cross-grade connect rules
+  UX                   — SVG icons, PWA (manifest + service worker),
+                         persistent shell, client-side cache, background
+                         prefetch, pre-rendered dropdowns
+  At-risk              — dynamic qualifiers (rising/declining/stopped/mixed),
+                         tap-to-call, rebuilt collapsible sections
+  Connection Audit     — per-lifegroup health, per-quad funnels,
+                         executive deck
+  Admin                — Clear Service/Group Data action, editable emails,
+                         allocation import/export CSV round-trip
