@@ -9,6 +9,19 @@ import type { Actor } from '../core/entities/user';
 import type { Quad } from '../core/types/enums';
 import { QUADS, QUAD_LABELS } from '../core/types/enums';
 import { computeTerms, classifyDate, mondayOf, type Terms } from './terms';
+import { ResponseCache } from '../utils/response-cache';
+
+// Module-level cache — survives across requests on the same warm serverless instance.
+// Cleared on every import so data is never stale after a CSV upload.
+const _cache = new ResponseCache<TrendsData>(60_000);
+
+export function invalidateTrendsCache(): void {
+  _cache.invalidateAll();
+}
+
+function _actorKey(actor: Actor): string {
+  return `${actor.role}:${actor.grade ?? '_'}:${actor.quad ?? '_'}:${actor.gender ?? '_'}`;
+}
 
 export interface SessionPoint {
   sessionId: string;
@@ -96,6 +109,9 @@ export function makeTrendsService(
   return {
     async get(actor) {
       assertCan(actor, 'overview:read');
+      const cacheKey = _actorKey(actor);
+      const cached = _cache.get(cacheKey);
+      if (cached) return cached;
 
       const settings = await settingsRepo.getSettings();
       const minAttendance = settings.serviceMinAttendance;
@@ -232,7 +248,7 @@ export function makeTrendsService(
         else stable++;
       }
 
-      return {
+      const result: TrendsData = {
         terms,
         ministry,
         byQuad,
@@ -246,6 +262,8 @@ export function makeTrendsService(
         },
         generatedAt: new Date().toISOString(),
       };
+      _cache.set(cacheKey, result);
+      return result;
     },
   };
 }

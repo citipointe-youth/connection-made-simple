@@ -69,16 +69,23 @@ export class SupabaseStudentRepository implements IStudentRepository {
   async search(query: string): Promise<Student[]> {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (terms.length === 0) return [];
-    // Build a LIKE filter for each term against the full name
-    let rows = await this.sql`select * from students order by last_name`;
-    const results = rows
-      .map(toStudent)
+    // Apply the first term as a Postgres ILIKE filter so we never load the full table.
+    // Any additional terms (rare: 3+ words) are applied in JS on the already-small result.
+    const primary = `%${terms[0]}%`;
+    const rows = await this.sql`
+      select * from students
+      where lower(first_name || ' ' || last_name) like ${primary}
+      order by last_name
+      limit 200
+    `;
+    const mapped = rows.map(toStudent);
+    if (terms.length === 1) return mapped.slice(0, 50);
+    return mapped
       .filter((s) => {
         const full = `${s.firstName} ${s.lastName}`.toLowerCase();
-        return terms.every((t) => full.includes(t));
+        return terms.slice(1).every((t) => full.includes(t));
       })
       .slice(0, 50);
-    return results;
   }
 
   async save(student: Student): Promise<Student> {

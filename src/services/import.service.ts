@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
 import { assertCan } from './access-control';
+import { invalidateTrendsCache } from './trends.service';
+import { invalidateLgStatsCache } from './lifegroup-stats.service';
 import type {
   IStudentRepository,
   ILeaderRepository,
@@ -416,6 +418,8 @@ export function makeImportService(
         status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id,
       });
 
+      invalidateTrendsCache();
+      invalidateLgStatsCache();
       return { importId, type: 'service', rowCount: rows.length, studentsAdded, studentsUpdated, sessionsAdded: dateKeys.length };
     },
 
@@ -637,13 +641,16 @@ export function makeImportService(
 
       // Writes, FK-safe order.
       await importRepo.save({ id: importId, type: 'lifegroup', filename, fileHash: '', rowCount: 0, sessionsAdded: 0, studentsAdded: 0, studentsUpdated: 0, status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id });
-      for (const l of leadersToWrite.values()) await leaderRepo.save(l);
+      // Leader saves are independent — run in parallel instead of sequentially.
+      await Promise.all([...leadersToWrite.values()].map((l) => leaderRepo.save(l)));
       await lifegroupRepo.saveMany(newLifegroups);
       await lifegroupWeekRepo.saveMany(weeksToCreate);
       await studentRepo.saveMany(studentsToSave);
       if (dedupedAttendance.length > 0) await lifegroupAttendanceRepo.saveMany(dedupedAttendance);
       await importRepo.save({ id: importId, type: 'lifegroup', filename, fileHash: '', rowCount, sessionsAdded: weeksAdded, studentsAdded, studentsUpdated, status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id });
 
+      invalidateTrendsCache();
+      invalidateLgStatsCache();
       return { importId, type: 'lifegroup', rowCount, groupsAdded, studentsAdded, studentsUpdated, weeksAdded };
     },
 

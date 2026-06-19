@@ -877,7 +877,7 @@ function renderLogin() {
       <div class="login-card">
         <div class="login-logo"><div class="icon">${icLg('target')}</div><h1>Youth Connection</h1><p>Sign in to continue</p></div>
         <div id="lerr"></div>
-        <div class="fg"><label class="fl">Email</label><input class="fi" id="lemail" type="email" placeholder="g79@youth.ministry or grade7g@youth.ministry" autocomplete="username"></div>
+        <div class="fg"><label class="fl">Username</label><input class="fi" id="lemail" type="text" placeholder="" autocomplete="username"></div>
         <div class="fg"><label class="fl">Password</label><input class="fi" id="lpw" type="password" placeholder="••••••••" autocomplete="current-password"></div>
         <button class="btn btn-primary btn-full" onclick="doLogin()">Sign In</button>
         ${/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? `<p style="text-align:center;font-size:12px;color:var(--ink-faint);margin-top:14px">Install as an app — <a href="/install.html" style="color:var(--accent)">how to add to Home Screen</a></p>` : ''}
@@ -3382,14 +3382,14 @@ function suggestEmail() {
   let suggested = '';
   if (role === 'grade') {
     const grade = document.getElementById('u-grade')?.value;
-    if (grade) suggested = `grade${grade}@youth.ministry`;
+    if (grade) suggested = `grade${grade}`;
   } else if (role === 'quad') {
     const quad = document.getElementById('u-quad')?.value;
-    if (quad) suggested = `${quad}@youth.ministry`;
+    if (quad) suggested = quad;
   } else if (role === 'director') {
-    suggested = 'director@youth.ministry';
+    suggested = 'director';
   } else if (role === 'admin') {
-    suggested = 'admin@youth.ministry';
+    suggested = 'admin';
   }
   if (suggested) emailEl.value = suggested;
 }
@@ -3399,7 +3399,7 @@ function showAddUser() {
     <div class="mo-title">Add Account</div>
     <div id="uerr"></div>
     <div class="fg"><label class="fl">Display Name</label><input class="fi" id="u-name" placeholder="Grade 9"></div>
-    <div class="fg"><label class="fl">Email</label><input class="fi" id="u-email" type="email" placeholder="grade9@youth.ministry"></div>
+    <div class="fg"><label class="fl">Username</label><input class="fi" id="u-email" type="text" placeholder="grade9"></div>
     <div class="fg"><label class="fl">Password</label><input class="fi" id="u-pw" type="password" placeholder="Min 6 chars"></div>
     <div class="fg"><label class="fl">Role</label>
       <select class="fs" id="u-role" onchange="toggleUserRoleFields();suggestEmail()">
@@ -3444,9 +3444,11 @@ async function submitAddUser() {
   const errEl = document.getElementById('uerr');
   if (!displayName || !email || !password) { errEl.innerHTML='<div class="alert al-err">All fields required</div>'; return; }
   try {
-    await API.post('/accounts/users', { displayName, email, password, role, grade, quad });
+    const created = await API.post('/accounts/users', { displayName, email, password, role, grade, quad });
     Cache.del('/accounts/users');
-    closeModal(); toast('Account created'); await renderAdmin();
+    _adminData.users = [..._adminData.users, created];
+    closeModal(); toast('Account created');
+    renderAdminView(_adminData.settings, _adminData.users);
   } catch (e) { errEl.innerHTML=`<div class="alert al-err">${e.message}</div>`; }
 }
 
@@ -3457,7 +3459,7 @@ async function showEditUser(id) {
     <div class="mo-title">Edit Account</div>
     <div id="uerr"></div>
     <div class="fg"><label class="fl">Display Name</label><input class="fi" id="u-name" value="${u.displayName}"></div>
-    <div class="fg"><label class="fl">Email (login)</label><input class="fi" id="u-email" type="email" value="${(u.email||'').replace(/"/g,'&quot;')}" autocomplete="off"></div>
+    <div class="fg"><label class="fl">Username</label><input class="fi" id="u-email" type="text" value="${(u.email||'').replace(/"/g,'&quot;')}" autocomplete="off"></div>
     <div class="fg"><label class="fl">Role</label>
       <select class="fs" id="u-role" onchange="toggleUserRoleFields()">
         ${['grade','quad','director','admin'].map(r=>`<option value="${r}" ${r===u.role?'selected':''}>${r.charAt(0).toUpperCase()+r.slice(1)}</option>`).join('')}
@@ -3483,11 +3485,13 @@ async function submitEditUser(id) {
   const role = document.getElementById('u-role')?.value;
   const grade = role==='grade' ? parseInt(document.getElementById('u-grade')?.value||'7',10) : null;
   const quad = role==='quad' ? document.getElementById('u-quad')?.value : null;
-  if (!displayName || !email) { document.getElementById('uerr').innerHTML='<div class="alert al-err">Name and email are required</div>'; return; }
+  if (!displayName || !email) { document.getElementById('uerr').innerHTML='<div class="alert al-err">Name and username are required</div>'; return; }
   try {
-    await API.patch(`/accounts/users/${id}`, { displayName, email, role, grade, quad });
+    const updated = await API.patch(`/accounts/users/${id}`, { displayName, email, role, grade, quad });
     Cache.del('/accounts/users');
-    closeModal(); toast('Account updated'); await renderAdmin();
+    _adminData.users = _adminData.users.map(u => u.id === id ? updated : u);
+    closeModal(); toast('Account updated');
+    renderAdminView(_adminData.settings, _adminData.users);
   } catch (e) { document.getElementById('uerr').innerHTML=`<div class="alert al-err">${e.message}</div>`; }
 }
 
@@ -3514,10 +3518,11 @@ async function submitSetPassword(id) {
 
 async function toggleUserStatus(id, currentStatus) {
   try {
-    await API.patch(`/accounts/users/${id}/status`, {});
+    const updated = await API.patch(`/accounts/users/${id}/status`, {});
     Cache.del('/accounts/users');
+    _adminData.users = _adminData.users.map(u => u.id === id ? updated : u);
     toast(currentStatus==='active' ? 'Account deactivated' : 'Account activated');
-    await renderAdmin();
+    renderAdminView(_adminData.settings, _adminData.users);
   } catch (e) { toast(e.message); }
 }
 
@@ -3525,9 +3530,19 @@ function confirmDelUser(id, name) {
   modal(`<div class="mo-title">Delete Account?</div>
     <p style="color:var(--ink-mid);margin-bottom:20px">Delete account for <strong>${name}</strong>?</p>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-danger" style="flex:1" onclick="API.del('/accounts/users/${id}').then(()=>{Cache.del('/accounts/users');closeModal();toast('Account deleted');renderAdmin()}).catch(e=>toast(e.message))">Delete</button>
+      <button class="btn btn-danger" style="flex:1" onclick="doDelUser('${id}')">Delete</button>
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
     </div>`);
+}
+
+async function doDelUser(id) {
+  try {
+    await API.del(`/accounts/users/${id}`);
+    Cache.del('/accounts/users');
+    _adminData.users = _adminData.users.filter(u => u.id !== id);
+    closeModal(); toast('Account deleted');
+    renderAdminView(_adminData.settings, _adminData.users);
+  } catch (e) { toast(e.message); }
 }
 
 // ============================================================

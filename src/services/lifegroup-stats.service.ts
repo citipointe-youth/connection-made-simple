@@ -11,6 +11,17 @@ import type { Actor } from '../core/entities/user';
 import type { Quad } from '../core/types/enums';
 import { QUADS, QUAD_LABELS } from '../core/types/enums';
 import { computeTerms, classifyDate, mondayOf, type Terms } from './terms';
+import { ResponseCache } from '../utils/response-cache';
+
+const _cache = new ResponseCache<LifegroupStatsData>(60_000);
+
+export function invalidateLgStatsCache(): void {
+  _cache.invalidateAll();
+}
+
+function _actorKey(actor: Actor): string {
+  return `${actor.role}:${actor.grade ?? '_'}:${actor.quad ?? '_'}:${actor.gender ?? '_'}`;
+}
 
 // One term's worth of lifegroup numbers for a scope (a single group, a grade, a
 // quad, or the whole ministry).
@@ -86,6 +97,9 @@ export function makeLifegroupStatsService(
   return {
     async get(actor) {
       assertCan(actor, 'overview:read');
+      const cacheKey = _actorKey(actor);
+      const cached = _cache.get(cacheKey);
+      if (cached) return cached;
 
       const [settings, students, lifegroups, weeks, attendance, sessions] = await Promise.all([
         settingsRepo.getSettings(),
@@ -299,13 +313,15 @@ export function makeLifegroupStatsService(
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([weekStart, set]) => ({ weekStart, attended: set.size }));
 
-      return {
+      const result: LifegroupStatsData = {
         terms,
         overall: { current: overallCurrent, previous: overallPrevious, weekly },
         byQuad,
         byGrade,
         generatedAt: new Date().toISOString(),
       };
+      _cache.set(cacheKey, result);
+      return result;
     },
   };
 }

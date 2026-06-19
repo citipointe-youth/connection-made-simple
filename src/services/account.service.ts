@@ -10,7 +10,7 @@ import { NotFoundError, BadRequestError, ConflictError } from '../core/errors/ap
 
 const CreateUserSchema = z.object({
   displayName: z.string().min(1),
-  email: z.string().email(),
+  email: z.string().min(1),
   password: z.string().min(6),
   role: z.enum(['grade', 'quad', 'director', 'admin']),
   grade: z.number().int().min(7).max(12).nullable().optional(),
