@@ -1,4 +1,6 @@
 import type { IRepository } from './base.repository';
+import type { PushSubscription } from '../../core/entities/push-subscription';
+import type { Notification, NotificationWithRecipient } from '../../core/entities/notification';
 import type { User } from '../../core/entities/user';
 import type { Student } from '../../core/entities/student';
 import type { Leader } from '../../core/entities/leader';
@@ -94,4 +96,24 @@ export interface ISnapshotRepository extends IRepository<AppDefaults> {}
 
 export interface IAuditRepository extends IRepository<AdminAuditEntry> {
   findRecent(limit: number): Promise<AdminAuditEntry[]>;
+}
+
+export interface IPushSubscriptionRepository {
+  init(): Promise<void>;
+  findByUserId(userId: string): Promise<PushSubscription[]>;
+  findByUserIds(userIds: string[]): Promise<PushSubscription[]>;
+  upsert(sub: PushSubscription): Promise<PushSubscription>;
+  deleteByEndpoint(userId: string, endpoint: string): Promise<void>;
+  deleteByUserId(userId: string): Promise<void>;
+}
+
+export interface INotificationRepository {
+  init(): Promise<void>;
+  save(notification: Notification): Promise<Notification>;
+  saveRecipients(notificationId: string, recipientIds: string[]): Promise<void>;
+  findById(id: string): Promise<Notification | null>;
+  findSentByUser(userId: string): Promise<Notification[]>;
+  findReceivedByUser(userId: string): Promise<NotificationWithRecipient[]>;
+  softDelete(id: string, deletedAt: string): Promise<void>;
+  dismissForUser(notificationId: string, userId: string, dismissedAt: string): Promise<void>;
 }
