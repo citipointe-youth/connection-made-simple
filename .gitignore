@@ -2,3 +2,6 @@ node_modules
 data
 .DS_Store
 .vercel/output
+.env
+.env.*
+!.env.example

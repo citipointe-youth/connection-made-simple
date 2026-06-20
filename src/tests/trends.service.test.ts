@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeTrendsService } from '../services/trends.service';
+import { makeTrendsService, invalidateTrendsCache } from '../services/trends.service';
 import { makeStudentService } from '../services/student.service';
 import { makeAtRiskService } from '../services/atrisk.service';
 import {
@@ -17,6 +17,10 @@ function actor(role: string, opts: { grade?: number; quad?: string } = {}): Acto
 const ADMIN = actor('admin');
 
 async function makeServices() {
+  // The trends service keeps a module-level response cache keyed by actor. Each
+  // test builds fresh repositories, so clear that cache to avoid one test's
+  // result leaking into another via a shared actor key (e.g. ADMIN).
+  invalidateTrendsCache();
   const studentRepo = new InMemoryStudentRepository();
   const settingsRepo = new InMemorySettingsRepository();
   const sessionRepo = new InMemoryServiceSessionRepository();

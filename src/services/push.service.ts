@@ -35,7 +35,19 @@ function deriveGenderFromEmail(email: string): 'male' | 'female' | null {
 export function getUsersForTarget(target: PushTarget, users: SafeUser[]): SafeUser[] {
   switch (target.type) {
     case 'all': return users;
-    case 'quad': return users.filter((u) => u.role === 'quad' && u.quad === target.quad);
+    case 'quad': {
+      // A quad notification goes to the quad login AND the gendered grade logins
+      // within that quad (e.g. g79 → grade7g / grade8g / grade9g).
+      const grades = quadGradesOf(target.quad);
+      const gender = quadGenderOf(target.quad);
+      return users.filter((u) => {
+        if (u.role === 'quad' && u.quad === target.quad) return true;
+        if (u.role === 'grade' && u.grade != null && grades.includes(u.grade)) {
+          return deriveGenderFromEmail(u.email) === gender;
+        }
+        return false;
+      });
+    }
     case 'grade':
       return users.filter((u) => {
         if (u.role !== 'grade' || u.grade !== target.grade) return false;
@@ -161,7 +173,7 @@ export function makePushService(opts: {
         sent,
         failed,
         createdAt: now,
-        expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         deletedAt: null,
       };
       await notifRepo.save(notif);

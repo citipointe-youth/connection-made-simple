@@ -243,8 +243,9 @@ export function makeTrendsService(
         const prevRate = s.prevGrpTotal > 0 ? s.prevGrpAttended / s.prevGrpTotal : null;
         if (prevRate === null) { stable++; continue; }
         const delta = currRate - prevRate;
-        if (delta > 0.05) increasing++;
-        else if (delta < -0.05) decreasing++;
+        // >= 20 percentage points vs previous term (raised from 5pts).
+        if (delta > 0.20) increasing++;
+        else if (delta < -0.20) decreasing++;
         else stable++;
       }
 

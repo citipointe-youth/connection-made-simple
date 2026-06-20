@@ -96,10 +96,14 @@ describe('getUsersForTarget', () => {
     expect(getUsersForTarget({ type: 'all' }, users)).toHaveLength(users.length);
   });
 
-  it('quad g79 → returns only qg79', () => {
+  it('quad g79 → returns the quad login plus its gendered grade logins', () => {
     const result = getUsersForTarget({ type: 'quad', quad: 'g79' }, users);
-    expect(result).toHaveLength(1);
-    expect(result[0]!.id).toBe('qg79');
+    const ids = result.map((u) => u.id).sort();
+    // qg79 (quad) + g7f (grade7g) + g9f (grade9g); excludes male/other-bracket grades.
+    expect(ids).toEqual(['g7f', 'g9f', 'qg79']);
+    expect(ids).not.toContain('g7m');
+    expect(ids).not.toContain('g12m');
+    expect(ids).not.toContain('qb79');
   });
 
   it('grade 7 female → returns only g7f', () => {

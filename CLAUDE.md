@@ -19,7 +19,7 @@ npm install
 npm run dev          # backend + frontend on http://localhost:4300 (tsx watch)
 npm run start        # same, no watch
 npm run typecheck    # tsc --noEmit (strict)
-npm run test         # vitest (71 tests)
+npm run test         # vitest (130 tests)
 ```
 
 Default port: **4300**. Set `PORT=xxxx` to override.
@@ -270,3 +270,39 @@ No emoji or Unicode symbol characters anywhere in the SPA — everything is SVG.
   us with `lifegroups`) falls through to the cache-first asset path and can get the
   SPA HTML cached under its URL, breaking JSON parsing (symptom: "… unavailable").
   When adding a new top-level API route, add it to `API_RE` and bump the cache name.
+
+## Notifications (web push)
+
+- Backend: `push.service.ts` + `/push/*` routes (`vapid-key`, `subscribe`, `unsubscribe`,
+  `send`, `notifications`, `notifications/:id` delete, `notifications/:id/dismiss`).
+- **Targeting:** `all` (director/admin only), `quad`, `grade` (gendered). A **quad**
+  notification fans out to the quad login **and** the gendered grade logins inside that
+  quad (e.g. `g79` → `grade7g`/`grade8g`/`grade9g`) — see `getUsersForTarget`.
+- **Expiry:** notifications expire **7 days** after creation (`send()` in `push.service.ts`).
+- `findReceivedByUser` already filters out dismissed/deleted/expired, so the SPA unread
+  count is just `received.length`.
+- **SPA:** notifications live on their **own page** (`renderNotifications`, route
+  `notifications`, in `navItems()` for every role incl. grade). The header **bell**
+  navigates there and shows a red unread **badge** (`_updateNotifBadge`). Admin/director/
+  quad get a **Send notification** button at the top of that page (`showSendNotification`).
+
+## Trend qualifiers
+
+- Rising/declining fire only when a stream's attendance **rate** moved **≥ 20 percentage
+  points** vs the previous term (raised from 5pts). Threshold lives in **both** the
+  backend (`atrisk.service.ts`, `trends.service.ts` groupSummary) and the SPA
+  (`isRising`, `_streamQual`, and the CA module rate trends) — keep them in sync.
+
+## Security notes
+
+- **XSS:** all user-supplied strings (names, emails, notification title/message,
+  lifegroup names) are HTML-escaped via the global `esc()` helper before going into
+  `innerHTML`. A `Content-Security-Policy` meta tag in `index.html` is defence-in-depth
+  (`'unsafe-inline'` is required by the inline-script/onclick architecture; its value is
+  blocking external script/resource loads + base-uri/form-action). **Always wrap new
+  user-data interpolations in `esc()`.** Residual gap: a few `onclick` handlers pass names
+  as JS-string args with only `'`-escaping — don't widen that surface.
+- **Session token** is stored in `localStorage` (`yap_token`). Accepted risk, mitigated by
+  the escaping + CSP above; switch to an httpOnly cookie if that ever regresses.
+- **CORS:** in production, `CORS_ORIGINS` defaults to the prod domain (never `*`); override
+  via env. **`SESSION_SECRET` must be set in production** or tokens can be forged.

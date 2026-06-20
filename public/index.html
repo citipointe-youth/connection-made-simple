@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- Content-Security-Policy: defence-in-depth alongside per-field HTML escaping.
+     'unsafe-inline' is required because the whole app is inline <script>/<style>
+     with onclick handlers; the value of CSP here is blocking EXTERNAL script/
+     resource loading, base-uri hijacks and form-action exfiltration. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -43,6 +48,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .role-badge{background:rgba(255,255,255,.18);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;text-transform:uppercase;white-space:nowrap}
 .btn-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.15);color:#fff;cursor:pointer;flex-shrink:0}
 .btn-icon:hover{background:rgba(255,255,255,.25)}
+.notif-badge{position:absolute;top:-2px;right:-2px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#dc2626;color:#fff;font-size:10px;font-weight:800;line-height:17px;text-align:center;box-shadow:0 0 0 2px var(--navy)}
 @media(min-width:768px){.hdr{padding:0 28px}.hdr-top{height:56px}.hdr h1{font-size:20px}}
 
 /* SVG icons */
@@ -408,6 +414,10 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 // API ADAPTER
 // ============================================================
 const API = (() => {
+  // The session token is kept in localStorage (sent as a Bearer header). This is
+  // an accepted risk: the XSS vector that could read it is closed by escaping all
+  // user-supplied fields (see esc()) plus the page CSP. If that ever changes,
+  // move to an httpOnly cookie. (See CLAUDE.md → Security notes.)
   let _t = localStorage.getItem('yap_token') || null;
   const hdr = () => ({ 'Content-Type': 'application/json', ...(_t ? { Authorization: `Bearer ${_t}` } : {}) });
   async function r(method, path, body, timeoutMs) {
@@ -460,6 +470,14 @@ const Cache = (() => {
 // STATE & ROUTING
 // ============================================================
 const S = { user: null, page: 'home', settings: {} };
+// HTML-escape any user-supplied string before interpolating it into innerHTML.
+// Names, notification titles/messages, emails etc. all come from CSV import or
+// user input and MUST go through this to prevent stored XSS.
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 function go(page) { S.page = page; render(); }
 function toast(msg, dur = 2500) {
   const el = document.getElementById('toast');
@@ -518,7 +536,7 @@ function _initShell() {
         <h1>Youth Connection</h1>
         <div class="hdr-meta">
           ${roleBadge(u)}
-          ${['admin','director','quad'].includes(u.role)?`<div class="btn-icon" onclick="showSendNotification()" title="Send notification" aria-label="Send notification">${icN('bell')}</div>`:''}
+          <div class="btn-icon" style="position:relative" onclick="go('notifications')" title="Notifications" aria-label="Notifications">${icN('bell')}<span id="notif-badge" class="notif-badge" hidden></span></div>
           <div class="btn-icon" onclick="doLogout()" title="Sign out" aria-label="Sign out">${icN('logout')}</div>
         </div>
       </div>
@@ -528,6 +546,7 @@ function _initShell() {
     <nav class="bot-nav">${mlinks}</nav>`;
   _shellReady = true;
   _prefetch();
+  _updateNotifBadge();
 }
 
 function _prefetch() {
@@ -607,10 +626,10 @@ function phoneLink(raw) {
   if (!raw) return '';
   return `<a onclick="callPhone('${String(raw).replace(/['\\]/g, '')}')" style="color:var(--accent-dark);font-weight:700;cursor:pointer;text-decoration:none">${fmtPhone(raw)}</a>`;
 }
-// A student is "rising" if their service OR lifegroup rate improved by >=5
+// A student is "rising" if their service OR lifegroup rate improved by >=20
 // points vs last term (needs data in both terms to judge).
 function isRising(s) {
-  const up = (a, t, pa, pt) => (t > 0 && pt > 0) && ((a / t) - (pa / pt) >= 0.05);
+  const up = (a, t, pa, pt) => (t > 0 && pt > 0) && ((a / t) - (pa / pt) >= 0.20);
   return up(s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)
       || up(s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal);
 }
@@ -621,8 +640,8 @@ function _hasAttended(s) {
   return (s.svcAttended > 0) || (s.grpAttended > 0) || (s.prevSvcAttended > 0) || (s.prevGrpAttended > 0);
 }
 // ── Dynamic per-stream qualifier (this term vs last term) ──
-// 'rising'  = rate up >=5pts vs last term
-// 'declining' = rate down >=5pts vs last term
+// 'rising'  = rate up >=20pts vs last term
+// 'declining' = rate down >=20pts vs last term
 // 'stopped' = attended 0 this term (>=3 sessions/weeks to judge)
 // 'steady'/'none' = no qualifier.
 function _streamQual(curA, curT, prevA, prevT) {
@@ -630,8 +649,8 @@ function _streamQual(curA, curT, prevA, prevT) {
   if (curT >= 3 && curA === 0) return 'stopped';
   if (prevT >= 1) {
     const d = curA / curT - prevA / prevT;
-    if (d >= 0.05) return 'rising';
-    if (d <= -0.05) return 'declining';
+    if (d >= 0.20) return 'rising';
+    if (d <= -0.20) return 'declining';
   }
   return 'steady';
 }
@@ -776,6 +795,7 @@ function navItems() {
     // quick actions:
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
+    { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' },
   ];
   // Quad: Home | Leaders & Connect | Trends | At Risk
   if (u.role === 'quad') return [
@@ -786,6 +806,7 @@ function navItems() {
     // quick actions:
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
+    { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' },
   ];
   // Admin: Home | Leaders & Connect | Trends | At Risk + quick actions
   if (u.role === 'admin') return [
@@ -798,6 +819,7 @@ function navItems() {
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
     { id:'admin',      ic:'settings', label:'Admin Settings',     mbl:'Settings' },
     { id:'ca-hub',     ic:'link',     label:'Connection Audit',  mbl:'Connection Audit' }, /*CA-HOOK*/
+    { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' },
   ];
   // Director: same as admin minus admin tile
   return [
@@ -809,6 +831,7 @@ function navItems() {
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
     { id:'ca-hub',     ic:'link',     label:'Connection Audit',  mbl:'Connection Audit' }, /*CA-HOOK*/
+    { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' },
   ];
 }
 function bottomNavItems() { return navItems().slice(0, 4); }
@@ -868,6 +891,7 @@ async function render() {
   else if (p==='trends') await renderTrends();
   else if (p==='import') await renderImport();
   else if (p==='admin') await renderAdmin();
+  else if (p==='notifications') await renderNotifications();
   else await renderHome();
 }
 
@@ -1010,7 +1034,7 @@ async function _renderHomeInner() {
   const grpAvgWk = lgStats ? lgStats.overall.current.avgPerWeek : (grpWeeks > 0 ? Math.round(grpAtt / grpWeeks) : 0);
 
   let body = `<div style="background:linear-gradient(135deg,#1e3a5f,#2d5a8a);color:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px">`;
-  body += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:18px;font-weight:800;line-height:1.1;display:flex;align-items:center;gap:7px">${icN('users')} ${u.displayName}</div>${roleBadge(u)}</div>`;
+  body += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:18px;font-weight:800;line-height:1.1;display:flex;align-items:center;gap:7px">${icN('users')} ${esc(u.displayName)}</div>${roleBadge(u)}</div>`;
   body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><colgroup><col style="width:44%"><col style="width:28%"><col style="width:28%"></colgroup>`;
   body += `<thead><tr>
     <th style="font-size:8px;font-weight:700;opacity:.45;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:3px">This term</th>
@@ -1181,9 +1205,7 @@ async function _renderHomeInner() {
     }
   }
 
-  body += '<div id="notif-history"></div>';
   setApp(shell(body));
-  _renderNotifHistory();
 }
 
 // ============================================================
@@ -1255,7 +1277,7 @@ async function submitSendNotification() {
     const res = await API.post('/push/send', { target, title, message });
     closeModal();
     Cache.del('/push/notifications');
-    _renderNotifHistory();
+    if (S.page === 'notifications') renderNotifications();
     const t = document.createElement('div');
     t.className = 'alert al-ok';
     t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.15)';
@@ -1283,56 +1305,90 @@ function _timeAgo(isoStr) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-async function _renderNotifHistory() {
-  const el = document.getElementById('notif-history');
-  if (!el || !S.user) return;
+// Notifications screen — dedicated page for every role. Admin/director/quad get
+// a "Send notification" button at the top; everyone sees their received list.
+async function renderNotifications() {
+  const u = S.user; if (!u) return;
+  const canSend = ['admin', 'director', 'quad'].includes(u.role);
+  if (!_allCached('/push/notifications')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
   let data;
-  try { data = await API.get('/push/notifications'); } catch { return; }
+  try { data = await API.get('/push/notifications'); }
+  catch {
+    if (S.page === 'notifications') setApp(shell('<h2 style="font-size:20px;font-weight:800;margin-bottom:12px">Notifications</h2><div class="alert al-err">Could not load notifications.</div>'));
+    return;
+  }
+  if (S.page !== 'notifications') return; // stale-render guard (user navigated away)
   const { received = [], sent = [] } = data;
-  if (!received.length && !sent.length) return;
-  let h = '<div class="sh" style="margin-top:8px">Notifications</div>';
+
+  let h = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">'
+    + '<h2 style="font-size:20px;font-weight:800">Notifications</h2>'
+    + (canSend ? `<button class="btn btn-primary btn-sm" onclick="showSendNotification()">${icS('bell')} Send notification</button>` : '')
+    + '</div>';
+
+  h += '<div class="sh">Received</div>';
   if (received.length) {
-    h += '<div class="card" style="padding:10px;margin-bottom:10px">';
-    h += '<div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Received</div>';
+    h += '<div class="card" style="padding:10px;margin-bottom:14px">';
     for (const n of received) {
       h += `<div style="padding:8px 0;border-bottom:1px solid var(--paper-dark)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
           <div style="flex:1">
-            <div style="font-size:13px;font-weight:700">${n.title}</div>
-            <div style="font-size:12px;color:var(--ink-mid);margin:2px 0">${n.message}</div>
-            <div style="font-size:11px;color:var(--ink-faint)">${n.senderName} · ${_timeAgo(n.createdAt)}</div>
+            <div style="font-size:13px;font-weight:700">${esc(n.title)}</div>
+            <div style="font-size:12px;color:var(--ink-mid);margin:2px 0">${esc(n.message)}</div>
+            <div style="font-size:11px;color:var(--ink-faint)">${esc(n.senderName)} · ${_timeAgo(n.createdAt)}</div>
           </div>
           <button class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;flex-shrink:0" onclick="dismissNotification('${n.id}')">Dismiss</button>
         </div></div>`;
     }
     h += '</div>';
+  } else {
+    h += '<p style="color:var(--ink-faint);font-size:13px;padding:8px 0 14px">No new notifications.</p>';
   }
-  if (sent.length) {
-    h += '<div class="card" style="padding:10px;margin-bottom:10px">';
-    h += '<div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Sent</div>';
-    for (const n of sent) {
-      h += `<div style="padding:8px 0;border-bottom:1px solid var(--paper-dark)">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-          <div style="flex:1">
-            <div style="font-size:13px;font-weight:700">${n.title}</div>
-            <div style="font-size:12px;color:var(--ink-mid);margin:2px 0">${n.message}</div>
-            <div style="font-size:11px;color:var(--ink-faint)">To: ${_pushTargetLabel(n.target)} · ${_timeAgo(n.createdAt)} · ${n.sent} sent</div>
-          </div>
-          <button class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;flex-shrink:0;color:var(--danger);border-color:var(--danger)" onclick="deleteNotification('${n.id}')">Delete</button>
-        </div></div>`;
+
+  if (canSend) {
+    h += '<div class="sh">Sent</div>';
+    if (sent.length) {
+      h += '<div class="card" style="padding:10px;margin-bottom:14px">';
+      for (const n of sent) {
+        h += `<div style="padding:8px 0;border-bottom:1px solid var(--paper-dark)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700">${esc(n.title)}</div>
+              <div style="font-size:12px;color:var(--ink-mid);margin:2px 0">${esc(n.message)}</div>
+              <div style="font-size:11px;color:var(--ink-faint)">To: ${_pushTargetLabel(n.target)} · ${_timeAgo(n.createdAt)} · ${n.sent} sent</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;flex-shrink:0;color:var(--danger);border-color:var(--danger)" onclick="deleteNotification('${n.id}')">Delete</button>
+          </div></div>`;
+      }
+      h += '</div>';
+    } else {
+      h += '<p style="color:var(--ink-faint);font-size:13px;padding:8px 0 14px">You haven\'t sent any notifications.</p>';
     }
-    h += '</div>';
   }
-  el.innerHTML = h;
+
+  setApp(shell(h));
+  _updateNotifBadge(data);
+}
+
+// Refresh the red unread badge on the header bell = count of current (undismissed,
+// unexpired) received notifications for the logged-in account.
+async function _updateNotifBadge(data) {
+  if (!S.user) return;
+  try { if (!data) data = await API.get('/push/notifications'); }
+  catch { return; }
+  const count = (data && data.received ? data.received : []).length;
+  const el = document.getElementById('notif-badge');
+  if (!el) return;
+  if (count > 0) { el.textContent = count > 99 ? '99+' : String(count); el.hidden = false; }
+  else { el.hidden = true; }
 }
 
 async function dismissNotification(id) {
-  try { await API.post(`/push/notifications/${id}/dismiss`, {}); Cache.del('/push/notifications'); _renderNotifHistory(); }
+  try { await API.post(`/push/notifications/${id}/dismiss`, {}); Cache.del('/push/notifications'); await _updateNotifBadge(); if (S.page === 'notifications') renderNotifications(); }
   catch (e) { console.error('[push] dismiss error', e); }
 }
 
 async function deleteNotification(id) {
-  try { await API.del(`/push/notifications/${id}`); Cache.del('/push/notifications'); _renderNotifHistory(); }
+  try { await API.del(`/push/notifications/${id}`); Cache.del('/push/notifications'); if (S.page === 'notifications') renderNotifications(); }
   catch (e) { console.error('[push] delete error', e); }
 }
 
@@ -1375,7 +1431,7 @@ async function renderLeaders() {
         <div class="li" style="cursor:pointer" onclick="showLeaderDetail('${l.id}')">
           <div style="width:42px;height:42px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${gi}</div>
           <div class="li-body">
-            <div class="li-title">${l.fullName}</div>
+            <div class="li-title">${esc(l.fullName)}</div>
             <div class="li-sub">Gr ${l.grades?.join(', ')||'All'} · ${l.gender||'any'} · ${assigned} student${assigned!==1?'s':''}</div>
           </div>
           ${canEdit?`<div class="li-right">
@@ -1392,7 +1448,7 @@ async function renderLeaders() {
     for (const l of leaders) {
       const assigned = countByLeader[l.id] || 0;
       body += `<tr style="cursor:pointer" onclick="showLeaderDetail('${l.id}')">
-        <td><strong>${l.fullName}</strong></td>
+        <td><strong>${esc(l.fullName)}</strong></td>
         <td>${l.gender||'—'}</td>
         <td>${l.grades?.length?'Gr '+l.grades.join(', '):'All'}</td>
         <td><span class="chip ${assigned>0?'c-success':'c-neutral'}">${assigned} student${assigned!==1?'s':''}</span></td>
@@ -1425,7 +1481,7 @@ async function showLeaderDetail(id) {
     const pct = s.svcTotal > 0 ? Math.round(s.svcAttended / s.svcTotal * 100) : null;
     studRows += `<div style="padding:10px 0;border-bottom:1px solid var(--paper-dark);display:flex;align-items:center;gap:10px">
       <div style="flex:1">
-        <div style="font-weight:600">${s.fullName}</div>
+        <div style="font-weight:600">${esc(s.fullName)}</div>
         <div style="font-size:12px;color:var(--ink-mid)">Gr ${s.grade||'—'} · ${s.gender}</div>
       </div>
       ${pct!==null?`<div style="text-align:right">
@@ -1436,7 +1492,7 @@ async function showLeaderDetail(id) {
   }
 
   modal(`
-    <div class="mo-title">${leader.fullName}</div>
+    <div class="mo-title">${esc(leader.fullName)}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
       <span class="chip c-accent">${leader.gender||'any gender'}</span>
       <span class="chip c-neutral">Gr ${leader.grades?.join(', ')||'All'}</span>
@@ -1504,7 +1560,7 @@ async function showEditLeader(id) {
   modal(`
     <div class="mo-title">Edit Leader</div>
     <div id="le"></div>
-    <div class="fg"><label class="fl">Full Name</label><input class="fi" id="ln" value="${l.fullName}"></div>
+    <div class="fg"><label class="fl">Full Name</label><input class="fi" id="ln" value="${esc(l.fullName)}"></div>
     ${genderField}
     <div class="fg"><label class="fl">Grade Focus</label>${gcbs}</div>
     <div class="fg"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px"><input type="checkbox" id="la" ${l.active?'checked':''}> Active</label></div>
@@ -1638,11 +1694,11 @@ function renderConnectView() {
         const p = svcPct(s);
         studentRows += `<div class="connect-stud-row">
           <div style="flex:1;min-width:0">
-            <div class="connect-stud-name">${s.firstName} ${s.lastName}</div>
+            <div class="connect-stud-name">${esc(s.firstName)} ${esc(s.lastName)}</div>
             <div class="connect-stud-meta">Gr ${s.grade||'—'} · ${s.gender}${p!==null?' · '+p+'%':''}</div>
           </div>
           ${riskChip(s.atRiskStatus)}
-          ${canEdit?`<button class="btn btn-ghost btn-sm" style="padding:4px 6px;color:var(--danger)" onclick="removeConnectWithUndo('${s.id}','${l.id}','${s.firstName} ${s.lastName}','${l.fullName}')" aria-label="Disconnect ${s.firstName} ${s.lastName} from ${l.fullName}">×</button>`:''}
+          ${canEdit?`<button class="btn btn-ghost btn-sm" style="padding:4px 6px;color:var(--danger)" onclick="removeConnectWithUndo('${s.id}','${l.id}','${s.firstName} ${s.lastName}','${l.fullName}')" aria-label="Disconnect ${esc(s.firstName)} ${esc(s.lastName)} from ${esc(l.fullName)}">×</button>`:''}
         </div>`;
       }
       if (assignedStudents.length > 8) {
@@ -1653,7 +1709,7 @@ function renderConnectView() {
       const nm = l.fullName.replace(/'/g,"\\'");
       body += `<div class="connect-leader">
         <div style="display:flex;align-items:flex-start;gap:6px">
-          <div class="connect-leader-name" style="flex:1">${gi}${l.fullName}</div>
+          <div class="connect-leader-name" style="flex:1">${gi}${esc(l.fullName)}</div>
           ${canEdit?`<button class="btn btn-ghost btn-sm" style="padding:2px 5px" title="Edit leader" onclick="showEditLeader('${l.id}')">${icS('edit')}</button>
           <button class="btn btn-ghost btn-sm" style="padding:2px 5px;color:var(--danger)" title="Delete leader" onclick="confirmDelLeader('${l.id}','${nm}')">${icS('trash')}</button>`:''}
         </div>
@@ -1827,15 +1883,15 @@ function pickerRow(s, isAssigned, note) {
   if (isAssigned) {
     return `<div class="picker-item assigned">
       <div>
-        <div class="picker-item-name" style="display:flex;align-items:center;gap:4px">${icS('check')} ${s.firstName} ${s.lastName}</div>
+        <div class="picker-item-name" style="display:flex;align-items:center;gap:4px">${icS('check')} ${esc(s.firstName)} ${esc(s.lastName)}</div>
         <div class="picker-item-meta">Gr ${s.grade||'—'} · ${s.gender}${pct!==null?' · '+pct+'%':''}</div>
       </div>
       <div class="picker-item-right">${risk}<button onclick="remPick('${s.id}')" title="Remove from this leader" style="margin-left:8px;border:none;background:none;color:var(--danger);font-size:20px;font-weight:700;line-height:1;cursor:pointer">−</button></div>
     </div>`;
   }
-  return `<button class="picker-item" onclick="addConnFromPicker('${s.id}')" aria-label="Assign ${s.firstName} ${s.lastName}">
+  return `<button class="picker-item" onclick="addConnFromPicker('${s.id}')" aria-label="Assign ${esc(s.firstName)} ${esc(s.lastName)}">
     <div>
-      <div class="picker-item-name">${s.firstName} ${s.lastName}</div>
+      <div class="picker-item-name">${esc(s.firstName)} ${esc(s.lastName)}</div>
       <div class="picker-item-meta">Gr ${s.grade||'—'} · ${s.gender}${pct!==null?' · '+pct+'%':''}</div>
       ${noteHtml}
     </div>
@@ -1947,7 +2003,7 @@ async function renderMyStudents() {
   if (_lvF.gender.size) visLeaders = visLeaders.filter(l => _lvF.gender.has(l.gender));
   if (_msLeader && !visLeaders.some(l => l.id === _msLeader)) _msLeader = null;
 
-  const opts = visLeaders.map(l => `<option value="${l.id}" ${_msLeader === l.id ? 'selected' : ''}>${l.fullName} (Gr ${l.grades?.join(', ') || 'All'} · ${l.gender || 'any gender'})</option>`).join('');
+  const opts = visLeaders.map(l => `<option value="${l.id}" ${_msLeader === l.id ? 'selected' : ''}>${esc(l.fullName)} (Gr ${l.grades?.join(', ') || 'All'} · ${l.gender || 'any gender'})</option>`).join('');
   body += `<div class="fg"><label class="fl">I am…</label><select class="fs" onchange="_msLeader=this.value;renderMyStudents()"><option value="">— Choose a leader —</option>${opts}</select></div>`;
 
   if (_msLeader) {
@@ -1959,7 +2015,7 @@ async function renderMyStudents() {
     if (leader) {
       body += `<div class="card" style="text-align:center;padding:18px;margin-bottom:16px">
         <div style="font-size:36px;margin-bottom:8px">${leader.gender === 'female' ? '♀' : leader.gender === 'male' ? '♂' : '⚥'}</div>
-        <div style="font-size:18px;font-weight:800">${leader.fullName}</div>
+        <div style="font-size:18px;font-weight:800">${esc(leader.fullName)}</div>
         <div style="font-size:13px;color:var(--ink-mid);margin-top:4px">Gr ${leader.grades?.join(', ') || 'All'} · ${leader.gender || 'any gender'}</div>
       </div>`;
     }
@@ -1973,7 +2029,7 @@ async function renderMyStudents() {
         body += `<div class="li" style="cursor:pointer" onclick="showStudentDetail('${s.id}')">
           <div class="li-body">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span class="li-title">${s.fullName}</span>${riskChip(s.atRiskStatus)}
+              <span class="li-title">${esc(s.fullName)}</span>${riskChip(s.atRiskStatus)}
             </div>
             <div class="li-sub">Yr ${s.grade || '—'} · ${s.gender}${bd ? ' · ' + bd : ''}</div>
             ${termRow('Fridays', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
@@ -2030,7 +2086,7 @@ async function renderQuadView() {
       body += `<div class="card">
         <div class="card-hdr">
           <div>
-            <div class="card-title">${l.fullName}</div>
+            <div class="card-title">${esc(l.fullName)}</div>
             <div class="card-sub">Gr ${l.grades?.join(', ')||'All'} · ${l.gender||'any'} · ${allocs.length} student${allocs.length!==1?'s':''}${atRiskCount?` · <span style="display:inline-flex;align-items:center;gap:2px">${icS('alert')}${atRiskCount} at risk</span>`:''}</div>
           </div>
           <button class="btn btn-ghost btn-sm" onclick="showLeaderDetail('${l.id}')">View →</button>
@@ -2043,7 +2099,7 @@ async function renderQuadView() {
           const pct = svcPct(s);
           body += `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--paper-dark)">
             <div style="flex:1">
-              <span style="font-weight:600;font-size:14px">${s.firstName} ${s.lastName}</span>
+              <span style="font-weight:600;font-size:14px">${esc(s.firstName)} ${esc(s.lastName)}</span>
               <span style="font-size:12px;color:var(--ink-mid);margin-left:6px">Gr ${s.grade||'—'} · ${s.gender}</span>
             </div>
             ${riskChip(s.atRiskStatus)}
@@ -2099,7 +2155,7 @@ async function renderMyQuad() {
         body += `<div class="card">
           <div class="card-hdr">
             <div>
-              <div class="card-title">${l.fullName}</div>
+              <div class="card-title">${esc(l.fullName)}</div>
               <div class="card-sub">Gr ${l.grades?.join(', ')||'All'} · ${l.gender||'any'} · ${allocs.length} student${allocs.length!==1?'s':''}${atRiskCount?` · <span style="display:inline-flex;align-items:center;gap:2px">${icS('alert')}${atRiskCount} at risk</span>`:''}</div>
             </div>
             <button class="btn btn-ghost btn-sm" onclick="showLeaderDetail('${l.id}')">View →</button>
@@ -2112,7 +2168,7 @@ async function renderMyQuad() {
             const pct = svcPct(s);
             body += `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--paper-dark)">
               <div style="flex:1">
-                <span style="font-weight:600;font-size:14px">${s.firstName} ${s.lastName}</span>
+                <span style="font-weight:600;font-size:14px">${esc(s.firstName)} ${esc(s.lastName)}</span>
                 <span style="font-size:12px;color:var(--ink-mid);margin-left:6px">Gr ${s.grade||'—'} · ${s.gender}</span>
               </div>
               ${riskChip(s.atRiskStatus)}
@@ -2134,7 +2190,7 @@ async function renderMyQuad() {
         body += `<div class="li" onclick="showStudentDetail('${s.id}')" style="cursor:pointer">
           <div class="li-body">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span class="li-title">${s.firstName} ${s.lastName}</span>
+              <span class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</span>
               ${riskChip(s.atRiskStatus)}
             </div>
             <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender} ${quadChip(s.quad)}</div>
@@ -2162,7 +2218,7 @@ async function renderMyQuad() {
           body += `<div class="li" style="cursor:default;align-items:flex-start">
             <div class="li-body">
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <span class="li-title">${s.firstName} ${s.lastName}</span>
+                <span class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</span>
                 ${riskChip(s.atRiskStatus)} ${quadChip(s.quad)}
               </div>
               <div class="li-sub" style="margin-top:3px">Gr ${s.grade||'—'} · ${s.gender}</div>
@@ -2255,7 +2311,7 @@ async function renderAtRisk() {
         <div class="li" style="cursor:pointer;align-items:flex-start" onclick="showStudentDetail('${s.id}')">
           <div class="li-body">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span class="li-title">${s.firstName} ${s.lastName}</span>
+              <span class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</span>
               ${qualChips(s)} ${quadChip(s.quad)}
             </div>
             <div class="li-sub" style="margin-top:3px">Gr ${s.grade||'—'} · ${s.gender}</div>
@@ -2366,7 +2422,7 @@ function _studentResultsHtml(vis) {
     h += `<div class="li" onclick="showStudentDetail('${s.id}')" style="cursor:pointer">
       <div class="li-body">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <span class="li-title">${s.firstName} ${s.lastName}</span>
+          <span class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</span>
           ${qualChips(s)}
         </div>
         <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender} ${quadChip(s.quad)}</div>
@@ -2384,7 +2440,7 @@ function _studentResultsHtml(vis) {
     const gp = s.grpTotal > 0 ? Math.round(s.grpAttended / s.grpTotal * 100) + '%' : '—';
     const pgp = s.prevGrpTotal > 0 ? Math.round(s.prevGrpAttended / s.prevGrpTotal * 100) + '%' : '—';
     h += `<tr>
-      <td><strong>${s.firstName} ${s.lastName}</strong></td>
+      <td><strong>${esc(s.firstName)} ${esc(s.lastName)}</strong></td>
       <td>${s.grade||'—'}</td><td>${s.gender}</td>
       <td>${quadChip(s.quad)}</td>
       <td>${pct!==null?pct+'%':'—'} <span style="color:var(--ink-faint)">/ ${psvc}</span></td>
@@ -2463,7 +2519,7 @@ function sdLeaderSearch(sid) {
     return;
   }
   el.innerHTML = list.map(l => `<button onclick="assignSD('${sid}','${l.id}')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:var(--paper);border:1px solid var(--paper-dark);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer">
-    <div style="flex:1"><div style="font-size:14px;font-weight:600">${l.fullName}</div><div style="font-size:11px;color:var(--ink-mid)">${l.gender || 'any gender'} · Yr ${(l.grades || []).join(', ') || 'All'}</div></div>
+    <div style="flex:1"><div style="font-size:14px;font-weight:600">${esc(l.fullName)}</div><div style="font-size:11px;color:var(--ink-mid)">${l.gender || 'any gender'} · Yr ${(l.grades || []).join(', ') || 'All'}</div></div>
     <span style="color:var(--accent);font-size:20px;font-weight:700">+</span></button>`).join('');
 }
 async function assignSD(sid, lid) {
@@ -2501,7 +2557,7 @@ async function showStudentDetail(id) {
     : '<p style="color:var(--ink-faint);font-size:13px;padding:8px 0">Not connected yet</p>';
 
   modal(`
-    <div class="mo-title">${s.firstName} ${s.lastName}</div>
+    <div class="mo-title">${esc(s.firstName)} ${esc(s.lastName)}</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
       ${quadChip(s.quad)} ${qualChips(s)}
       <span class="chip c-neutral">Gr ${s.grade||'—'}</span>
@@ -2620,7 +2676,7 @@ function _lgPrevBits(a) {
 // One lifegroup detail row (per-grade dropdown content).
 function _lgGroupRow(lg, showPrev) {
   return `<div style="border-top:1px solid var(--paper-dark);padding:7px 0 5px 20px">
-    <div style="font-size:13px;font-weight:600;margin-bottom:2px">${lg.name}</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:2px">${esc(lg.name)}</div>
     <div style="font-size:12px;color:var(--ink-mid)">${_lgAggBits(lg.current)}</div>
     ${showPrev ? _lgPrevBits(lg.previous) : ''}
   </div>`;
@@ -3388,10 +3444,10 @@ async function renderAdminView(settings, users) {
         body += `<div class="li" style="cursor:default;margin-bottom:6px">
           <div class="li-body">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span class="li-title">${u.displayName}</span>
+              <span class="li-title">${esc(u.displayName)}</span>
               ${statusChip(u.status)}
             </div>
-            <div class="li-sub">${u.email}</div>
+            <div class="li-sub">${esc(u.email)}</div>
           </div>
           <div class="li-right">
             <button class="btn btn-ghost btn-sm" onclick="showEditUser('${u.id}')" title="Edit account" aria-label="Edit ${u.displayName}">${icS('edit')}</button>
@@ -3612,7 +3668,7 @@ async function showEditUser(id) {
   modal(`
     <div class="mo-title">Edit Account</div>
     <div id="uerr"></div>
-    <div class="fg"><label class="fl">Display Name</label><input class="fi" id="u-name" value="${u.displayName}"></div>
+    <div class="fg"><label class="fl">Display Name</label><input class="fi" id="u-name" value="${esc(u.displayName)}"></div>
     <div class="fg"><label class="fl">Username</label><input class="fi" id="u-email" type="text" value="${(u.email||'').replace(/"/g,'&quot;')}" autocomplete="off"></div>
     <div class="fg"><label class="fl">Role</label>
       <select class="fs" id="u-role" onchange="toggleUserRoleFields()">
@@ -3857,7 +3913,7 @@ function flowStats(){
 function trendOf(s){
   if(!s||!s.psT||!s.sT)return'stable';
   const d=s.sA/s.sT-s.psA/s.psT;
-  return d>=0.05?'rising':d<=-0.05?'declining':'stable';
+  return d>=0.20?'rising':d<=-0.20?'declining':'stable';
 }
 function scoreOf(stage,s,trend){
   if(!stage)return 0;
@@ -3923,7 +3979,7 @@ function model(){
       const cur=rate(pv.reduce((t,s)=>t+s.gA,0),pv.reduce((t,s)=>t+s.gT,0));
       const prev=rate(pv.reduce((t,s)=>t+s.pgA,0),pv.reduce((t,s)=>t+s.pgT,0));
       trendPct=Math.round((cur-prev)*100);
-      trend=cur-prev>=0.05?'rising':prev-cur>=0.05?'declining':'stable';
+      trend=cur-prev>=0.20?'rising':prev-cur>=0.20?'declining':'stable';
     }
     const loose=enrolled>=10&&va<3&&trend==='stable';
     groups.push({id:'co-'+gr+(gender==='female'?'f':'m'),name:'Yr '+gr+' '+(gender==='female'?'Girls':'Boys'),grade:gr,gender,mem,enrolled,active,va,breadth,weeksRun,trend,trendPct,loose});
@@ -3986,7 +4042,7 @@ function rOverview(){
   const max=m.rungs[0].v||1;
   const cols=['#0f1f3a','#1b3a6b','#2563eb','#4a82f0','#7aa8f7'];
   b+='<div class="card"><div class="ca-ct">Integration ladder</div>'+m.rungs.map((r,i)=>'<div class="ca-lrow"><div class="ca-lname">'+r.lb+'</div><div class="ca-lbar"><div class="ca-lfill" style="width:'+Math.max(8,Math.round(r.v/max*100))+'%;background:'+cols[i]+'">'+r.v+'</div></div></div>').join('')+'</div>';
-  const row=(g,chip)=>'<div class="ca-alr" onclick="CA.showGroup(\''+g.id+'\')"><div style="font-size:.78rem;font-weight:600">'+g.name+'</div>'+chip+'</div>';
+  const row=(g,chip)=>'<div class="ca-alr" onclick="CA.showGroup(\''+g.id+'\')"><div style="font-size:.78rem;font-weight:600">'+esc(g.name)+'</div>'+chip+'</div>';
   const tops=m.groups.slice().sort((a,b)=>b.trendPct-a.trendPct||b.va-a.va).slice(0,2);
   b+='<div class="card"><div class="ca-ct">Group highlights</div>'
     +(tops.length?tops.map(g=>row(g,'<span class="chip '+(g.trendPct>0?'c-success':'c-neutral')+'">'+(g.trendPct>0?'▲ +'+g.trendPct+'%':'− level')+'</span>')).join(''):'<div style="font-size:.74rem;color:var(--ca-muted)">No group data yet</div>')
@@ -4110,7 +4166,7 @@ function rGroups(){
 }
 function showGroup(id){
   const g=model().groups.find(x=>x.id===id);if(!g)return;
-  let h='<div style="font-size:1rem;font-weight:800;margin-bottom:6px">'+g.name+'</div>'
+  let h='<div style="font-size:1rem;font-weight:800;margin-bottom:6px">'+esc(g.name)+'</div>'
     +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:.72rem;color:var(--ca-muted)">'+g.enrolled+' enrolled · '+g.active+' active · '+g.va+' visits/unique · '+g.weeksRun+' weeks run</span>'+gChip(g)+'</div>';
   h+='<div style="max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid var(--ca-line)">';
   for(const s of g.mem.slice().sort((a,b)=>b.gA-a.gA)){
@@ -4409,7 +4465,7 @@ function buildDeck(){
       core:'These students’ attendance rate has fallen well below their previous term — the early-warning list. Caught now, most return; ignored, they become next term’s absentees.',
       body:sparkViz(),
       args:[
-        'Declining means this term’s attendance rate sits at least 5 points below the same student’s previous-term rate.',
+        'Declining means this term’s attendance rate sits at least 20 points below the same student’s previous-term rate.',
         'This is a names list, not a statistic — every one is actionable in the People tab tonight, exportable per quad.',
         'The cost of a text now is far smaller than the cost of re-reaching a student who has fully disengaged.'
       ],

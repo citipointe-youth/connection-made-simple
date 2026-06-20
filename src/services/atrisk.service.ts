@@ -79,8 +79,10 @@ function trendDirection(
   if (prev === null || prev === 0) return 'no-data';
   if (curr === null) return 'no-data';
   const delta = curr - prev;
-  if (delta > 0.05) return 'up';
-  if (delta < -0.05) return 'down';
+  // Only flag a trend when the attendance rate moved by >= 20 percentage points
+  // vs the previous term (raised from 5pts — the old threshold was too sensitive).
+  if (delta > 0.20) return 'up';
+  if (delta < -0.20) return 'down';
   return 'stable';
 }
 
