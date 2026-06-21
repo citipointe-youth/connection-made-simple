@@ -44,7 +44,7 @@ export class SupabaseConnectionAuditRepository implements IConnectionAuditReposi
         ${audit.label},
         ${audit.uploadedBy},
         ${audit.uploadedAt},
-        ${this.sql.json(audit.snapshot as Parameters<typeof this.sql.json>[0])}
+        ${this.sql.json(audit.snapshot as unknown as Parameters<typeof this.sql.json>[0])}
       )
       on conflict (id) do update set
         year        = excluded.year,
