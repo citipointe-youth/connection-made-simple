@@ -2207,7 +2207,9 @@ async function renderMyStudents() {
       body += '<div style="color:var(--ink-faint);font-size:13px;padding:12px 0">No students connected yet.</div>';
     } else {
       for (const s of students) {
-        const bd = fmtBday(bdayOf[s.id]);
+        // Prefer the birthday carried on the summary row; fall back to the scoped
+        // /students lookup for any older cached payload.
+        const bd = fmtBday(s.dateOfBirth ?? bdayOf[s.id]);
         body += `<div class="li" style="cursor:pointer" onclick="showStudentDetail('${s.id}')">
           <div class="li-body">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -2745,6 +2747,7 @@ async function showStudentDetail(id) {
       ${quadChip(s.quad)} ${qualChips(s)}
       <span class="chip c-neutral">Gr ${s.grade||'—'}</span>
       <span class="chip c-neutral">${s.gender}</span>
+      ${fmtBday(s.dateOfBirth) ? `<span class="chip c-neutral">Born ${fmtBday(s.dateOfBirth)}</span>` : ''}
     </div>
 
     <div class="sh">Attendance</div>

@@ -55,7 +55,8 @@ export interface ConnectionService {
 
 function summariseStudent(s: {
   id: string; firstName: string; lastName: string; grade: number | null; gender: string;
-  mobile: string | null; parentPhone: string | null; svcAttended: number; svcTotal: number;
+  mobile: string | null; parentPhone: string | null; dateOfBirth: string | null;
+  svcAttended: number; svcTotal: number;
   grpAttended: number; grpTotal: number;
   prevSvcAttended: number; prevSvcTotal: number; prevGrpAttended: number; prevGrpTotal: number;
 }) {
@@ -66,6 +67,7 @@ function summariseStudent(s: {
     gender: s.gender,
     mobile: s.mobile,
     parentPhone: s.parentPhone,
+    dateOfBirth: s.dateOfBirth,
     svcAttended: s.svcAttended,
     svcTotal: s.svcTotal,
     grpAttended: s.grpAttended,

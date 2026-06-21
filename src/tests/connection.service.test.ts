@@ -58,6 +58,20 @@ async function buildServices() {
 }
 
 describe('Connection Service', () => {
+  // leaderSummary must carry dateOfBirth so My Students shows it without a
+  // separate, role-scoped /students lookup (which misses cross-grade students).
+  it('leaderSummary includes dateOfBirth for connected students', async () => {
+    const { connSvc, studentSvc, leaderSvc } = await buildServices();
+    const stud = await studentSvc.create(ADMIN, {
+      firstName: 'Dee', lastName: 'Bee', gender: 'female', grade: 9, dateOfBirth: '2009-05-05',
+    });
+    const leader = await leaderSvc.create(ADMIN, { fullName: 'Lead Er', gender: 'female', grades: [9] });
+    await connSvc.assign(ADMIN, { studentId: stud.id, leaderId: leader.id });
+    const summary = await connSvc.leaderSummary(ADMIN, leader.id);
+    const row = summary.students.find((s) => s.id === stud.id);
+    expect(row?.dateOfBirth).toBe('2009-05-05');
+  });
+
   // TC23 — admin can connect any student to any leader
   it('TC23: admin can connect', async () => {
     const { connSvc, student, leaderF } = await buildServices();
