@@ -4516,29 +4516,42 @@ function slotU(kind,t,up){
   return '<div class="ca-uslot"><div class="ca-uic '+(sd?'wn':'ok')+'">'+icS('upload')+'</div><div class="ca-usl"><div class="ca-ust">'+t+'</div><div class="ca-uss">'+(sd?'Demo seed':esc(up.fn))+' · '+up.rows.length+' rows · '+fmtD(up.at)+'</div></div><button class="btn btn-secondary btn-sm" onclick="CA.pick(\''+kind+'\')">Replace</button><input type="file" id="ca-f-'+kind+'" accept=".csv,.xlsx" style="display:none" onchange="CA.upload(\''+kind+'\',this)"></div>';
 }
 function rData(){
-  const m=model();
-  const att=D.students.filter(s=>s.sA>0).length;
-  const enr=D.students.filter(s=>s.gT>0).length;
   let b=tabs('ca-data');
-  b+='<div class="sh" style="margin-top:2px">From the platform — automatic</div><div class="card" style="padding:4px 13px">'
-    +slotS('Friday services',sessSeries().length+' sessions · '+att+' attenders · live from the platform')
-    +slotS('Lifegroups',m.groups.length+' cohorts · '+enr+' enrolled · live from the platform')
+  // ── Year selector (existing server-stored audits) ──
+  const yrs=AUDIT_SUMMARIES||[];
+  const opts=yrs.map(y=>'<option value="'+y.year+'"'+(y.year===AUDIT_YEAR?' selected':'')+'>'+esc(y.label)+'</option>').join('');
+  b+='<div class="sh" style="margin-top:2px">Audit year</div><div class="card" style="padding:11px 13px">'
+    +(yrs.length?'<select onchange="CA.setYear(this.value)" style="width:100%;padding:8px;border:1px solid var(--ca-line);border-radius:7px;font-size:.82rem">'+opts+'</select>':'<div style="font-size:.74rem;color:var(--ca-muted)">No audits stored yet — upload a year-to-date export below to create the first one.</div>')
+    +(AUDIT?'<div style="font-size:.64rem;color:var(--ca-muted);margin-top:7px">Viewing '+esc(AUDIT_YEAR)+' · '+(AUDIT.terms||[]).length+' term(s) · data '+esc(AUDIT.dataStartDate||'—')+' → '+esc(AUDIT.dataEndDate||'—')+'</div>':'')
     +'</div>';
-  b+='<div class="sh">Uploads — keep these current</div><div class="card" style="padding:4px 13px">'
-    +slotU('team','Student Team CSV',st.uploads.team)
-    +slotU('connect','New Connect CSV',st.uploads.connect)
-    +slotU('decision','Decision CSV',st.uploads.decision)
-    +slotU('flows','People Flow CSV',st.uploads.flows)
+  // ── Staging slots for a new/updated audit ──
+  const slot=(kind,label,sub,staged)=>'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--ca-line)">'
+    +'<div style="flex:1"><div style="font-size:.78rem;font-weight:600">'+label+'</div><div style="font-size:.62rem;color:var(--ca-muted)">'+(staged?('✓ '+esc(staged)):sub)+'</div></div>'
+    +'<input type="file" id="ca-f-'+kind+'" accept=".csv,.xlsx" style="display:none" onchange="CA.upload(\''+kind+'\',this)">'
+    +'<button class="btn btn-secondary btn-sm" onclick="CA.pick(\''+kind+'\')">'+(staged?'Replace':'Choose')+'</button>'
+    +'</div>';
+  b+='<div class="sh">Upload year-to-date data</div><div class="card" style="padding:4px 13px">'
+    +slot('service','Service attendance — required','Year-to-date Friday export',PENDING.service?(PENDING._serviceFn||(PENDING.service.rows.length+' rows')):null)
+    +slot('group','Lifegroup attendance','Year-to-date group export',PENDING.group?(PENDING._groupFn||(PENDING.group.groups.length+' groups')):null)
+    +slot('team','Student Team CSV','Current team roster',PENDING.team.length?(PENDING._teamFn||(PENDING.team.length+' rows')):null)
+    +slot('connect','New Connect CSV','Connect dates',PENDING.connect.length?(PENDING._connectFn||(PENDING.connect.length+' rows')):null)
+    +slot('decision','Decision CSV','Decision dates',PENDING.decision.length?(PENDING._decisionFn||(PENDING.decision.length+' rows')):null)
+    +slot('flows','People Flow CSV','Follow-up export',PENDING.flows.length?(PENDING._flowsFn||(PENDING.flows.length+' rows')):null)
+    +'</div>';
+  b+='<div class="card" style="display:flex;gap:10px;align-items:center;justify-content:space-between">'
+    +'<div style="font-size:.66rem;color:var(--ca-muted);line-height:1.5">Saving computes the terms server-side and stores one audit for that year. Re-saving a year overwrites it. Other directors/admins can then load it.</div>'
+    +'<button class="btn btn-primary btn-sm" style="white-space:nowrap" onclick="CA.saveAudit()">Save audit</button>'
     +'</div>';
   b+='<div class="sh">Export</div><div class="card" style="display:flex;align-items:center;gap:12px">'
     +'<div class="ca-uic ok" style="background:var(--ca-chip);color:var(--ca-blue)">'+icS('deck')+'</div>'
-    +'<div class="ca-usl"><div class="ca-ust">Executive brief</div><div class="ca-uss">Self-contained slide deck of the full audit · opens in a new tab</div></div>'
+    +'<div class="ca-usl"><div class="ca-ust">Executive brief</div><div class="ca-uss">Self-contained slide deck of the loaded audit · opens in a new tab</div></div>'
     +'<button class="btn btn-primary btn-sm" onclick="CA.buildDeck()">Export ↗</button>'
     +'</div>';
-  b+='<div class="card" style="background:var(--ca-paper);border:1px dashed var(--ca-line);text-align:center;padding:11px"><div style="font-size:.66rem;color:var(--ca-muted);line-height:1.5">Uploads accept <b>CSV or Excel (.xlsx)</b>, are matched to students by name, stored only on this device, and cleared by <b>Full Reset</b>. Unmatched names become audit-only people.</div></div>';
   caShell(b,'ca-data');
 }
 function pick(kind){const el=document.getElementById('ca-f-'+kind);if(el)el.click();}
+// Stage an uploaded file into PENDING (not localStorage). saveAudit() then POSTs
+// the whole staged set to /audits, where the server computes the terms.
 function upload(kind,input){
   const f=input&&input.files&&input.files[0];if(!f)return;
   const isX=/\.xlsx?$/i.test(f.name);
@@ -4549,13 +4562,24 @@ function upload(kind,input){
       try{text=rowsToCsv(await readXlsx(e.target.result));}
       catch(err){toast((err&&err.message)||'Could not read that Excel file');return;}
     }
+    if(kind==='service'){
+      if(parseGroupCSV(text)){toast('That looks like a Lifegroup export — use the Lifegroup slot');return;}
+      const rows=parseCSV(text);
+      if(!rows.length){toast('Could not read that as a service attendance CSV');return;}
+      PENDING.service={rows};PENDING._serviceFn=f.name;
+      toast(rows.length+' service rows staged');rerender();return;
+    }
+    if(kind==='group'){
+      const grp=parseGroupCSV(text);
+      if(!grp||!grp.groups.length){toast('Could not read that as a lifegroup attendance CSV');return;}
+      PENDING.group=grp;PENDING._groupFn=f.name;
+      toast(grp.groups.length+' lifegroups staged');rerender();return;
+    }
     if(kind==='flows'){
       const frows=parseFlows(text);
       if(!frows||!frows.length){toast('Could not read that file — needs the People Flow export columns (Person, Status, Date Entered, Days in Step, Administrator)');return;}
-      st.uploads.flows={rows:frows,at:new Date().toISOString(),fn:f.name,src:'csv'};
-      save();mdl=null;
-      toast(frows.length+' rows · '+frows.filter(r=>r.step>=2&&r.step<=4).length+' step 2–4 records');
-      rerender();return;
+      PENDING.flows=frows;PENDING._flowsFn=f.name;
+      toast(frows.length+' rows · '+frows.filter(r=>r.step>=2&&r.step<=4).length+' step 2–4 records');rerender();return;
     }
     const rows=parseRows(text);
     if(!rows||!rows.length){toast('Could not read that file — needs a Name (or First/Last Name) column');return;}
@@ -4567,15 +4591,28 @@ function upload(kind,input){
       else if(kind==='connect'&&r.date&&(!p.date||r.date<p.date))p.date=r.date;
       else if(kind==='decision'&&r.date&&(!p.date||r.date>p.date))p.date=r.date;
     }
-    const ded=[...seen.values()];
-    const names=new Set(D.students.map(s=>norm(s.fn+' '+s.ln)));
-    const matched=ded.filter(r=>names.has(norm(r.name))).length;
-    st.uploads[kind]={rows:ded,at:new Date().toISOString(),fn:f.name,src:'csv'};
-    save();mdl=null;
-    toast(ded.length+' rows · '+matched+' matched · '+(ded.length-matched)+' new people');
-    rerender();
+    PENDING[kind]=[...seen.values()];PENDING['_'+kind+'Fn']=f.name;
+    toast(PENDING[kind].length+' '+kind+' rows staged');rerender();
   };
   if(isX)rd.readAsArrayBuffer(f);else rd.readAsText(f);
+}
+// POST the staged uploads as one audit; the server computes terms + per-term
+// aggregates and stores one row for that year (re-save overwrites the year).
+async function saveAudit(){
+  if(!PENDING.service){toast('Upload the year-to-date service CSV first');return;}
+  try{
+    const a=await API.post('/audits',{
+      service:PENDING.service,
+      group:PENDING.group||{groups:[]},
+      team:PENDING.team||[],connect:PENDING.connect||[],decision:PENDING.decision||[],flows:PENDING.flows||[],
+    },90000);
+    auditInvalidate();
+    await auditList();
+    await auditLoad(a.year);
+    PENDING={service:null,group:null,team:[],connect:[],decision:[],flows:[]};
+    toast('Audit saved for '+a.year);
+    await render('ca-overview');
+  }catch(e){toast((e&&e.message)||'Save failed');}
 }
 function rDeck(){
   let b='<button class="btn btn-secondary btn-sm" style="margin-bottom:10px" onclick="go(\'ca-overview\')">‹ Back to Overview</button>';
@@ -4917,7 +4954,7 @@ async function render(p){
   restore();mdl=null;
   dispatch(p);
 }
-return{render,reset,stale,seedOn,dismissWarn,
+return{render,reset,stale,seedOn,dismissWarn,setYear,setTerm,saveAudit,
   model:async()=>{await load();restore();return model();},
   fquad,gfilter,lgfilter,fopen,flowStats,_parseFlows:parseFlows,pick,upload,showPerson,showGroup,exportMenu,exportQuad,buildDeck,
   pq,pstage,pquad,pdec,pmore};
