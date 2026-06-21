@@ -2,8 +2,9 @@ import type { ID, ISODateString } from '../types/common';
 import type { LabeledTerm } from '../../services/year-terms';
 
 // One CRM-upload overlay row (Student Team / Connect / Decision / People Flow).
-// `name` is the matched person; `date` is null for the Team roster snapshot.
-export interface AuditUploadRow { name: string; date: string | null; step?: number; admin?: string; status?: string; }
+// Stored verbatim and rendered client-side. Team/Connect/Decision use {name,date};
+// People Flow uses {person,step,status,entered,days,admin} — hence the open shape.
+export interface AuditUploadRow { name?: string; date?: string | null; [key: string]: unknown; }
 
 export interface AuditStudentRow {
   id: string;

@@ -8,21 +8,19 @@ import { BadRequestError } from '../core/errors/app-error';
 import { buildServiceModel, buildGroupModel, type GroupInput } from './attendance-build';
 import { computeYearAggregates } from './year-aggregates';
 
-const UploadRowSchema = z.object({
-  name: z.string(),
-  date: z.string().nullable().optional(),
-  step: z.number().optional(),
-  admin: z.string().optional(),
-  status: z.string().optional(),
-}).transform((r) => ({ name: r.name, date: r.date ?? null, step: r.step, admin: r.admin, status: r.status }));
+// The CRM overlays (team/connect/decision/flows) are stored verbatim and echoed
+// back to the SPA — never computed server-side — so they round-trip as opaque
+// rows. (People Flow rows carry person/step/entered/days/admin, unlike the
+// name/date shape of the others; an opaque schema preserves both.)
+const OverlayRows = z.array(z.record(z.string(), z.unknown())).default([]);
 
 const UploadSchema = z.object({
   service: z.object({ rows: z.array(z.unknown()) }),
   group: z.object({ groups: z.array(z.any()) }).default({ groups: [] }),
-  team: z.array(UploadRowSchema).default([]),
-  connect: z.array(UploadRowSchema).default([]),
-  decision: z.array(UploadRowSchema).default([]),
-  flows: z.array(UploadRowSchema).default([]),
+  team: OverlayRows,
+  connect: OverlayRows,
+  decision: OverlayRows,
+  flows: OverlayRows,
 });
 
 export interface AuditSummary { year: number; label: string; uploadedAt: string; termKeys: string[]; }
