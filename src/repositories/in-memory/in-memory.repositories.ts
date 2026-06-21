@@ -17,6 +17,7 @@ import type {
   ImportRecord,
 } from '../../core/entities/attendance';
 import type { AppSettings, AppDefaults, AdminAuditEntry } from '../../core/entities/settings';
+import type { ConnectionAudit } from '../../core/entities/connection-audit';
 import type { UserRole } from '../../core/types/enums';
 
 import type {
@@ -33,6 +34,7 @@ import type {
   ISettingsRepository,
   ISnapshotRepository,
   IAuditRepository,
+  IConnectionAuditRepository,
   IPushSubscriptionRepository,
   INotificationRepository,
 } from '../interfaces/entity-repositories';
@@ -425,6 +427,21 @@ export class InMemoryAuditRepository
       .sort((a, b) => b.performedAt.localeCompare(a.performedAt))
       .slice(0, limit)
       .map((e) => this.clone(e));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Connection Audits (year-keyed snapshots)
+// ---------------------------------------------------------------------------
+export class InMemoryConnectionAuditRepository
+  extends InMemoryBaseRepository<ConnectionAudit>
+  implements IConnectionAuditRepository
+{
+  constructor(persistence?: IPersistenceAdapter<ConnectionAudit>) { super(persistence); }
+
+  async findByYear(year: number): Promise<ConnectionAudit | null> {
+    for (const a of this.store.values()) if (a.year === year) return this.clone(a);
+    return null;
   }
 }
 

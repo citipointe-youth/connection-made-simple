@@ -14,6 +14,7 @@ import type {
   ImportRecord,
 } from '../../core/entities/attendance';
 import type { AppSettings, AppDefaults, AdminAuditEntry } from '../../core/entities/settings';
+import type { ConnectionAudit } from '../../core/entities/connection-audit';
 import type { UserRole } from '../../core/types/enums';
 
 export interface IUserRepository extends IRepository<User> {
@@ -96,6 +97,10 @@ export interface ISnapshotRepository extends IRepository<AppDefaults> {}
 
 export interface IAuditRepository extends IRepository<AdminAuditEntry> {
   findRecent(limit: number): Promise<AdminAuditEntry[]>;
+}
+
+export interface IConnectionAuditRepository extends IRepository<ConnectionAudit> {
+  findByYear(year: number): Promise<ConnectionAudit | null>;
 }
 
 export interface IPushSubscriptionRepository {
