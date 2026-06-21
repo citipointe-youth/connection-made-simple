@@ -1104,6 +1104,8 @@ async function _renderHomeInner(stale) {
     const pGrpUniq = sc.filter(s => s.prevGrpAttended > 0).length;
     const pGrpRun = pGrpEnr.length ? Math.max(...pGrpEnr.map(s => s.prevGrpTotal)) : 0;
     const pGrpAvg = lgStats ? lgStats.overall.previous.avgPerWeek : (pGrpRun > 0 ? Math.round(pGrpAtt / pGrpRun) : 0);
+    body += `<button onclick="_toggleHomePrev()" style="margin-top:6px;background:rgba(255,255,255,.1);border:none;color:#fff;opacity:.7;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:6px;padding:3px 8px;cursor:pointer;display:flex;align-items:center;gap:5px"><span id="home-prev-chev" style="display:inline-block;transition:transform .15s">›</span> Prev term</button>`;
+    body += `<div id="home-prev-body" style="display:none">`;
     body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:5px"><colgroup><col style="width:44%"><col style="width:28%"><col style="width:28%"></colgroup>`;
     body += `<thead><tr>
       <th style="font-size:7px;font-weight:700;opacity:.3;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:2px">Prev term</th>
@@ -1113,6 +1115,7 @@ async function _renderHomeInner(stale) {
     if (pSvcTot > 0) body += `<tr style="background:rgba(255,255,255,.06)"><td style="font-size:10px;font-weight:800;opacity:.45;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td><td style="text-align:center;padding:3px 4px"><span style="font-size:13px;font-weight:800;opacity:.6">${pSvcUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-size:13px;font-weight:800;opacity:.6">${pSvcAvg}</span></td></tr>`;
     if (pGrpTot > 0) body += `<tr style="background:rgba(255,255,255,.03)"><td style="font-size:10px;font-weight:800;opacity:.4;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Groups</td><td style="text-align:center;padding:3px 4px"><span style="font-size:13px;font-weight:800;opacity:.5">${pGrpUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-size:13px;font-weight:800;opacity:.5">${pGrpAvg}</span></td></tr>`;
     body += `</tbody></table>`;
+    body += `</div>`;
   }
   body += `</div>`;
 
@@ -1309,6 +1312,16 @@ function chooseHomeLeader() {
   if (!v) return;
   setMyLeaderId(v);
   renderHomeFollowup();
+}
+
+// Toggle the Home hero's previous-term table (Recommendation 4b). In-DOM only.
+function _toggleHomePrev() {
+  const b = document.getElementById('home-prev-body');
+  const c = document.getElementById('home-prev-chev');
+  if (!b) return;
+  const open = b.style.display === 'none';
+  b.style.display = open ? 'block' : 'none';
+  if (c) c.style.transform = open ? 'rotate(90deg)' : '';
 }
 
 // ============================================================
