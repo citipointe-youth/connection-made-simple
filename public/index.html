@@ -4013,22 +4013,30 @@ function esc(x){return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'
 async function auditList(){ if(AUDIT_SUMMARIES)return AUDIT_SUMMARIES; AUDIT_SUMMARIES=await API.get('/audits').catch(()=>[]); return AUDIT_SUMMARIES||[]; }
 async function auditLoad(year){ const a=await API.get('/audits/'+year).catch(()=>null); AUDIT=a&&a.snapshot?a.snapshot:null; AUDIT_YEAR=a?a.year:null; TERM='ALL'; st=null; mdl=null; D=null; return AUDIT; }
 function auditInvalidate(){ AUDIT_SUMMARIES=null; Cache.del('/audits'); }
+async function setTerm(k){ TERM=k; D=null; mdl=null; st=null; await render(S.page); }
+async function setYear(y){ await auditLoad(Number(y)); await render(S.page); }
 
 // ---------- async adapter ----------
+// Derive the module's data shape (D) from the loaded audit SNAPSHOT, scoped to
+// the selected term. TERM==='ALL' sums every term (year-to-date) with no
+// previous-term comparison; a single term uses that term's figures and the term
+// immediately before it (within this audit) as the "previous" comparison.
 async function load(force){
   if(D&&!force)return D;
-  const[stu,tr,se,lg]=await Promise.all([
-    API.get('/students').catch(()=>[]),
-    API.get('/trends').catch(()=>null),
-    API.get('/settings').catch(()=>({})),
-    API.get('/lifegroups/stats').catch(()=>null),
-  ]);
+  const settings=await API.get('/settings').catch(()=>({}));
+  if(!AUDIT){ D={students:[],trends:null,settings:settings||{},lgStats:null,_empty:true}; return D; }
+  const terms=AUDIT.terms||[];
+  const idx= TERM==='ALL' ? -1 : terms.findIndex(t=>t.key===TERM);
+  const sel= TERM==='ALL' ? terms : (idx>=0?[terms[idx]]:[]);
+  const prev= TERM==='ALL' ? [] : (idx>0?[terms[idx-1]]:[]);
+  const sumOver=(keys,id)=>{let sA=0,sT=0,gA=0,gT=0;for(const t of keys){const pt=AUDIT.perTerm[t.key];if(!pt)continue;sT+=pt.svcTotal;const a=pt.byStudent[id];if(a){sA+=a.svcAttended;gA+=a.grpAttended;gT+=a.grpTotal;}}return{sA,sT,gA,gT};};
   D={
-    students:(stu||[]).map(s=>({id:s.id,fn:s.firstName||'',ln:s.lastName||'',gender:s.gender,grade:s.grade,quad:s.quad,
-      sA:s.svcAttended||0,sT:s.svcTotal||0,gA:s.grpAttended||0,gT:s.grpTotal||0,
-      psA:s.prevSvcAttended||0,psT:s.prevSvcTotal||0,pgA:s.prevGrpAttended||0,pgT:s.prevGrpTotal||0,
-      ph:s.mobile||'',pp:s.parentPhone||''})),
-    trends:tr,settings:se||{},lgStats:lg,
+    students:(AUDIT.students||[]).map(s=>{
+      const c=sumOver(sel,s.id), p=sumOver(prev,s.id);
+      return {id:s.id,fn:s.firstName,ln:s.lastName,gender:s.gender,grade:s.grade,quad:s.quad,
+        sA:c.sA,sT:c.sT,gA:c.gA,gT:c.gT, psA:p.sA,psT:p.sT,pgA:p.gA,pgT:p.gT, ph:'',pp:''};
+    }),
+    trends:null, settings:settings||{}, lgStats:null,
   };
   return D;
 }
@@ -4037,23 +4045,28 @@ function sessDates(){const ss=sessSeries();if(ss.length)return ss.map(x=>x.date)
 function regR(){const s=D.settings||{};return(s.regRateNumerator||3)/(s.regRateDenominator||4);}
 
 // ---------- store ----------
-function save(){try{localStorage.setItem(KEY,JSON.stringify(st));}catch{}}
-// Audit-specific uploads (team/connect/decision/flows) start EMPTY — the user
-// uploads real CSVs. The funnel/lifegroup views still render from the live
-// platform roster (load()); only the uploaded overlays are blank until provided.
+// Uploads now live on the server inside the loaded audit snapshot, not in
+// localStorage. `st.uploads.<k>.rows` is sourced from AUDIT.uploads so the
+// existing model()/flowStats() code (which reads that shape) is unchanged.
+function save(){/* uploads are server-side now — no local persistence */}
 function emptyUploads(){
-  const now=new Date().toISOString();
-  const mk=()=>({rows:[],at:now,fn:'(none)',src:'empty'});
+  const mk=()=>({rows:[],at:null,fn:'(none)',src:'empty'});
   return{team:mk(),connect:mk(),decision:mk(),flows:mk()};
 }
 function restore(){
   if(st)return;
-  try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(d&&d.v===4&&d.uploads&&d.uploads.team&&d.uploads.connect&&d.uploads.decision&&d.uploads.flows){st=d;return;}}}catch{}
-  st={v:4,uploads:emptyUploads()};save();
+  if(AUDIT&&AUDIT.uploads){
+    const u=AUDIT.uploads;const mk=rows=>({rows:rows||[],at:AUDIT.generatedAt||null,fn:'(audit)',src:'audit'});
+    st={v:5,uploads:{team:mk(u.team),connect:mk(u.connect),decision:mk(u.decision),flows:mk(u.flows)}};
+    return;
+  }
+  st={v:5,uploads:emptyUploads()};
 }
-function reset(){try{localStorage.removeItem(KEY);}catch{}st=null;mdl=null;D=null;warnOff=false;}
-function seedOn(){restore();return['team','connect','decision','flows'].some(k=>st.uploads[k].src==='seed');}
-function stale(){restore();return['team','connect','decision','flows'].some(k=>st.uploads[k].src==='seed'||(Date.now()-Date.parse(st.uploads[k].at))>30*864e5);}
+function reset(){try{localStorage.removeItem(KEY);}catch{}st=null;mdl=null;D=null;warnOff=false;AUDIT=null;AUDIT_YEAR=null;AUDIT_SUMMARIES=null;TERM='ALL';PENDING={service:null,group:null,team:[],connect:[],decision:[],flows:[]};}
+// Server audits have no localStorage-staleness/seed concept — the freshness cue
+// is the year + uploaded date shown in the switcher and Data tab.
+function seedOn(){return false;}
+function stale(){return false;}
 
 // (Demo seed removed — audit uploads start empty; see emptyUploads.)
 
