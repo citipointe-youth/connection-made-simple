@@ -805,6 +805,7 @@ const IC = {
   arrr:     '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
   xmark:    '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   bell:     '<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>',
+  cake:     '<path d="M20 21v-8a2 2 0 00-2-2H6a2 2 0 00-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><line x1="2" y1="21" x2="22" y2="21"/><line x1="7" y1="8" x2="7" y2="11"/><line x1="12" y1="8" x2="12" y2="11"/><line x1="17" y1="8" x2="17" y2="11"/>',
 };
 function icN(k){ return `<svg class="ic-n" viewBox="0 0 24 24">${IC[k]||''}</svg>`; }
 function icS(k){ return `<svg class="ic-s" viewBox="0 0 24 24">${IC[k]||''}</svg>`; }
@@ -822,6 +823,7 @@ function navItems() {
     // quick actions:
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
+    { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
     { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' },
   ];
   // Quad: Home | Leaders & Connect | Trends | At Risk
@@ -917,6 +919,7 @@ async function render() {
   else if (p==='students') await renderStudents();
   else if (p==='trends') await renderTrends();
   else if (p==='import') await renderImport();
+  else if (p==='birthdays') await renderUpcomingBirthdays();
   else if (p==='admin') await renderAdmin();
   else if (p==='notifications') await renderNotifications();
   else await renderHome();
@@ -2172,6 +2175,53 @@ function _fmtUpcoming(date) {
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   return { weekday: WD[date.getDay()], day: date.getDate(), month: MON[date.getMonth()], monthName: FULL[date.getMonth()] };
+}
+async function renderUpcomingBirthdays() {
+  if (!_allCached('/students')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+  let students = [];
+  try { students = await API.get('/students'); } catch {}
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const cap = new Date(today.getFullYear(), today.getMonth() + 2, today.getDate());
+
+  // Everyone in scope with a birthday between today and +2 months, soonest first.
+  const upcoming = [];
+  for (const s of (students || [])) {
+    const when = _nextBirthday(s.dateOfBirth, today);
+    if (when && when <= cap) upcoming.push({ s, when });
+  }
+  upcoming.sort((a, b) => a.when - b.when);
+
+  let body = `<div class="ph"><div class="ph-title">Upcoming Birthdays</div><div class="ph-sub">Next 2 months</div></div>`;
+
+  if (!upcoming.length) {
+    body += `<div class="empty">${icEmpty('cake')}<div class="empty-title">No birthdays in the next 2 months</div></div>`;
+    setApp(shell(body));
+    return;
+  }
+
+  // Group rows under a month header (window spans at most two/three month names).
+  let curKey = '';
+  for (const { s, when } of upcoming) {
+    const f = _fmtUpcoming(when);
+    const key = when.getFullYear() + '-' + when.getMonth();
+    if (key !== curKey) { curKey = key; body += `<div class="sh">${f.monthName}</div>`; }
+    const birthYear = Number(String(s.dateOfBirth).slice(0, 4));
+    const turns = birthYear > 1900 ? when.getFullYear() - birthYear : null;
+    const phone = s.mobile || s.parentPhone;
+    body += `<div class="li">
+      <div class="li-body">
+        <div class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</div>
+        <div class="li-sub">Yr ${s.grade || '—'} · ${s.gender}${turns != null ? ' · turns ' + turns : ''}</div>
+        ${phone ? `<div style="font-size:12px;margin-top:4px;color:var(--ink-mid)" onclick="event.stopPropagation()">${s.mobile ? `<span style="font-weight:600">Mobile:</span> ${phoneLink(s.mobile)}` : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? `<span style="font-weight:600">Parent:</span> ${phoneLink(s.parentPhone)}` : ''}</div>` : ''}
+      </div>
+      <div class="li-right" style="text-align:right">
+        <div style="font-weight:800;font-size:14px">${f.day} ${f.month}</div>
+        <div style="font-size:11px;color:var(--ink-faint)">${f.weekday}</div>
+      </div>
+    </div>`;
+  }
+  setApp(shell(body));
 }
 function fmtBday(iso) {
   if (!iso) return '';
