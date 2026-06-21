@@ -3993,6 +3993,12 @@ let st=null,warnOff=false,mdl=null,D=null; // D = {students,trends,settings} cac
 const PF={q:'',stage:'',quad:'',dec:false,cap:60};
 let GF='',FQ=false;
 let FO=false; // overview: follow-up leader table open
+// ── Server-stored audit state (replaces the old localStorage uploads) ──
+let AUDIT=null;            // loaded AuditSnapshot for AUDIT_YEAR
+let AUDIT_YEAR=null;       // selected year (number) or null
+let AUDIT_SUMMARIES=null;  // cached list of {year,label,uploadedAt,termKeys}
+let TERM='ALL';            // selected term key, or 'ALL' for year-to-date
+let PENDING={service:null,group:null,team:[],connect:[],decision:[],flows:[]}; // staged for next Save
 const QLBL={g79:'Girls Yr 7–9',b79:'Boys Yr 7–9',g1012:'Girls Yr 10–12',b1012:'Boys Yr 10–12'};
 const CA_NAMES=['Ava Okafor','Noah Castellanos','Isla Vandermeer','Eli Borowski','Maya Lindqvist','Levi Acheampong','Zara Kowalczyk','Finn Drummond','Lena Marchetti','Kai Stratford','Ruby Vasquez','Theo Lindgren','Nina Oyelaran','Jude Hartmann','Esme Calloway','Remy Delacroix','Sofia Andrade','Hugo Bertrand','Lola Fitzwilliam','Omar Castaneda','Iris Galloway','Felix Moreau','Tara Whitlock','Ezra Soderberg','Mila Beaumont','Arlo Kingsley'];
 
@@ -4002,6 +4008,11 @@ function norm(n){return String(n||'').toLowerCase().replace(/\s+/g,' ').trim();}
 function ini(n){const p=String(n).trim().split(/\s+/);return((p[0]||'?')[0]+(p[1]?p[1][0]:'')).toUpperCase();}
 function fmtD(iso){if(!iso)return'—';const d=new Date(iso);return isNaN(d)?'—':d.getUTCDate()+'/'+(d.getUTCMonth()+1);}
 function esc(x){return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ---------- server audit API ----------
+async function auditList(){ if(AUDIT_SUMMARIES)return AUDIT_SUMMARIES; AUDIT_SUMMARIES=await API.get('/audits').catch(()=>[]); return AUDIT_SUMMARIES||[]; }
+async function auditLoad(year){ const a=await API.get('/audits/'+year).catch(()=>null); AUDIT=a&&a.snapshot?a.snapshot:null; AUDIT_YEAR=a?a.year:null; TERM='ALL'; st=null; mdl=null; D=null; return AUDIT; }
+function auditInvalidate(){ AUDIT_SUMMARIES=null; Cache.del('/audits'); }
 
 // ---------- async adapter ----------
 async function load(force){
