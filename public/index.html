@@ -1142,15 +1142,8 @@ async function _renderHomeInner(stale) {
     // ── Weekly follow-up (Recommendation 3) — filled in asynchronously below ──
     body += '<div id="home-followup"></div>';
 
-    if (u.role === 'grade') {
-      // Compact connection strip (Total / Connected / Pending)
-      body += '<div class="sh">Connection Summary</div>';
-      body += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:16px">';
-      body += `<div class="stat"><div class="stat-v">${stats.ministryTotal}</div><div class="stat-l">Total</div></div>`;
-      body += `<div class="stat"><div class="stat-v" style="color:var(--success)">${stats.connectedTotal}</div><div class="stat-l">Connected</div></div>`;
-      body += `<div class="stat"><div class="stat-v" style="color:var(--warn)">${stats.unconnectedTotal}</div><div class="stat-l">Pending</div></div>`;
-      body += '</div>';
-    } else {
+    {
+      // Connection Summary for grade logins now lives on Leaders & Connect (Rec 4a).
       // Director/Admin: Attendance by Quad — tap to expand per-grade rows
       if (['admin', 'director'].includes(u.role)) {
         const vq = (stats.byQuad || []).filter(q => q.totalStudents > 0);
@@ -1784,6 +1777,11 @@ function renderConnectView() {
       </div>
     </div>
     ${lockBanner}${gradeHint}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">
+      <div class="stat"><div class="stat-v">${totalStudents}</div><div class="stat-l">Total</div></div>
+      <div class="stat"><div class="stat-v" style="color:var(--success)">${connectedCount}</div><div class="stat-l">Connected</div></div>
+      <div class="stat"><div class="stat-v" style="color:var(--warn)">${Math.max(0, totalStudents - connectedCount)}</div><div class="stat-l">Pending</div></div>
+    </div>
     ${gChips ? `<div class="filter-row" role="group" aria-label="Filter by grade">
       <span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Grade:</span>${gChips}
     </div>` : ''}
