@@ -73,6 +73,7 @@ import { makeAdminService, type AdminService } from './services/admin.service';
 import { makeTrendsService, type TrendsService } from './services/trends.service';
 import { makeLifegroupStatsService, type LifegroupStatsService } from './services/lifegroup-stats.service';
 import { makePushService, type PushService } from './services/push.service';
+import { makeConnectionAuditService, type ConnectionAuditService } from './services/connection-audit.service';
 
 export interface Repositories {
   users: IUserRepository;
@@ -108,6 +109,7 @@ export interface Services {
   account: AccountService;
   admin: AdminService;
   push: PushService;
+  connectionAudit: ConnectionAuditService;
   users: IUserRepository;
 }
 
@@ -223,10 +225,11 @@ export async function buildContainer(): Promise<Container> {
     notifRepo: notifications,
     userRepo: users,
   });
+  const connectionAudit = makeConnectionAuditService(connectionAudits, settings);
 
   const services: Services = {
     auth, student, leader, connection, followup, overview, atRisk, trends, lifegroupStats,
-    importService, settings: settingsSvc, account, admin, push,
+    importService, settings: settingsSvc, account, admin, push, connectionAudit,
     users,
   };
 
