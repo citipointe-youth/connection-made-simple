@@ -1139,6 +1139,9 @@ async function _renderHomeInner(stale) {
       body += '</div>';
     }
 
+    // ── Weekly follow-up (Recommendation 3) — filled in asynchronously below ──
+    body += '<div id="home-followup"></div>';
+
     if (u.role === 'grade') {
       // Compact connection strip (Total / Connected / Pending)
       body += '<div class="sh">Connection Summary</div>';
@@ -1247,6 +1250,72 @@ async function _renderHomeInner(stale) {
   }
 
   setApp(shell(body));
+  // Fill the follow-up container after the main paint (the div is now in the DOM).
+  renderHomeFollowup();
+}
+
+// Render the weekly follow-up into #home-followup. If no leader identity is set,
+// show a self-identify picker first (Recommendation 2 + 3).
+async function renderHomeFollowup() {
+  const host = document.getElementById('home-followup');
+  if (!host) return;
+  const mine = getMyLeaderId();
+
+  // No identity yet → offer a picker built from the leaders in scope.
+  if (!mine) {
+    let leaders = [];
+    try { leaders = await API.get('/leaders'); } catch {}
+    if (!leaders.length) { host.innerHTML = ''; return; }
+    const opts = leaders.map(l => `<option value="${l.id}">${esc(l.fullName)}</option>`).join('');
+    host.innerHTML = `<div class="sh">This week's follow-up</div>
+      <div class="card" style="padding:14px">
+        <div style="font-size:13px;color:var(--ink-mid);margin-bottom:8px">Tell us who you are to see your students to follow up with this week.</div>
+        <select class="fs" id="home-leader-pick"><option value="">— Choose your name —</option>${opts}</select>
+        <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="chooseHomeLeader()">Show my follow-up</button>
+      </div>`;
+    return;
+  }
+
+  let data;
+  try { data = await API.get(`/connections/leader/${mine}/followup`); }
+  catch { host.innerHTML = ''; return; }
+  if (!data) { host.innerHTML = ''; return; }
+
+  const changeBtn = `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="setMyLeaderId(null);renderHomeFollowup()">Not you?</button>`;
+  let h = `<div class="sh" style="display:flex;align-items:center;justify-content:space-between"><span>This week's follow-up · ${esc(data.leader.fullName)}</span>${changeBtn}</div>`;
+  h += _followupListHtml('Birthdays this week', data.birthdays, 'No birthdays this week');
+  h += _followupListHtml('Not seen at Friday', data.notSeenService, data.latestSvcDate ? 'Everyone was seen' : 'No service data yet');
+  h += _followupListHtml('Not seen at Lifegroup', data.notSeenGroup, data.latestGrpDate ? 'Everyone was seen' : 'No lifegroup data yet');
+  host.innerHTML = h;
+}
+
+// One follow-up list as a compact card. Shows name + grade/gender + tap-to-call;
+// deliberately NO at-risk/declining marker (per spec).
+function _followupListHtml(title, items, emptyMsg) {
+  let h = `<div class="card" style="padding:12px;margin-bottom:10px">
+    <div style="font-size:12px;font-weight:800;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px">${title} (${items.length})</div>`;
+  if (!items.length) { h += `<div style="font-size:13px;color:var(--ink-faint)">${emptyMsg}</div></div>`; return h; }
+  for (const s of items) {
+    const bd = fmtBday(s.dateOfBirth);
+    const phone = s.mobile || s.parentPhone;
+    h += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--paper-dark)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px">${esc(s.fullName)}</div>
+        <div style="font-size:12px;color:var(--ink-mid)">Yr ${s.grade||'—'} · ${s.gender}${bd ? ' · ' + bd : ''}</div>
+      </div>
+      ${phone ? `<div style="font-size:13px;white-space:nowrap" onclick="event.stopPropagation()">${phoneLink(phone)}</div>` : ''}
+    </div>`;
+  }
+  h += '</div>';
+  return h;
+}
+
+// Commit the Home self-identify picker selection and re-render.
+function chooseHomeLeader() {
+  const v = document.getElementById('home-leader-pick')?.value;
+  if (!v) return;
+  setMyLeaderId(v);
+  renderHomeFollowup();
 }
 
 // ============================================================
