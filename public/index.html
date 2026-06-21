@@ -965,6 +965,16 @@ async function doLogout() {
 // via _drop() (see .drop CSS) — no expand-state vars / re-render needed.
 function _hQuadGrades(q) { return (q === 'g79' || q === 'b79') ? [7, 8, 9] : [10, 11, 12]; }
 function _hGradeAvg(trends, g) { const x = ((trends && trends.byGrade) || []).find(y => y.grade === g); return x ? Math.round(x.averageAttendance) : 0; }
+// Gendered per-grade Svc/wk. trends.byGrade is whole-grade (both genders) for an
+// admin/director login, so the quad dropdown must NOT use it for a gendered grade
+// row. averageOf over a session set == sum(svcAttended)/svcTotal over its members,
+// so we derive the gendered average straight from the already gender-filtered
+// student aggregates — matching the Svc-uniq count shown beside it.
+function _hGradeSvcAvg(studs) {
+  const svcTot = studs.reduce((m, s) => Math.max(m, s.svcTotal || 0), 0);
+  if (!svcTot) return 0;
+  return Math.round(studs.reduce((a, s) => a + s.svcAttended, 0) / svcTot);
+}
 function _hQuadAvg(trends, q) { const x = ((trends && trends.byQuad) || []).find(y => y.quad === q); return x ? Math.round(x.averageAttendance) : 0; }
 function _hScopeSvcAvg(trends, u) {
   if (!trends) return 0;
@@ -1177,7 +1187,8 @@ async function _renderHomeInner(stale) {
             let gradeRows = '';
             for (const gr of _hQuadGrades(q.quad)) {
               const qgLg = (qLg && qLg.grades || []).find(x => x.grade === gr);
-              gradeRows += _hGradeMini('Yr ' + gr + _gsfx(quadGender(q.quad)), qStud.filter(s => s.grade === gr), _hGradeAvg(trends, gr), qgLg);
+              const gradeStuds = qStud.filter(s => s.grade === gr);
+              gradeRows += _hGradeMini('Yr ' + gr + _gsfx(quadGender(q.quad)), gradeStuds, _hGradeSvcAvg(gradeStuds), qgLg);
             }
             body += _hAttTile(q.label, qStud, _hQuadAvg(trends, q.quad), { dropId: 'hq-' + q.quad, gradeRows, grpAvgWk: qLg ? qLg.current.avgPerWeek : 0 });
           }
