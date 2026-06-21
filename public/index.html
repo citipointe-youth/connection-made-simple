@@ -1296,11 +1296,26 @@ async function renderHomeFollowup() {
   if (!data) { host.innerHTML = ''; return; }
 
   const changeBtn = `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="setMyLeaderId(null);renderHomeFollowup()">Not you?</button>`;
+  // Each "not seen" list reflects the most recent session/week — label it with the
+  // Monday of that week so the leader knows which week they're chasing up.
+  const svcWeek = data.latestSvcDate ? ` (week of ${_mondayLabel(data.latestSvcDate)})` : '';
+  const grpWeek = data.latestGrpDate ? ` (week of ${_mondayLabel(data.latestGrpDate)})` : '';
   let h = `<div class="sh" style="display:flex;align-items:center;justify-content:space-between"><span>This week's follow-up · ${esc(data.leader.fullName)}</span>${changeBtn}</div>`;
   h += _followupListHtml('Birthdays this week', data.birthdays, 'No birthdays this week');
-  h += _followupListHtml('Not seen at Friday', data.notSeenService, data.latestSvcDate ? 'Everyone was seen' : 'No service data yet');
-  h += _followupListHtml('Not seen at Lifegroup', data.notSeenGroup, data.latestGrpDate ? 'Everyone was seen' : 'No lifegroup data yet');
+  h += _followupListHtml('Not seen at Friday' + svcWeek, data.notSeenService, data.latestSvcDate ? 'Everyone was seen' : 'No service data yet');
+  h += _followupListHtml('Not seen at Lifegroup' + grpWeek, data.notSeenGroup, data.latestGrpDate ? 'Everyone was seen' : 'No lifegroup data yet');
   host.innerHTML = h;
+}
+
+// Monday of the week containing an ISO date, formatted "D/M" (Australian day/month).
+function _mondayLabel(iso) {
+  const p = String(iso).slice(0, 10).split('-');
+  if (p.length !== 3) return '';
+  const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  if (isNaN(d.getTime())) return '';
+  const off = (d.getDay() + 6) % 7; // days since Monday
+  d.setDate(d.getDate() - off);
+  return `${d.getDate()}/${d.getMonth() + 1}`;
 }
 
 // One follow-up list as a compact card. Shows name + grade/gender + tap-to-call;

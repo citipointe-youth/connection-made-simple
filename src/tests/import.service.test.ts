@@ -70,6 +70,56 @@ describe('Import Service', () => {
     expect(students[0]?.svcTotal).toBe(1);
   });
 
+  // ── Birthday preservation: a re-import without DOB must not wipe an existing one ──
+  it('preserves an existing birthday when the re-import omits the birthday column', async () => {
+    const r = makeRepos();
+    await initRepos(r);
+    const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+    // First import: includes the birthday.
+    await svc.importServiceCsv(ADMIN, [
+      { first_name: 'Cara', last_name: 'Lee', gender: 'female', grade: 9, date_of_birth: '12/03/2009', '2025-02-07': true },
+    ], 'with-dob.csv');
+    let students = await r.students.findAll();
+    expect(students[0]?.dateOfBirth).toBe('2009-03-12');
+
+    // Second import: SAME student, NO birthday column at all.
+    await svc.importServiceCsv(ADMIN, [
+      { first_name: 'Cara', last_name: 'Lee', gender: 'female', grade: 9, '2025-02-14': true },
+    ], 'no-dob.csv');
+    students = await r.students.findAll();
+    expect(students[0]?.dateOfBirth).toBe('2009-03-12'); // still there
+  });
+
+  // ── Birthday preservation: a blank birthday cell must not wipe an existing one ──
+  it('preserves an existing birthday when the re-import has a blank birthday cell', async () => {
+    const r = makeRepos();
+    await initRepos(r);
+    const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+    await svc.importServiceCsv(ADMIN, [
+      { first_name: 'Dan', last_name: 'Ng', gender: 'male', grade: 10, date_of_birth: '2008-07-05', '2025-02-07': true },
+    ], 'with-dob.csv');
+    await svc.importServiceCsv(ADMIN, [
+      { first_name: 'Dan', last_name: 'Ng', gender: 'male', grade: 10, date_of_birth: '', '2025-02-14': true },
+    ], 'blank-dob.csv');
+    const students = await r.students.findAll();
+    expect(students[0]?.dateOfBirth).toBe('2008-07-05');
+  });
+
+  // ── Birthday update: a new birthday value DOES overwrite (keep-up-to-date) ──
+  it('updates the birthday when the re-import provides a new value', async () => {
+    const r = makeRepos();
+    await initRepos(r);
+    const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+    await svc.importServiceCsv(ADMIN, [
+      { first_name: 'Eve', last_name: 'Ho', gender: 'female', grade: 8, date_of_birth: '2010-01-01', '2025-02-07': true },
+    ], 'a.csv');
+    await svc.importServiceCsv(ADMIN, [
+      { first_name: 'Eve', last_name: 'Ho', gender: 'female', grade: 8, date_of_birth: '2010-02-02', '2025-02-14': true },
+    ], 'b.csv');
+    const students = await r.students.findAll();
+    expect(students[0]?.dateOfBirth).toBe('2010-02-02');
+  });
+
   // ── TC57 — Excel short-date columns (DD-MMM) are normalised to ISO ──
   it('TC57: Excel short-date columns are normalised and imported', async () => {
     const r = makeRepos();

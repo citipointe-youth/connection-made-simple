@@ -289,6 +289,10 @@ export function makeImportService(
 
         if (existing) {
           studentId = existing.id;
+          // Non-destructive merge: contact fields and date of birth fall back to
+          // the EXISTING value when the upload omits them (no column) or leaves
+          // the cell blank — so a service export without a birthday column never
+          // wipes a birthday we already hold. A *present* value still updates it.
           const incomingMobile = row.mobile ?? row.phone ?? null;
           const incomingParentPhone = row.parent_phone ?? row.guardian_phone ?? null;
           const incomingDob = normalizeDob(row.date_of_birth ?? row.birthday ?? null);
