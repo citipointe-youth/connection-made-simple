@@ -15,6 +15,7 @@ import {
   InMemorySettingsRepository,
   InMemorySnapshotRepository,
   InMemoryAuditRepository,
+  InMemoryConnectionAuditRepository,
   InMemoryPushSubscriptionRepository,
   InMemoryNotificationRepository,
 } from './repositories/in-memory';
@@ -33,6 +34,7 @@ import {
   SupabaseSettingsRepository,
   SupabaseSnapshotRepository,
   SupabaseAuditRepository,
+  SupabaseConnectionAuditRepository,
   SupabasePushSubscriptionRepository,
   SupabaseNotificationRepository,
   getSqlClient,
@@ -52,6 +54,7 @@ import type {
   ISettingsRepository,
   ISnapshotRepository,
   IAuditRepository,
+  IConnectionAuditRepository,
   IPushSubscriptionRepository,
   INotificationRepository,
 } from './repositories/interfaces';
@@ -85,6 +88,7 @@ export interface Repositories {
   settings: ISettingsRepository;
   snapshots: ISnapshotRepository;
   audit: IAuditRepository;
+  connectionAudits: IConnectionAuditRepository;
   pushSubscriptions: IPushSubscriptionRepository;
   notifications: INotificationRepository;
 }
@@ -161,6 +165,9 @@ export async function buildContainer(): Promise<Container> {
   const audit: IAuditRepository = useSupabase
     ? new SupabaseAuditRepository(sql)
     : new InMemoryAuditRepository(useJson ? makeJson('audit.json') : undefined);
+  const connectionAudits: IConnectionAuditRepository = useSupabase
+    ? new SupabaseConnectionAuditRepository(sql)
+    : new InMemoryConnectionAuditRepository(useJson ? makeJson('connection-audits.json') : undefined);
   const pushSubscriptions: IPushSubscriptionRepository = useSupabase
     ? new SupabasePushSubscriptionRepository(sql)
     : new InMemoryPushSubscriptionRepository();
@@ -172,7 +179,7 @@ export async function buildContainer(): Promise<Container> {
     users, students, leaders, connections,
     serviceSessions, serviceAttendance,
     lifegroups, lifegroupWeeks, lifegroupAttendance,
-    imports, settings, snapshots, audit,
+    imports, settings, snapshots, audit, connectionAudits,
     pushSubscriptions, notifications,
   };
 
@@ -181,7 +188,7 @@ export async function buildContainer(): Promise<Container> {
     users.init(), students.init(), leaders.init(), connections.init(),
     serviceSessions.init(), serviceAttendance.init(),
     lifegroups.init(), lifegroupWeeks.init(), lifegroupAttendance.init(),
-    imports.init(), settings.init(), snapshots.init(), audit.init(),
+    imports.init(), settings.init(), snapshots.init(), audit.init(), connectionAudits.init(),
     pushSubscriptions.init(), notifications.init(),
   ]);
 
