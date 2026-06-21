@@ -1,4 +1,16 @@
 import type { Student } from '../core/entities/student';
+import type {
+  IConnectionRepository,
+  IStudentRepository,
+  ILeaderRepository,
+  IServiceSessionRepository,
+  IServiceAttendanceRepository,
+  ILifegroupWeekRepository,
+  ILifegroupAttendanceRepository,
+} from '../repositories/interfaces';
+import type { Actor } from '../core/entities/user';
+import { assertCan } from './access-control';
+import { NotFoundError } from '../core/errors/app-error';
 
 export interface FollowupStudent {
   id: string;
@@ -78,4 +90,80 @@ export function buildFollowup(
     ? students.filter((s) => isGroupEligible(s) && !latestGrpAttendees.has(s.id)).map(toFollowup).sort(byName)
     : [];
   return { birthdays, notSeenService, notSeenGroup };
+}
+
+export interface LeaderFollowup {
+  leader: { id: string; fullName: string };
+  latestSvcDate: string | null;
+  latestGrpDate: string | null;
+  birthdays: FollowupStudent[];
+  notSeenService: FollowupStudent[];
+  notSeenGroup: FollowupStudent[];
+}
+
+export interface FollowupService {
+  leaderFollowup(actor: Actor, leaderId: string): Promise<LeaderFollowup>;
+}
+
+export function makeFollowupService(
+  connRepo: IConnectionRepository,
+  studentRepo: IStudentRepository,
+  leaderRepo: ILeaderRepository,
+  sessionRepo: IServiceSessionRepository,
+  svcAttRepo: IServiceAttendanceRepository,
+  weekRepo: ILifegroupWeekRepository,
+  grpAttRepo: ILifegroupAttendanceRepository,
+): FollowupService {
+  return {
+    async leaderFollowup(actor, leaderId) {
+      assertCan(actor, 'leader:read');
+      const [leader, conns, allStudents] = await Promise.all([
+        leaderRepo.findById(leaderId),
+        connRepo.findByLeader(leaderId),
+        studentRepo.findAll(),
+      ]);
+      if (!leader) throw new NotFoundError('Leader not found');
+      const connectedIds = new Set(conns.map((c) => c.studentId));
+      const myStudents = allStudents.filter((s) => connectedIds.has(s.id));
+
+      // Most recent VALID service session (ignores holiday/low-attendance Fridays).
+      const validSessions = await sessionRepo.findValid();
+      const latestSession = validSessions.reduce<(typeof validSessions)[number] | null>(
+        (max, s) => (!max || s.sessionDate > max.sessionDate ? s : max),
+        null,
+      );
+      let latestSvcAttendees = new Set<string>();
+      if (latestSession) {
+        const recs = await svcAttRepo.findBySession(latestSession.id);
+        latestSvcAttendees = new Set(recs.filter((r) => r.attended).map((r) => r.studentId));
+      }
+
+      // Most recent lifegroup week (by weekStart).
+      const weeks = await weekRepo.findAll();
+      const latestWeek = weeks.reduce<(typeof weeks)[number] | null>(
+        (max, w) => (!max || w.weekStart > max.weekStart ? w : max),
+        null,
+      );
+      let latestGrpAttendees = new Set<string>();
+      if (latestWeek) {
+        const recs = await grpAttRepo.findByWeek(latestWeek.id);
+        latestGrpAttendees = new Set(recs.filter((r) => r.attended).map((r) => r.studentId));
+      }
+
+      const lists = buildFollowup(
+        myStudents,
+        latestSvcAttendees,
+        latestGrpAttendees,
+        latestSession ? latestSession.sessionDate : null,
+        latestWeek ? latestWeek.weekStart : null,
+        new Date(),
+      );
+      return {
+        leader: { id: leader.id, fullName: leader.fullName },
+        latestSvcDate: latestSession ? latestSession.sessionDate : null,
+        latestGrpDate: latestWeek ? latestWeek.weekStart : null,
+        ...lists,
+      };
+    },
+  };
 }

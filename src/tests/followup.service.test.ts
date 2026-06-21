@@ -99,3 +99,54 @@ describe('buildFollowup', () => {
     expect(r.notSeenService.map(s => s.fullName)).toEqual(['Bea Student', 'Zed Student']);
   });
 });
+
+import { makeFollowupService } from '../services/followup.service';
+import {
+  InMemoryConnectionRepository,
+  InMemoryStudentRepository,
+  InMemoryLeaderRepository,
+  InMemoryServiceSessionRepository,
+  InMemoryServiceAttendanceRepository,
+  InMemoryLifegroupWeekRepository,
+  InMemoryLifegroupAttendanceRepository,
+} from '../repositories/in-memory';
+import type { Actor } from '../core/entities/user';
+
+const ADMIN: Actor = { id: 'a', role: 'admin' as any, displayName: 'A', grade: null as any, quad: null as any };
+
+describe('makeFollowupService.leaderFollowup', () => {
+  it('returns not-seen lists for connected, eligible students who missed the latest session/week', async () => {
+    const connRepo = new InMemoryConnectionRepository();
+    const studentRepo = new InMemoryStudentRepository();
+    const leaderRepo = new InMemoryLeaderRepository();
+    const sessionRepo = new InMemoryServiceSessionRepository();
+    const svcAttRepo = new InMemoryServiceAttendanceRepository();
+    const weekRepo = new InMemoryLifegroupWeekRepository();
+    const grpAttRepo = new InMemoryLifegroupAttendanceRepository();
+    for (const r of [connRepo, studentRepo, leaderRepo, sessionRepo, svcAttRepo, weekRepo, grpAttRepo]) await r.init();
+
+    const leader = await leaderRepo.save({ id: 'L1', fullName: 'Em Leader', gender: 'female', grades: [9], active: true, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' } as any);
+    const base = { gender: 'female', grade: 9, quad: 'g79', mobile: null, parentPhone: null, dateOfBirth: null, svcTotal: 4, grpTotal: 4, grpMetWeeks: 4, prevSvcAttended: 0, prevSvcTotal: 0, prevGrpAttended: 0, prevGrpTotal: 0, atRiskStatus: null, dataSource: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
+    const seen = await studentRepo.save({ id: 'S1', firstName: 'Ann', lastName: 'A', svcAttended: 3, grpAttended: 3, ...base } as any);
+    const missed = await studentRepo.save({ id: 'S2', firstName: 'Bea', lastName: 'B', svcAttended: 2, grpAttended: 2, ...base } as any);
+    await connRepo.save({ id: 'C1', studentId: seen.id, leaderId: leader.id, createdAt: '2026-01-01T00:00:00.000Z' } as any);
+    await connRepo.save({ id: 'C2', studentId: missed.id, leaderId: leader.id, createdAt: '2026-01-01T00:00:00.000Z' } as any);
+
+    const older = await sessionRepo.save({ id: 'SS0', importId: 'i', sessionDate: '2026-06-05', sessionName: 'old', isRegular: true, isValid: true, totalAttendance: 200, sortOrder: 0, createdAt: '2026-01-01T00:00:00.000Z' } as any);
+    const latest = await sessionRepo.save({ id: 'SS1', importId: 'i', sessionDate: '2026-06-12', sessionName: 'latest', isRegular: true, isValid: true, totalAttendance: 200, sortOrder: 1, createdAt: '2026-01-01T00:00:00.000Z' } as any);
+    void older;
+    await svcAttRepo.saveMany([{ studentId: seen.id, sessionId: latest.id, attended: true }]); // missed has no record for latest
+
+    const week = await weekRepo.save({ id: 'W1', importId: 'i', weekNum: 1, weekKey: '2026-06-08', weekStart: '2026-06-08', weekEnd: '2026-06-14' } as any);
+    await grpAttRepo.saveMany([{ studentId: seen.id, weekId: week.id, lifegroupId: 'g', groupMet: true, attended: true }]);
+
+    const svc = makeFollowupService(connRepo, studentRepo, leaderRepo, sessionRepo, svcAttRepo, weekRepo, grpAttRepo);
+    const out = await svc.leaderFollowup(ADMIN, leader.id);
+
+    expect(out.leader.fullName).toBe('Em Leader');
+    expect(out.latestSvcDate).toBe('2026-06-12');
+    expect(out.latestGrpDate).toBe('2026-06-08');
+    expect(out.notSeenService.map((s) => s.id)).toEqual(['S2']);
+    expect(out.notSeenGroup.map((s) => s.id)).toEqual(['S2']);
+  });
+});
