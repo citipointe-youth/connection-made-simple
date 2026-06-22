@@ -1,4 +1,5 @@
 import type { SqlClient } from './client';
+import { toIso } from './client';
 import type { IConnectionAuditRepository } from '../interfaces/entity-repositories';
 import type { ConnectionAudit, AuditSnapshot } from '../../core/entities/connection-audit';
 
@@ -8,7 +9,7 @@ function toConnectionAudit(row: Record<string, unknown>): ConnectionAudit {
     year: row['year'] as number,
     label: row['label'] as string,
     uploadedBy: row['uploaded_by'] as string,
-    uploadedAt: (row['uploaded_at'] as Date).toISOString(),
+    uploadedAt: toIso(row['uploaded_at']),
     snapshot: row['snapshot'] as AuditSnapshot,
   };
 }

@@ -1,4 +1,5 @@
 import type { SqlClient } from './client';
+import { toIso } from './client';
 import type { IPushSubscriptionRepository } from '../interfaces/entity-repositories';
 import type { PushSubscription } from '../../core/entities/push-subscription';
 import { generateId } from '../../utils/id';
@@ -10,7 +11,7 @@ function toSub(row: Record<string, unknown>): PushSubscription {
     endpoint: row['endpoint'] as string,
     p256dh: row['p256dh'] as string,
     auth: row['auth'] as string,
-    createdAt: (row['created_at'] as Date).toISOString(),
+    createdAt: toIso(row['created_at']),
   };
 }
 
