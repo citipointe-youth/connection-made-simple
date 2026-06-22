@@ -251,20 +251,27 @@ export function makeLifegroupStatsService(
       ): GradeLifegroupStat => {
         const matchGender = (g: string | null) => gender == null || !g || g === gender;
         const groupsOfGrade = lifegroups.filter((l) => l.grade === grade && lifegroupVisible(l.id) && matchGender(l.gender));
-        const inGrade = (id: string) => { const lg = lifegroupById.get(id); return lg?.grade === grade && matchGender(lg.gender); };
         const lifegroupStats = groupsOfGrade
           .map((l) => statForGroup(l.id))
           .filter((s) => s.current.weeksRan > 0 || s.previous.weeksRan > 0)
           .sort((a, b) => b.current.uniqueAttenders - a.current.uniqueAttenders || a.name.localeCompare(b.name));
+        // The grade total counts the students OF THIS GRADE wherever they attend a
+        // lifegroup — `studentFilter` (own grade/quad) decides inclusion, NOT the
+        // group's own grade — so a student in another grade's group still lands in
+        // their own grade. The lifegroup LIST above stays grade-scoped.
         return {
           grade,
-          current: termAgg(inGrade, studentFilter, 'current'),
-          previous: termAgg(inGrade, studentFilter, 'previous'),
+          current: termAgg(lifegroupVisible, studentFilter, 'current'),
+          previous: termAgg(lifegroupVisible, studentFilter, 'previous'),
           lifegroups: lifegroupStats,
         };
       };
+      // weeksRan now reflects the whole (visible) lifegroup calendar, so gate on
+      // whether any student of the grade was actually seen/enrolled, plus its own groups.
       const isEmptyGrade = (g: GradeLifegroupStat) =>
-        g.current.weeksRan === 0 && g.previous.weeksRan === 0 && g.lifegroups.length === 0;
+        g.lifegroups.length === 0 &&
+        g.current.uniqueAttenders === 0 && g.previous.uniqueAttenders === 0 &&
+        g.current.members === 0 && g.previous.members === 0;
 
       // ── Per-grade (top level): individuals OF THAT GRADE attending each week. ──
       const byGrade: GradeLifegroupStat[] = [];
@@ -280,19 +287,17 @@ export function makeLifegroupStatsService(
       for (const quad of visibleQuads) {
         const grades = quadGradesOf(quad);
         const gender = quadGenderOf(quad);
-        const inQuad = (id: string) => {
-          const lg = lifegroupById.get(id);
-          if (!lg || lg.grade == null || !grades.includes(lg.grade)) return false;
-          // A group with a known gender must match the quad's gender.
-          return !lg.gender || lg.gender === gender;
-        };
+        // Count the students OF THIS QUAD across every visible lifegroup they attend
+        // (their own quad decides inclusion, not the group's grade/gender), so a
+        // student attending another grade's group still lands in their own quad.
         const quadStudent = (row: JoinedRow) => row.quad === quad;
-        const current = termAgg(inQuad, quadStudent, 'current');
-        const previous = termAgg(inQuad, quadStudent, 'previous');
+        const current = termAgg(lifegroupVisible, quadStudent, 'current');
+        const previous = termAgg(lifegroupVisible, quadStudent, 'previous');
         const quadGrades = grades
           .map((g) => gradeStatFor(g, gender, (row) => row.quad === quad && row.grade === g))
           .filter((g) => !isEmptyGrade(g));
-        if (current.weeksRan === 0 && previous.weeksRan === 0 && quadGrades.length === 0) continue;
+        if (current.uniqueAttenders === 0 && previous.uniqueAttenders === 0 &&
+            current.members === 0 && previous.members === 0 && quadGrades.length === 0) continue;
         byQuad.push({ quad, label: QUAD_LABELS[quad], current, previous, grades: quadGrades });
       }
 

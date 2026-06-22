@@ -149,6 +149,50 @@ describe('Lifegroup Stats Service', () => {
     expect(grade9.current.avgPerWeek).toBe(2);
   });
 
+  it('counts a student in their OWN grade/quad even when they attend a different grade\'s lifegroup', async () => {
+    const r = makeRepos();
+    await Promise.all([
+      r.students.init(), r.sessions.init(), r.attendance.init(), r.imports.init(), r.settings.init(),
+      r.lifegroups.init(), r.lifegroupWeeks.init(), r.lifegroupAttendance.init(), r.leaders.init(),
+    ]);
+    await r.settings.updateSettings({ serviceMinAttendance: 1 });
+    const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+    // Amy is grade 9, Cara is grade 10 — both girls, both attend valid Fridays this term.
+    await svc.importServiceCsv(ADMIN, [
+      { first_name: 'Amy', last_name: 'A', gender: 'female', grade: 9, '2026-04-17': true, '2026-04-24': true },
+      { first_name: 'Cara', last_name: 'C', gender: 'female', grade: 10, '2026-04-17': true, '2026-04-24': true },
+    ], 'svc.csv');
+    // A single GRADE 9 girls lifegroup — but Cara (grade 10) also attends it.
+    await svc.importGroupCsv(DIR, {
+      groups: [{ name: 'Grade 9 Girls Lifegroup', meetings: ['2026-04-13', '2026-04-20'], members: [
+        { first_name: 'Amy', last_name: 'A', attendance: [true, true] },
+        { first_name: 'Cara', last_name: 'C', attendance: [true, true] },
+      ] }],
+    }, 'grp.csv');
+
+    const statsSvc = makeLifegroupStatsService(r.students, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.sessions, r.settings);
+    const data = await statsSvc.get(ADMIN);
+
+    // The lifegroup itself counts ALL its attenders, regardless of their grade.
+    const grade9 = data.byGrade.find((g) => g.grade === 9)!;
+    expect(grade9.lifegroups[0]!.current.uniqueAttenders).toBe(2); // Amy + Cara in the group
+
+    // Grade 9 total counts only the grade-9 student (Amy).
+    expect(grade9.current.uniqueAttenders).toBe(1);
+
+    // Grade 10 total counts Cara — her OWN grade — even though she attended the grade-9 group.
+    const grade10 = data.byGrade.find((g) => g.grade === 10)!;
+    expect(grade10).toBeDefined();
+    expect(grade10.current.uniqueAttenders).toBe(1);
+
+    // Likewise at quad level: Cara lands in g1012, not g79.
+    const g79 = data.byQuad.find((q) => q.quad === 'g79')!;
+    expect(g79.current.uniqueAttenders).toBe(1); // Amy
+    const g1012 = data.byQuad.find((q) => q.quad === 'g1012')!;
+    expect(g1012).toBeDefined();
+    expect(g1012.current.uniqueAttenders).toBe(1); // Cara
+  });
+
   it('per-quad grade breakdown is GENDERED (g79 grade 9 excludes the boys group)', async () => {
     const r = makeRepos();
     await Promise.all([

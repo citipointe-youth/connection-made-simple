@@ -1051,19 +1051,19 @@ function _hAttTile(label, studs, avgWk, opts) {
   const svcUniq = studs.filter(s => s.svcAttended > 0).length;
   const grpUniq = studs.filter(s => s.grpAttended > 0).length;
   // Group average = individuals from this scope attending a lifegroup each week
-  // (avg/wk), supplied from /lifegroups/stats; falls back to 0 if absent.
+  // (weekly), supplied from /lifegroups/stats; falls back to 0 if absent.
   const grpAvg = (opts.grpAvgWk != null) ? opts.grpAvgWk : 0;
   const drop = !!opts.dropId;
   const chev = drop ? `<span class="drop-chev" style="display:inline-block;color:var(--ink-faint);font-weight:800">›</span>` : '';
   const inner = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${chev}<div style="font-size:13px;font-weight:700;color:var(--ink-mid)">${label}</div></div>`
     + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center;margin-bottom:3px">
     <div style="font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px">Youth</div>
-    <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${svcUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
+    <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${svcUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Seen</div></div>
     <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${avgWk}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`
     + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center">
     <div style="font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px;opacity:.8">Groups</div>
-    <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
+    <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Seen</div></div>
     <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpAvg}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`;
   if (drop) {
@@ -1150,7 +1150,7 @@ async function _renderHomeInner(stale) {
   const grpUniq = sc.filter(s => s.grpAttended > 0).length;
   const grpWeeks = grpEnr.length ? Math.max(0, ...grpEnr.map(s => s.grpTotal)) : 0;
   const grpAtt = sc.reduce((a, s) => a + s.grpAttended, 0);
-  // avg/wk comes from /lifegroups/stats (same source as Trends) so Home and Trends
+  // weekly comes from /lifegroups/stats (same source as Trends) so Home and Trends
   // agree: it divides total visits by VALID SERVICE FRIDAYS this term, not by the
   // max weeks any one group ran. Fall back to the per-student calc when stats absent.
   const grpAvgWk = lgStats ? lgStats.overall.current.avgPerWeek : (grpWeeks > 0 ? Math.round(grpAtt / grpWeeks) : 0);
@@ -1160,8 +1160,8 @@ async function _renderHomeInner(stale) {
   body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>`;
   body += `<thead><tr>
     <th style="font-size:11px;font-weight:700;opacity:.55;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:4px">This term</th>
-    <th style="font-size:11px;font-weight:700;opacity:.6;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:4px">Unique</th>
-    <th style="font-size:11px;font-weight:700;opacity:.6;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:4px">Weekly avg</th>
+    <th style="font-size:11px;font-weight:700;opacity:.6;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:4px">Seen</th>
+    <th style="font-size:11px;font-weight:700;opacity:.6;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:4px">Weekly</th>
   </tr></thead><tbody>`;
   body += `<tr style="background:rgba(255,255,255,.1)">
     <td style="font-size:13px;font-weight:700;opacity:.82;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td>
@@ -1190,8 +1190,8 @@ async function _renderHomeInner(stale) {
     body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:5px"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>`;
     body += `<thead><tr>
       <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:3px">Prev term</th>
-      <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Unique</th>
-      <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Weekly avg</th>
+      <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Seen</th>
+      <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Weekly</th>
     </tr></thead><tbody>`;
     if (pSvcTot > 0) body += `<tr style="background:rgba(255,255,255,.06)"><td style="font-size:12px;font-weight:700;opacity:.5;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcAvg}</span></td></tr>`;
     if (pGrpTot > 0) body += `<tr style="background:rgba(255,255,255,.03)"><td style="font-size:12px;font-weight:700;opacity:.45;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Groups</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpAvg}</span></td></tr>`;
@@ -1259,7 +1259,7 @@ async function _renderHomeInner(stale) {
       // ── Lifegroup Attendance (current term only on Home) ──
       // average = individuals attending a lifegroup each week the scope ran.
       if (lgStats && ['admin', 'director'].includes(u.role)) {
-        const quads = (lgStats.byQuad || []).filter(q => q.current.weeksRan > 0 || q.current.uniqueAttenders > 0);
+        const quads = (lgStats.byQuad || []).filter(q => q.current.uniqueAttenders > 0 || q.current.members > 0);
         if (quads.length) {
           body += '<div class="sh">Lifegroups by Quad</div><div style="margin-bottom:16px">';
           for (const q of quads) {
@@ -1268,7 +1268,7 @@ async function _renderHomeInner(stale) {
               <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('${qid}')">
                 <span class="drop-chev" style="font-size:12px;color:var(--ink-faint);font-weight:800">›</span>
                 <div style="flex:1;font-size:13px;font-weight:700">${q.label}</div>
-                <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${q.current.uniqueAttenders} uniq · ${q.current.avgPerWeek} avg/wk</span>
+                <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${q.current.uniqueAttenders} seen · ${q.current.avgPerWeek} weekly</span>
               </div><div class="drop-body">`;
             for (const gr of _hQuadGrades(q.quad)) {
               const g = (q.grades || []).find(x => x.grade === gr);
@@ -1279,7 +1279,7 @@ async function _renderHomeInner(stale) {
           body += '</div>';
         }
       } else if (lgStats && u.role === 'quad') {
-        const grades = (lgStats.byGrade || []).filter(g => g.current.weeksRan > 0 || g.current.uniqueAttenders > 0);
+        const grades = (lgStats.byGrade || []).filter(g => g.current.uniqueAttenders > 0 || g.current.members > 0);
         if (grades.length) {
           body += '<div class="sh">Lifegroups by Grade</div><div class="card" style="margin-bottom:16px">';
           for (const g of grades) body += _lgGradeBlock(g, false, _gsfx(_loginGender(u)), 'hlg-' + g.grade);
@@ -2988,7 +2988,7 @@ function trendArrow(dir) {
 }
 
 // Service attendance aggregate for a student subset. `prev=true` reads the
-// previous-term fields. avg/wk = total attendances ÷ valid weeks in the term
+// previous-term fields. weekly = total attendances ÷ valid weeks in the term
 // (== the server's per-session average), uniq = distinct attenders.
 function _svcAgg(list, prev) {
   const att = list.reduce((a, s) => a + (prev ? s.prevSvcAttended : s.svcAttended), 0);
@@ -3002,11 +3002,11 @@ function _svcPrevSub(p) { return p.weeks > 0 ? ['prev: ' + p.uniq, 'prev: ' + p.
 // `showPrev` toggles the muted previous-term line (Trends shows it; Home doesn't).
 function _lgAggBits(a) {
   if (!a) return '<span style="color:var(--ink-faint)">no data</span>';
-  return `<b style="color:var(--ink)">${a.uniqueAttenders}</b> uniq · <b style="color:var(--ink)">${a.avgPerWeek}</b> avg/wk · <b style="color:var(--ink)">${a.weeksRan}</b> wk${a.weeksRan===1?'':'s'}`;
+  return `<b style="color:var(--ink)">${a.uniqueAttenders}</b> seen · <b style="color:var(--ink)">${a.avgPerWeek}</b> weekly · <b style="color:var(--ink)">${a.weeksRan}</b> wk${a.weeksRan===1?'':'s'}`;
 }
 function _lgPrevBits(a) {
   if (!a || a.weeksRan === 0) return '';
-  return `<div style="font-size:11px;color:var(--ink-faint);margin-top:1px">prev term: ${a.uniqueAttenders} uniq · ${a.avgPerWeek} avg/wk · ${a.weeksRan} wk${a.weeksRan===1?'':'s'}</div>`;
+  return `<div style="font-size:11px;color:var(--ink-faint);margin-top:1px">prev term: ${a.uniqueAttenders} seen · ${a.avgPerWeek} weekly · ${a.weeksRan} wk${a.weeksRan===1?'':'s'}</div>`;
 }
 // One lifegroup detail row (per-grade dropdown content).
 function _lgGroupRow(lg, showPrev) {
@@ -3024,9 +3024,9 @@ function _lgGradeBlock(g, showPrev, gsfx, id) {
     <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 0;border-top:1px solid var(--paper-dark)" onclick="_drop('${id}')">
       <span class="drop-chev" style="font-size:12px">›</span>
       <div style="flex:1;font-size:13px;font-weight:700">Year ${g.grade}${gsfx}</div>
-      <span style="font-size:12px;color:var(--ink-mid)">${g.current.uniqueAttenders} uniq · ${g.current.avgPerWeek} avg/wk</span>
+      <span style="font-size:12px;color:var(--ink-mid)">${g.current.uniqueAttenders} seen · ${g.current.avgPerWeek} weekly</span>
     </div>`;
-  if (showPrev && g.previous.weeksRan > 0) h += `<div style="font-size:11px;color:var(--ink-faint);padding:0 0 4px 20px">prev term: ${g.previous.uniqueAttenders} uniq · ${g.previous.avgPerWeek} avg/wk · ${g.previous.weeksRan} wks</div>`;
+  if (showPrev && (g.previous.uniqueAttenders > 0 || g.previous.members > 0)) h += `<div style="font-size:11px;color:var(--ink-faint);padding:0 0 4px 20px">prev term: ${g.previous.uniqueAttenders} seen · ${g.previous.avgPerWeek} weekly</div>`;
   h += `<div class="drop-body">`;
   if (g.lifegroups && g.lifegroups.length) for (const lg of g.lifegroups) h += _lgGroupRow(lg, showPrev);
   else h += `<div style="font-size:12px;color:var(--ink-faint);padding:4px 0 6px 20px">No lifegroups ran this term</div>`;
@@ -3130,8 +3130,8 @@ async function renderTrends() {
     const mn = (trends && trends.ministry) || {};
     body += `<div class="sh">Ministry Overview</div><div class="card">`;
     body += `<div style="font-size:12px;color:var(--ink-mid);margin-bottom:8px">Whole-ministry service attendance · this term (${_termNote})</div>`;
-    body += statCard([mn.uniqueAttenders || 0, Math.round(mn.averageAttendance || 0)], ['Unique attenders', 'Avg students/week'],
-      (mn.prevUniqueAttenders || mn.prevAverageAttendance) ? ['prev: ' + (mn.prevUniqueAttenders||0), 'prev: ' + (mn.prevAverageAttendance||0)] : null);
+    body += statCard([mn.uniqueAttenders || 0, Math.round(mn.averageAttendance || 0)], ['Seen', 'Weekly'],
+      (mn.prevSeenAttenders || mn.prevAverageAttendance) ? ['prev: ' + (mn.prevSeenAttenders||0), 'prev: ' + (mn.prevAverageAttendance||0)] : null);
     body += '</div>';
 
     // Weekly attendance chart — one bar per valid CURRENT-TERM service (whole ministry)
@@ -3153,7 +3153,7 @@ async function renderTrends() {
       const gl = students.filter(s => s.grade === u.grade);
       const c = _svcAgg(gl, false), p = _svcAgg(gl, true);
       body += `<div class="sh">Grade ${u.grade}${_gsfx(_loginGender(u))}</div><div class="card">`;
-      body += statCard([c.uniq, c.avg], ['Unique attenders','Avg students/week'], _svcPrevSub(p));
+      body += statCard([c.uniq, c.avg], ['Seen','Weekly'], _svcPrevSub(p));
       body += '</div>';
       // Weekly attendance bar graph for this grade (already gender-scoped server-side).
       const gtr = (trends && trends.byGrade || []).find(x => x.grade === u.grade);
@@ -3170,7 +3170,7 @@ async function renderTrends() {
       const ql = students.filter(s => s.quad === u.quad);
       const c = _svcAgg(ql, false), p = _svcAgg(ql, true);
       body += `<div class="sh">${QUAD_LABELS_LOCAL[u.quad]||u.quad}</div><div class="card">`;
-      body += statCard([c.uniq, c.avg], ['Unique attenders','Avg students/week'], _svcPrevSub(p));
+      body += statCard([c.uniq, c.avg], ['Seen','Weekly'], _svcPrevSub(p));
       body += '<div class="sh" style="margin-top:10px">By Grade</div>';
       const grades = u.quad==='g79'||u.quad==='b79' ? [7,8,9] : [10,11,12];
       for (const gr of grades) {
@@ -3179,8 +3179,8 @@ async function renderTrends() {
         const gc = _svcAgg(gl2, false), gp = _svcAgg(gl2, true);
         body += `<div style="border-top:1px solid var(--paper-dark);padding:7px 0 5px 20px">
           <div style="font-size:13px;font-weight:600">Year ${gr}${_gsfx(_loginGender(u))}</div>
-          <div style="font-size:12px;color:var(--ink-mid)"><b style="color:var(--ink)">${gc.uniq}</b> uniq · <b style="color:var(--ink)">${gc.avg}</b> avg/wk</div>
-          ${gp.weeks>0?`<div style="font-size:11px;color:var(--ink-faint)">prev term: ${gp.uniq} uniq · ${gp.avg} avg/wk</div>`:''}
+          <div style="font-size:12px;color:var(--ink-mid)"><b style="color:var(--ink)">${gc.uniq}</b> seen · <b style="color:var(--ink)">${gc.avg}</b> weekly</div>
+          ${gp.weeks>0?`<div style="font-size:11px;color:var(--ink-faint)">prev term: ${gp.uniq} seen · ${gp.avg} weekly</div>`:''}
         </div>`;
       }
       body += '</div>';
@@ -3196,9 +3196,9 @@ async function renderTrends() {
         body += `<div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('${qid}')">
           <span class="drop-chev" style="font-size:12px">›</span>
           <div style="flex:1;font-weight:700;font-size:14px">${q.label}</div>
-          <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${c.uniq} uniq · ${c.avg} avg/wk</span>
+          <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${c.uniq} seen · ${c.avg} weekly</span>
         </div>`;
-        if (p.weeks>0) body += `<div style="font-size:11px;color:var(--ink-faint);padding-left:20px;margin-top:2px">prev term: ${p.uniq} uniq · ${p.avg} avg/wk</div>`;
+        if (p.weeks>0) body += `<div style="font-size:11px;color:var(--ink-faint);padding-left:20px;margin-top:2px">prev term: ${p.uniq} seen · ${p.avg} weekly</div>`;
         body += `<div class="drop-body">`;
         {
           const grades = q.quad==='g79'||q.quad==='b79' ? [7,8,9] : [10,11,12];
@@ -3208,7 +3208,7 @@ async function renderTrends() {
             const gc = _svcAgg(gl2, false), gp = _svcAgg(gl2, true);
             body += `<div style="border-top:1px solid var(--paper-dark);padding:7px 0 5px">
                 <div style="font-size:13px;font-weight:600;padding-left:20px;margin-bottom:2px">Year ${gr}${_gsfx(quadGender(q.quad))}</div>
-                <div style="padding-left:20px;font-size:12px;color:var(--ink-mid)"><b style="color:var(--ink)">${gc.uniq}</b> uniq · <b style="color:var(--ink)">${gc.avg}</b> avg/wk${gp.weeks>0?` <span style="color:var(--ink-faint)">(prev ${gp.uniq} · ${gp.avg})</span>`:''}</div>
+                <div style="padding-left:20px;font-size:12px;color:var(--ink-mid)"><b style="color:var(--ink)">${gc.uniq}</b> seen · <b style="color:var(--ink)">${gc.avg}</b> weekly${gp.weeks>0?` <span style="color:var(--ink-faint)">(prev ${gp.uniq} · ${gp.avg})</span>`:''}</div>
               </div>`;
           }
         }
@@ -3226,7 +3226,7 @@ async function renderTrends() {
       const oc = lgStats.overall.current, op = lgStats.overall.previous;
       body += `<div class="sh">Overview</div><div class="card">`;
       body += `<div style="font-size:12px;color:var(--ink-mid);margin-bottom:8px">Individuals attending a lifegroup · this term</div>`;
-      body += statCard([oc.uniqueAttenders, oc.avgPerWeek], ['Unique attenders','Avg/week'],
+      body += statCard([oc.uniqueAttenders, oc.avgPerWeek], ['Seen','Weekly'],
         op.weeksRan>0 ? ['prev: '+op.uniqueAttenders, 'prev: '+op.avgPerWeek] : null);
       body += `<div style="font-size:11px;color:var(--ink-faint);margin-top:6px">${oc.weeksRan} week${oc.weeksRan===1?'':'s'} ran this term${op.weeksRan>0?' · '+op.weeksRan+' previous':''}</div>`;
       // Weekly lifegroup attendance chart (current term) — bar = individuals that week
@@ -3260,9 +3260,9 @@ async function renderTrends() {
           body += `<div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('${qid}')">
             <span class="drop-chev" style="font-size:12px">›</span>
             <div style="flex:1;font-weight:700;font-size:14px">${q.label}</div>
-            <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${q.current.uniqueAttenders} uniq · ${q.current.avgPerWeek} avg/wk</span>
+            <span style="font-size:12px;font-weight:700;color:var(--ink-mid)">${q.current.uniqueAttenders} seen · ${q.current.avgPerWeek} weekly</span>
           </div>`;
-          if (q.previous.weeksRan>0) body += `<div style="font-size:11px;color:var(--ink-faint);padding-left:20px;margin-top:2px">prev term: ${q.previous.uniqueAttenders} uniq · ${q.previous.avgPerWeek} avg/wk</div>`;
+          if (q.previous.uniqueAttenders>0 || q.previous.members>0) body += `<div style="font-size:11px;color:var(--ink-faint);padding-left:20px;margin-top:2px">prev term: ${q.previous.uniqueAttenders} seen · ${q.previous.avgPerWeek} weekly</div>`;
           body += `<div class="drop-body">`;
           // Use the quad's own GENDERED per-grade breakdown (not the combined byGrade).
           const gradeStats = q.grades || [];
@@ -3281,7 +3281,7 @@ async function renderTrends() {
 async function exportTrendsCSV() {
   try {
     const students = await API.get('/students');
-    const rows = [['Grade','Students','Unique Svc','Avg Svc Sess','Grp Enrolled','Unique Grp','Avg Grp Sess']];
+    const rows = [['Grade','Students','Seen Svc','Avg Svc Sess','Grp Enrolled','Seen Grp','Avg Grp Sess']];
     for (const gr of [7,8,9,10,11,12]) {
       const gs = students.filter(s=>s.grade===gr);
       if (!gs.length) continue;
@@ -4441,7 +4441,7 @@ function ytdStrip(){
   const cells=terms.map(t=>{
     const pt=AUDIT.perTerm[t.key]||{svcTotal:0,byStudent:{}};
     const uniq=Object.values(pt.byStudent).filter(a=>a.svcAttended>0).length;
-    return '<div style="flex:1;min-width:70px;text-align:center;padding:6px;border-right:1px solid var(--ca-line)"><div style="font-size:.58rem;color:var(--ca-muted);text-transform:uppercase;font-weight:700">T'+t.ordinal+(pt.inProgress?' ·':'')+'</div><div style="font-size:1rem;font-weight:800">'+uniq+'</div><div style="font-size:.54rem;color:var(--ca-muted)">unique · '+pt.svcTotal+' svc</div></div>';
+    return '<div style="flex:1;min-width:70px;text-align:center;padding:6px;border-right:1px solid var(--ca-line)"><div style="font-size:.58rem;color:var(--ca-muted);text-transform:uppercase;font-weight:700">T'+t.ordinal+(pt.inProgress?' ·':'')+'</div><div style="font-size:1rem;font-weight:800">'+uniq+'</div><div style="font-size:.54rem;color:var(--ca-muted)">seen · '+pt.svcTotal+' svc</div></div>';
   }).join('');
   return '<div class="card" style="display:flex;padding:4px 0;margin-bottom:8px">'+cells+'</div>';
 }
@@ -4607,7 +4607,7 @@ function rGroups(){
   const rc='text-align:right;padding:7px 8px;white-space:nowrap';
   b+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.72rem">'
     +'<thead><tr style="color:var(--ca-muted)"><th style="text-align:left;padding:8px 10px">Lifegroup</th>'
-    +['Enrolled','Unique','Visits/unique','Run','Weekly'].map(h=>'<th style="'+rc+'">'+h+'</th>').join('')
+    +['Enrolled','Seen','Visits/person','Run','Weekly'].map(h=>'<th style="'+rc+'">'+h+'</th>').join('')
     +'</tr></thead><tbody>';
   for(const r of rows){
     b+='<tr style="border-top:1px solid var(--ca-line)"><td style="padding:7px 10px;font-weight:600">'+esc(r.name)+'</td>'
@@ -4620,7 +4620,7 @@ function rGroups(){
 function showGroup(id){
   const g=model().groups.find(x=>x.id===id);if(!g)return;
   let h='<div style="font-size:1rem;font-weight:800;margin-bottom:6px">'+esc(g.name)+'</div>'
-    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:.72rem;color:var(--ca-muted)">'+g.enrolled+' enrolled · '+g.active+' active · '+g.va+' visits/unique · '+g.weeksRun+' weeks run</span>'+gChip(g)+'</div>';
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:.72rem;color:var(--ca-muted)">'+g.enrolled+' enrolled · '+g.active+' active · '+g.va+' visits/person · '+g.weeksRun+' weeks run</span>'+gChip(g)+'</div>';
   h+='<div style="max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid var(--ca-line)">';
   for(const s of g.mem.slice().sort((a,b)=>b.gA-a.gA)){
     h+='<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--ca-line)"><div style="font-size:.8rem;font-weight:600">'+esc(s.fn+' '+s.ln)+'</div><div style="font-size:.72rem;color:var(--ca-muted)">'+s.gA+'/'+s.gT+' lifegroups · '+s.sA+'/'+s.sT+' Fridays</div></div>';
@@ -4870,7 +4870,7 @@ function buildDeck(){
     const rows=lifegroupRows().sort((a,b)=>b.unique-a.unique||a.name.localeCompare(b.name));
     if(!rows.length)return '<p class="muted">No lifegroup data.</p>';
     const tr=rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td class="r">'+r.enrolled+'</td><td class="r">'+r.unique+'</td><td class="r">'+r.vpu+'</td><td class="r">'+r.run+'</td><td class="r">'+r.avgT+'</td><td class="r">'+r.avgL+'</td></tr>').join('');
-    return '<table class="lgt"><thead><tr><th>Lifegroup</th><th class="r">Enrolled</th><th class="r">Unique</th><th class="r">Visits/unique</th><th class="r">Run</th><th class="r">Avg this</th><th class="r">Avg last</th></tr></thead><tbody>'+tr+'</tbody></table>';
+    return '<table class="lgt"><thead><tr><th>Lifegroup</th><th class="r">Enrolled</th><th class="r">Seen</th><th class="r">Visits/person</th><th class="r">Run</th><th class="r">Weekly this</th><th class="r">Weekly last</th></tr></thead><tbody>'+tr+'</tbody></table>';
   };
   const tilesViz=()=>{
     const tile=(n,l)=>'<div class="tile ok"><b>'+n+'</b><span>'+esc(l)+'</span></div>';
@@ -4967,7 +4967,7 @@ function buildDeck(){
       ]},
     {kicker:'Deepen',
       title:'Lifegroups: where attendance becomes belonging',
-      core:partPct+'% of active youth attended a lifegroup (at least once this term) across '+lifegroupRows().length+' lifegroups'+(strongLg&&weakLg?'. '+strongLg.name+' is our strongest at '+strongLg.va+' visits/unique; '+weakLg.name+' most needs support at '+weakLg.va+'.':'.'),
+      core:partPct+'% of active youth attended a lifegroup (at least once this term) across '+lifegroupRows().length+' lifegroups'+(strongLg&&weakLg?'. '+strongLg.name+' is our strongest at '+strongLg.va+' visits/person; '+weakLg.name+' most needs support at '+weakLg.va+'.':'.'),
       body:lgTableViz(),
       notes:'Reframe lifegroups as the destination, not a programme. Trend is the term-over-term attendance-rate change for students we hold both terms for. Celebrate the strong cohort publicly; offer the weak one help privately — '+gDecl+' cohort'+(gDecl===1?' is':'s are')+' declining.',
       vizSuggest:['Slope chart: attendance rate last term → this term per cohort','Bar of visits-per-active, sorted, with the weakest flagged'],
