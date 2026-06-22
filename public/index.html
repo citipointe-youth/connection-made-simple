@@ -1101,6 +1101,13 @@ async function renderHome() {
   }
   setApp(shell('<div class="loading"><div class="spin"></div></div>'));
   try { await _renderHomeInner(false); } catch (err) { _homeError(err); }
+  // Cold load self-heal: if any endpoint failed this round (e.g. a slow
+  // /lifegroups/stats timed out during the serverless cold start), Home would
+  // otherwise show a degraded fallback number (weekly averages computed without
+  // the authoritative stats) until the user navigated away and back. Retry in the
+  // background and repaint once the instance is warm — same mechanism as the
+  // stale branch, so the wrong number self-corrects instead of sticking.
+  if (HOME_PATHS.some(p => Cache.get(p) === null)) _revalidateHome();
 }
 let _homeRevalidating = false;
 function _revalidateHome() {
@@ -3062,6 +3069,9 @@ async function renderTrends() {
       API.get('/lifegroups/stats').catch(() => null),
     ]);
     if (S.page !== _pg) return; // navigated away while awaiting — don't overwrite the new page
+    // Cold-load self-heal: retry any endpoint that failed (e.g. a timed-out
+    // /lifegroups/stats) so Trends doesn't sit on degraded numbers.
+    if (TREND_PATHS.some(p => Cache.get(p) === null)) _revalidateTrends();
   }
 
   const canExport = ['quad','director','admin'].includes(u.role);
