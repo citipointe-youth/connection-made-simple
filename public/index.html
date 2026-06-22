@@ -4072,9 +4072,39 @@ async function load(force){
       return {id:s.id,fn:s.firstName,ln:s.lastName,gender:s.gender,grade:s.grade,quad:s.quad,
         sA:c.sA,sT:c.sT,gA:c.gA,gT:c.gT, psA:p.sA,psT:p.sT,pgA:p.gA,pgT:p.gT, ph:'',pp:''};
     }),
-    trends:null, settings:settings||{}, lgStats:null,
+    trends:null, settings:settings||{}, lgStats:_auditLgStats(sel,prev),
   };
   return D;
+}
+// Assemble D.lgStats (the byQuad→grades→lifegroups shape lifegroupRows() expects)
+// from the snapshot's per-term lifegroup stats: `sel` terms = current scope,
+// `prev` terms = the comparison ("avg last") column.
+function _lgCombine(lists){
+  const m={};
+  for(const list of lists)for(const x of (list||[])){
+    let e=m[x.lifegroupId];
+    if(!e){e=m[x.lifegroupId]={lifegroupId:x.lifegroupId,name:x.name,grade:x.grade,gender:x.gender,quad:x.quad,members:0,uniqueAttenders:0,totalVisits:0,weeksRan:0};}
+    e.members=Math.max(e.members,x.members);e.uniqueAttenders=Math.max(e.uniqueAttenders,x.uniqueAttenders);
+    e.totalVisits+=x.totalVisits;e.weeksRan+=x.weeksRan;
+  }
+  return Object.keys(m).map(id=>{const e=m[id];e.avgPerWeek=e.weeksRan?Math.round(e.totalVisits/e.weeksRan):0;return e;});
+}
+function _auditLgStats(sel,prev){
+  const by=(AUDIT&&AUDIT.lgStatsByTerm)||null;if(!by)return null;
+  const curList=_lgCombine((sel||[]).map(t=>by[t.key]||[]));
+  const prevList=_lgCombine((prev||[]).map(t=>by[t.key]||[]));
+  const prevById={};for(const x of prevList)prevById[x.lifegroupId]=x;
+  const quads={};
+  for(const x of curList){
+    const q=x.quad||'uncl',g=(x.grade==null?0:x.grade);
+    quads[q]=quads[q]||{quad:q,grades:{}};
+    quads[q].grades[g]=quads[q].grades[g]||{grade:(x.grade==null?null:x.grade),lifegroups:[]};
+    const pv=prevById[x.lifegroupId];
+    quads[q].grades[g].lifegroups.push({lifegroupId:x.lifegroupId,name:x.name,grade:x.grade,
+      current:{members:x.members,uniqueAttenders:x.uniqueAttenders,totalVisits:x.totalVisits,weeksRan:x.weeksRan,avgPerWeek:x.avgPerWeek},
+      previous:pv?{avgPerWeek:pv.avgPerWeek}:{}});
+  }
+  return {byQuad:Object.keys(quads).map(q=>({quad:q,grades:Object.values(quads[q].grades)}))};
 }
 function sessSeries(){const t=D&&D.trends&&D.trends.ministry;return((t&&t.sessions)||[]).filter(x=>!x.isOutlier).map(x=>({date:x.sessionDate,v:x.totalAttended||0}));}
 function sessDates(){const ss=sessSeries();if(ss.length)return ss.map(x=>x.date);const a=[];for(let i=9;i>=0;i--)a.push(new Date(Date.now()-i*7*864e5).toISOString().slice(0,10));return a;}

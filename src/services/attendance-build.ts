@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
 import { computeQuad } from '../core/types/enums';
+import type { LabeledTerm } from './year-terms';
 
 // Pure CSV → attendance-model builders for the Connection Audit. The audit is a
 // self-contained snapshot: it parses its OWN year-to-date service + group CSVs
@@ -125,7 +126,10 @@ export function buildServiceModel(rows: unknown[], serviceMinAttendance: number)
 
 // ── group builder ──
 export interface BuiltWeek { id: string; weekStart: string; }
-export interface GroupRosterEntry { nameKey: string; firstName: string; lastName: string; }
+// Group-only members get grade/gender inferred from the LIFEGROUP NAME (e.g.
+// "Grade 9 Girls Lifegroup"), so a lifegroup attender who didn't match a service
+// record still lands in the right cohort instead of becoming a grade-less stub.
+export interface GroupRosterEntry { nameKey: string; firstName: string; lastName: string; grade: number | null; gender: 'male' | 'female' | null; }
 export interface GroupParsed {
   weeks: BuiltWeek[];
   roster: GroupRosterEntry[];
@@ -140,6 +144,16 @@ export interface GroupInput {
 
 const LEADER_RE = /\(\s*(?:assistant\s+)?leaders?\s*\)/i;
 const LEADER_RE_G = /\(\s*(?:assistant\s+)?leaders?\s*\)/ig;
+
+// Grade + gender from a lifegroup name, e.g. "Grade 9 Girls Lifegroup".
+export function parseGroupMeta(name: string): { grade: number | null; gender: 'male' | 'female' | null } {
+  const gm = name.match(/\bGrade\s+(\d+)\b/i);
+  const grade = gm ? parseInt(gm[1]!, 10) : null;
+  let gender: 'male' | 'female' | null = null;
+  if (/\bboys?\b/i.test(name)) gender = 'male';
+  else if (/\bgirls?\b/i.test(name)) gender = 'female';
+  return { grade, gender };
+}
 
 export function buildGroupModel(groups: GroupInput[]): GroupParsed {
   if (!Array.isArray(groups) || groups.length === 0) return { weeks: [], roster: [], attendance: [] };
@@ -157,6 +171,7 @@ export function buildGroupModel(groups: GroupInput[]): GroupParsed {
 
   for (const group of groups) {
     const groupId = generateId();
+    const meta = parseGroupMeta(group.name);
     const weekOfIdx = group.meetings.map((d) => weekStartOf(d));
 
     const youth = group.members.filter((m) => !LEADER_RE.test(`${m.first_name} ${m.last_name}`));
@@ -183,7 +198,11 @@ export function buildGroupModel(groups: GroupInput[]): GroupParsed {
       const cleanFirst = m.first_name.replace(LEADER_RE_G, ' ').replace(/\s+/g, ' ').trim();
       const cleanLast = m.last_name.replace(LEADER_RE_G, ' ').replace(/\s+/g, ' ').trim();
       const nameKey = nameKeyOf(cleanFirst, cleanLast);
-      rosterByName.set(nameKey, { nameKey, firstName: cleanFirst, lastName: cleanLast });
+      // First group wins for identity; prefer a group whose name yields a grade.
+      const existing = rosterByName.get(nameKey);
+      if (!existing || (existing.grade == null && meta.grade != null)) {
+        rosterByName.set(nameKey, { nameKey, firstName: cleanFirst, lastName: cleanLast, grade: meta.grade, gender: meta.gender });
+      }
 
       for (const w of weeksRanList) {
         attendance.push({ nameKey, weekId: ensureWeek(groupId, w), attended: attendedWeeks.has(w) });
@@ -201,4 +220,80 @@ export function buildGroupModel(groups: GroupInput[]): GroupParsed {
   });
 
   return { weeks: [...weekByKey.values()], roster: [...rosterByName.values()], attendance: deduped };
+}
+
+// ── per-named-lifegroup, per-term stats (powers the audit Lifegroup Health tab) ──
+// Lifegroup-centric: counts every attender of the group regardless of whether
+// they matched a service record, bucketed into terms by the group's meeting week.
+export interface AuditLgStat {
+  lifegroupId: string;
+  name: string;
+  grade: number | null;
+  gender: 'male' | 'female' | null;
+  quad: string | null;
+  members: number;        // distinct youth the group ran for this term
+  uniqueAttenders: number;
+  totalVisits: number;
+  weeksRan: number;
+  avgPerWeek: number;
+}
+
+export function buildLifegroupStats(groups: GroupInput[], terms: LabeledTerm[]): Record<string, AuditLgStat[]> {
+  const out: Record<string, AuditLgStat[]> = {};
+  for (const t of terms) out[t.key] = [];
+  if (!Array.isArray(groups) || groups.length === 0) return out;
+
+  const termFor = (weekStart: string): string | null => {
+    for (const t of terms) if (weekStart >= t.startDate && weekStart <= t.endDate) return t.key;
+    return null;
+  };
+
+  groups.forEach((group, gi) => {
+    const meta = parseGroupMeta(group.name);
+    const quad = (computeQuad(meta.grade, meta.gender ?? 'other') as string | null) ?? null;
+    const weekOfIdx = group.meetings.map((d) => weekStartOf(d));
+    const youth = group.members.filter((m) => !LEADER_RE.test(`${m.first_name} ${m.last_name}`));
+
+    // termKey -> { weeks, members, attenders, visits }
+    const perTerm = new Map<string, { weeks: Set<string>; members: Set<string>; attenders: Set<string>; visits: number }>();
+    const ensure = (k: string) => {
+      let a = perTerm.get(k);
+      if (!a) { a = { weeks: new Set(), members: new Set(), attenders: new Set(), visits: 0 }; perTerm.set(k, a); }
+      return a;
+    };
+
+    for (const m of youth) {
+      const key = nameKeyOf(m.first_name, m.last_name);
+      for (let i = 0; i < m.attendance.length; i++) {
+        const mark = m.attendance[i];
+        if (mark === null || mark === undefined) continue;
+        const w = weekOfIdx[i];
+        if (!w) continue;
+        const tk = termFor(w);
+        if (!tk) continue;
+        const acc = ensure(tk);
+        acc.weeks.add(w);
+        acc.members.add(key);
+        if (mark === true) { acc.attenders.add(key); acc.visits++; }
+      }
+    }
+
+    for (const [tk, acc] of perTerm) {
+      const weeksRan = acc.weeks.size;
+      out[tk]!.push({
+        lifegroupId: 'lg' + gi,
+        name: group.name,
+        grade: meta.grade,
+        gender: meta.gender,
+        quad,
+        members: acc.members.size,
+        uniqueAttenders: acc.attenders.size,
+        totalVisits: acc.visits,
+        weeksRan,
+        avgPerWeek: weeksRan ? Math.round(acc.visits / weeksRan) : 0,
+      });
+    }
+  });
+
+  return out;
 }

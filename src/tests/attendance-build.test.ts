@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildServiceModel, buildGroupModel, normaliseServiceDate } from '../services/attendance-build';
+import { buildServiceModel, buildGroupModel, buildLifegroupStats, normaliseServiceDate } from '../services/attendance-build';
+import { computeAllTerms } from '../services/year-terms';
 
 describe('normaliseServiceDate', () => {
   it('passes ISO through and normalises Excel short-dates', () => {
@@ -33,7 +34,7 @@ describe('buildServiceModel', () => {
 });
 
 describe('buildGroupModel', () => {
-  it('excludes leaders and zero-week members, keeps youth attendance', () => {
+  it('excludes leaders and zero-week members, keeps youth attendance, infers grade/gender from the group name', () => {
     const m = buildGroupModel([{
       name: 'Grade 9 Girls Lifegroup',
       meetings: ['2026-02-09', '2026-02-16'],
@@ -44,9 +45,31 @@ describe('buildGroupModel', () => {
       ],
     }]);
     expect(m.roster.map((r) => r.nameKey)).toEqual(['ava okafor']);
+    expect(m.roster[0]).toMatchObject({ grade: 9, gender: 'female' });
     expect(m.weeks).toHaveLength(2);
     const ava = m.attendance.filter((a) => a.nameKey === 'ava okafor');
     expect(ava).toHaveLength(2);
     expect(ava.filter((a) => a.attended)).toHaveLength(1);
+  });
+});
+
+describe('buildLifegroupStats', () => {
+  it('computes per-term per-lifegroup stats bucketed by term', () => {
+    // Boundary source is Monday-bucketed in production (computeYearAggregates),
+    // so lifegroup Mondays align with the term ranges.
+    const terms = computeAllTerms(['2026-02-02', '2026-02-09', '2026-04-20', '2026-04-27'], 14); // T1 (Feb), T2 (Apr)
+    const stats = buildLifegroupStats([{
+      name: 'Grade 9 Girls Lifegroup',
+      meetings: ['2026-02-09', '2026-04-20'], // one week in T1, one in T2
+      members: [
+        { first_name: 'Ava', last_name: 'Okafor', attendance: [true, true] },
+        { first_name: 'Maya', last_name: 'Lindqvist', attendance: [true, false] },
+      ],
+    }], terms);
+    const t1 = stats['2026-T1']!;
+    expect(t1).toHaveLength(1);
+    expect(t1[0]).toMatchObject({ name: 'Grade 9 Girls Lifegroup', grade: 9, quad: 'g79', uniqueAttenders: 2, weeksRan: 1, totalVisits: 2 });
+    const t2 = stats['2026-T2']!;
+    expect(t2[0]).toMatchObject({ uniqueAttenders: 1, weeksRan: 1, totalVisits: 1 });
   });
 });

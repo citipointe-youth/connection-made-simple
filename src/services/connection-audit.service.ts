@@ -5,8 +5,9 @@ import type { IConnectionAuditRepository, ISettingsRepository } from '../reposit
 import type { Actor } from '../core/entities/user';
 import type { ConnectionAudit, AuditSnapshot, AuditStudentRow, AuditUploadRow, AuditTermSnapshot } from '../core/entities/connection-audit';
 import { BadRequestError } from '../core/errors/app-error';
-import { buildServiceModel, buildGroupModel, type GroupInput } from './attendance-build';
+import { buildServiceModel, buildGroupModel, buildLifegroupStats, type GroupInput } from './attendance-build';
 import { computeYearAggregates } from './year-aggregates';
+import { computeQuad } from '../core/types/enums';
 
 // The CRM overlays (team/connect/decision/flows) are stored verbatim and echoed
 // back to the SPA — never computed server-side — so they round-trip as opaque
@@ -61,7 +62,12 @@ export function makeConnectionAuditService(
         if (idByName.has(r.nameKey)) continue;
         const id = generateId();
         idByName.set(r.nameKey, id);
-        studentByName.set(r.nameKey, { id, firstName: r.firstName, lastName: r.lastName, gender: 'other', grade: null, quad: null });
+        // Group-only youth get grade/gender inferred from their lifegroup name so
+        // they still land in the right cohort (group highlights / People), not as
+        // grade-less stubs that only show in the funnel count.
+        const gender = r.gender ?? 'other';
+        const quad = (r.grade != null && r.gender) ? (computeQuad(r.grade, r.gender) as string | null) : null;
+        studentByName.set(r.nameKey, { id, firstName: r.firstName, lastName: r.lastName, gender, grade: r.grade, quad });
       }
 
       const agg = computeYearAggregates({
@@ -93,6 +99,7 @@ export function makeConnectionAuditService(
         terms: agg.terms,
         students: [...studentByName.values()],
         perTerm,
+        lgStatsByTerm: buildLifegroupStats(data.group.groups as unknown as GroupInput[], agg.terms),
         uploads: {
           team: data.team as AuditUploadRow[],
           connect: data.connect as AuditUploadRow[],

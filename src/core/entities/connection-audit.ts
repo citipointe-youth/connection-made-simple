@@ -1,5 +1,6 @@
 import type { ID, ISODateString } from '../types/common';
 import type { LabeledTerm } from '../../services/year-terms';
+import type { AuditLgStat } from '../../services/attendance-build';
 
 // One CRM-upload overlay row (Student Team / Connect / Decision / People Flow).
 // Stored verbatim and rendered client-side. Team/Connect/Decision use {name,date};
@@ -31,6 +32,8 @@ export interface AuditSnapshot {
   terms: LabeledTerm[];
   students: AuditStudentRow[];
   perTerm: Record<string, AuditTermSnapshot>;
+  // Per-named-lifegroup stats keyed by term — powers the Lifegroup Health tab.
+  lgStatsByTerm: Record<string, AuditLgStat[]>;
   uploads: {
     team: AuditUploadRow[];
     connect: AuditUploadRow[];
