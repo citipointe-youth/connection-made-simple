@@ -126,10 +126,7 @@ export function buildServiceModel(rows: unknown[], serviceMinAttendance: number)
 
 // ── group builder ──
 export interface BuiltWeek { id: string; weekStart: string; }
-// Group-only members get grade/gender inferred from the LIFEGROUP NAME (e.g.
-// "Grade 9 Girls Lifegroup"), so a lifegroup attender who didn't match a service
-// record still lands in the right cohort instead of becoming a grade-less stub.
-export interface GroupRosterEntry { nameKey: string; firstName: string; lastName: string; grade: number | null; gender: 'male' | 'female' | null; }
+export interface GroupRosterEntry { nameKey: string; firstName: string; lastName: string; }
 export interface GroupParsed {
   weeks: BuiltWeek[];
   roster: GroupRosterEntry[];
@@ -171,7 +168,6 @@ export function buildGroupModel(groups: GroupInput[]): GroupParsed {
 
   for (const group of groups) {
     const groupId = generateId();
-    const meta = parseGroupMeta(group.name);
     const weekOfIdx = group.meetings.map((d) => weekStartOf(d));
 
     const youth = group.members.filter((m) => !LEADER_RE.test(`${m.first_name} ${m.last_name}`));
@@ -198,11 +194,7 @@ export function buildGroupModel(groups: GroupInput[]): GroupParsed {
       const cleanFirst = m.first_name.replace(LEADER_RE_G, ' ').replace(/\s+/g, ' ').trim();
       const cleanLast = m.last_name.replace(LEADER_RE_G, ' ').replace(/\s+/g, ' ').trim();
       const nameKey = nameKeyOf(cleanFirst, cleanLast);
-      // First group wins for identity; prefer a group whose name yields a grade.
-      const existing = rosterByName.get(nameKey);
-      if (!existing || (existing.grade == null && meta.grade != null)) {
-        rosterByName.set(nameKey, { nameKey, firstName: cleanFirst, lastName: cleanLast, grade: meta.grade, gender: meta.gender });
-      }
+      if (!rosterByName.has(nameKey)) rosterByName.set(nameKey, { nameKey, firstName: cleanFirst, lastName: cleanLast });
 
       for (const w of weeksRanList) {
         attendance.push({ nameKey, weekId: ensureWeek(groupId, w), attended: attendedWeeks.has(w) });

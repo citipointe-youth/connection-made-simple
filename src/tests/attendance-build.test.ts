@@ -34,7 +34,7 @@ describe('buildServiceModel', () => {
 });
 
 describe('buildGroupModel', () => {
-  it('excludes leaders and zero-week members, keeps youth attendance, infers grade/gender from the group name', () => {
+  it('excludes leaders and zero-week members, keeps youth attendance', () => {
     const m = buildGroupModel([{
       name: 'Grade 9 Girls Lifegroup',
       meetings: ['2026-02-09', '2026-02-16'],
@@ -45,7 +45,6 @@ describe('buildGroupModel', () => {
       ],
     }]);
     expect(m.roster.map((r) => r.nameKey)).toEqual(['ava okafor']);
-    expect(m.roster[0]).toMatchObject({ grade: 9, gender: 'female' });
     expect(m.weeks).toHaveLength(2);
     const ava = m.attendance.filter((a) => a.nameKey === 'ava okafor');
     expect(ava).toHaveLength(2);

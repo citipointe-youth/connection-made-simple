@@ -7,7 +7,6 @@ import type { ConnectionAudit, AuditSnapshot, AuditStudentRow, AuditUploadRow, A
 import { BadRequestError } from '../core/errors/app-error';
 import { buildServiceModel, buildGroupModel, buildLifegroupStats, type GroupInput } from './attendance-build';
 import { computeYearAggregates } from './year-aggregates';
-import { computeQuad } from '../core/types/enums';
 
 // The CRM overlays (team/connect/decision/flows) are stored verbatim and echoed
 // back to the SPA — never computed server-side — so they round-trip as opaque
@@ -62,12 +61,11 @@ export function makeConnectionAuditService(
         if (idByName.has(r.nameKey)) continue;
         const id = generateId();
         idByName.set(r.nameKey, id);
-        // Group-only youth get grade/gender inferred from their lifegroup name so
-        // they still land in the right cohort (group highlights / People), not as
-        // grade-less stubs that only show in the funnel count.
-        const gender = r.gender ?? 'other';
-        const quad = (r.grade != null && r.gender) ? (computeQuad(r.grade, r.gender) as string | null) : null;
-        studentByName.set(r.nameKey, { id, firstName: r.firstName, lastName: r.lastName, gender, grade: r.grade, quad });
+        // Authoritative grade/gender comes ONLY from a service name-match (same as
+        // the live importer). A group-only youth with no service record stays
+        // grade-less; their lifegroup activity still surfaces in Lifegroup Health
+        // (which attributes by the lifegroup's own grade, not the student's).
+        studentByName.set(r.nameKey, { id, firstName: r.firstName, lastName: r.lastName, gender: 'other', grade: null, quad: null });
       }
 
       const agg = computeYearAggregates({
