@@ -11,23 +11,37 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Connection">
-<meta name="theme-color" content="#2563eb">
+<meta name="theme-color" content="#1a1af2">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icons/icon.svg">
 <title>Youth Connection</title>
 <style>
+/* Display face — self-hosted Space Grotesk (geometric, echoes the YS logo).
+   Single latin woff2; CSP-safe (font-src 'self'). Falls back to the system stack. */
+@font-face{
+  font-family:'Space Grotesk';
+  font-style:normal;
+  font-weight:500 700;
+  font-display:swap;
+  src:url('/fonts/space-grotesk-latin.woff2') format('woff2');
+}
 :root{
-  --accent:#2563eb;--accent-dark:#1d4ed8;--accent-light:#dbeafe;
-  --navy:#12233b;
+  /* Brand palette — matched to the YS logo (electric ultramarine) */
+  --accent:#1a1af2;--accent-dark:#1111c9;--accent-light:#ececff;
+  --navy:#0a0a2e;
   --danger:#ef4444;--danger-light:#fee2e2;--warn:#f59e0b;--warn-light:#fef3c7;
   --success:#10b981;--success-light:#d1fae5;
   --ink:#1f2937;--ink-mid:#647488;--ink-faint:#94a3b8;
   --paper:#f4f7fc;--paper-card:#ffffff;--paper-dark:#e8edf4;
-  --line:#e8edf4;--chip:#eef4ff;
+  --line:#e8edf4;--chip:#ececff;
   --radius:12px;--radius-sm:8px;
   --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
   --shadow-md:0 4px 12px rgba(18,35,59,.10),0 2px 4px rgba(0,0,0,.05);
   --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-display:'Space Grotesk','Segoe UI',var(--font);
+  /* Type scale — 8 steps, 11px legibility floor (no UI text below 11px) */
+  --t-display:34px;--t-h1:24px;--t-h2:19px;--t-title:16px;
+  --t-body:15px;--t-sm:13px;--t-label:12px;--t-micro:11px;
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
 }
@@ -41,8 +55,9 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 #app{display:flex;flex-direction:column;min-height:100vh;max-width:100%;overflow-x:hidden}
 
 /* Header */
-.hdr{background:linear-gradient(135deg,var(--navy) 0%,#1a3a6b 100%);color:#fff;padding:var(--safe-t) 16px 0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(18,35,59,.25)}
-.hdr h1{font-size:17px;font-weight:800;letter-spacing:-.3px}
+.hdr{background:linear-gradient(150deg,var(--accent) 0%,var(--navy) 130%);color:#fff;padding:var(--safe-t) 16px 0;box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(10,10,46,.28)}
+.hdr h1{font-family:var(--font-display);font-size:18px;font-weight:700;letter-spacing:-.01em}
+.hdr-brand{display:flex;align-items:center;gap:9px}
 .hdr-top{display:flex;align-items:center;justify-content:space-between;height:56px}
 .hdr-meta{display:flex;align-items:center;gap:10px}
 .role-badge{background:rgba(255,255,255,.18);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;text-transform:uppercase;white-space:nowrap}
@@ -66,7 +81,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 
 /* Bottom nav */
 .bot-nav{display:flex;background:var(--paper-card);border-top:1px solid var(--line);padding:6px 0 calc(6px + var(--safe-b));position:fixed;left:0;right:0;bottom:0;z-index:100;box-shadow:0 -2px 8px rgba(18,35,59,.06)}
-.bot-nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;padding:4px 2px;cursor:pointer;transition:color .15s}
+.bot-nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.01em;padding:4px 2px;cursor:pointer;transition:color .15s}
 .bot-nav a.on{color:var(--accent)}
 .bot-nav a .ic-n{transition:color .15s}
 @media(min-width:768px){.bot-nav{display:none}}
@@ -85,8 +100,8 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px}
 @media(min-width:480px){.stat-grid{grid-template-columns:repeat(4,1fr)}}
 .stat{background:var(--paper-card);border-radius:var(--radius-sm);box-shadow:var(--shadow);border:1px solid var(--line);padding:14px;text-align:center}
-.stat-v{font-size:30px;font-weight:800;color:var(--navy);line-height:1}
-.stat-l{font-size:10px;font-weight:700;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.stat-v{font-family:var(--font-display);font-size:30px;font-weight:700;letter-spacing:-.01em;color:var(--navy);line-height:1}
+.stat-l{font-size:11px;font-weight:700;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
 
 /* Buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;border:none;white-space:nowrap}
@@ -143,11 +158,11 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 
 /* Page headers */
 .ph{margin-bottom:16px}
-.ph-title{font-size:22px;font-weight:800;letter-spacing:-.5px}
+.ph-title{font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.02em}
 .ph-sub{font-size:14px;color:var(--ink-mid);margin-top:4px}
 
 /* Section headers */
-.sh{font-size:10px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.8px;margin:20px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--paper-dark)}
+.sh{font-size:11px;font-weight:700;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.8px;margin:20px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--paper-dark)}
 
 /* Empty state */
 .empty{text-align:center;padding:48px 24px;color:var(--ink-mid)}
@@ -161,7 +176,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .mo-box{background:var(--paper-card);border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:94vh;overflow-y:auto;padding:18px 18px max(18px,env(safe-area-inset-bottom));animation:rise .2s}
 @media(min-width:768px){.mo-box{border-radius:var(--radius)}}
 .mo-handle{width:40px;height:4px;background:var(--paper-dark);border-radius:2px;margin:0 auto 16px}
-.mo-title{font-size:18px;font-weight:800;margin-bottom:16px}
+.mo-title{font-family:var(--font-display);font-size:18px;font-weight:700;letter-spacing:-.01em;margin-bottom:16px}
 
 /* Filters */
 .filter-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;align-items:center}
@@ -182,11 +197,12 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .al-warn{background:var(--warn-light);color:#92400e}
 
 /* Login */
-.login-pg{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%)}
+.login-pg{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:linear-gradient(150deg,var(--accent) 0%,var(--navy) 130%)}
 .login-card{background:#fff;border-radius:var(--radius);padding:28px;width:100%;max-width:380px;box-shadow:0 20px 40px rgba(0,0,0,.2)}
 .login-logo{text-align:center;margin-bottom:20px}
 .login-logo .icon{display:flex;justify-content:center;margin-bottom:8px;color:var(--navy)}
-.login-logo h1{font-size:22px;font-weight:800}
+.login-badge{width:74px;height:74px;border-radius:20px;background:linear-gradient(150deg,var(--accent),var(--navy));display:flex;align-items:center;justify-content:center;margin:0 auto 14px;box-shadow:0 10px 24px rgba(26,26,242,.32)}
+.login-logo h1{font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em}
 .login-logo p{font-size:13px;color:var(--ink-mid);margin-top:4px}
 
 /* Spinner */
@@ -194,6 +210,13 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes rise{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
 .loading{display:flex;justify-content:center;padding:40px}
+
+/* Respect reduced-motion: keep the spinner (it conveys loading state) but drop
+   decorative transitions/animations. */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:.001ms!important;animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}
+  .spin{animation-duration:.6s!important;animation-iteration-count:infinite!important}
+}
 
 /* Toast */
 #toast{position:fixed;bottom:calc(76px + var(--safe-b));left:50%;transform:translateX(-50%) translateY(10px);background:rgba(17,24,39,.92);color:#fff;padding:10px 18px;border-radius:20px;font-size:14px;font-weight:500;pointer-events:none;opacity:0;transition:all .22s;z-index:300;white-space:nowrap;max-width:92vw;text-align:center}
@@ -351,7 +374,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .ni-lbl{display:flex;flex-direction:column;align-items:center;line-height:1.15}
 
 /* ── CA MODULE CSS START ── */
-:root{--ca-navy:#12233b;--ca-blue:#2563eb;--ca-teal:#0ea5a4;--ca-amber:#f59e0b;--ca-rose:#e11d48;--ca-green:#16a34a;--ca-paper:#f4f7fc;--ca-card:#fff;--ca-ink:#1f2937;--ca-muted:#647488;--ca-line:#e8edf4;--ca-chip:#eef4ff;--ca-r:14px;--ca-rs:11px;--ca-sh:0 3px 10px rgba(18,35,59,.05);}
+:root{--ca-navy:#0a0a2e;--ca-blue:#1a1af2;--ca-teal:#0ea5a4;--ca-amber:#f59e0b;--ca-rose:#e11d48;--ca-green:#16a34a;--ca-paper:#f4f7fc;--ca-card:#fff;--ca-ink:#1f2937;--ca-muted:#647488;--ca-line:#e8edf4;--ca-chip:#ececff;--ca-r:14px;--ca-rs:11px;--ca-sh:0 3px 10px rgba(10,10,46,.06);}
 .ca-cw{background:#fef3c7;color:#92660b}
 .ca-av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:.74rem;font-weight:700;flex:none}
 .ca-av.f{background:#fce4f1;color:#c0257e}.ca-av.m{background:#dbe6ff;color:#2851a3}.ca-av.n{background:#fef3c7;color:#92660b}
@@ -563,7 +586,7 @@ function _initShell() {
   document.getElementById('app').innerHTML = `
     <div class="hdr">
       <div class="hdr-top">
-        <h1>Youth Connection</h1>
+        <div class="hdr-brand">${brandMark(26, '#fff')}<h1>Youth Connection</h1></div>
         <div class="hdr-meta">
           ${roleBadge(u)}
           <div class="btn-icon" style="position:relative" onclick="go('notifications')" title="Notifications" aria-label="Notifications">${icN('bell')}<span id="notif-badge" class="notif-badge" hidden></span></div>
@@ -821,6 +844,13 @@ function icN(k){ return `<svg class="ic-n" viewBox="0 0 24 24">${IC[k]||''}</svg
 function icS(k){ return `<svg class="ic-s" viewBox="0 0 24 24">${IC[k]||''}</svg>`; }
 function icLg(k){ return `<svg class="ic-lg" viewBox="0 0 24 24">${IC[k]||''}</svg>`; }
 function icEmpty(k){ return `<svg class="empty-icon" viewBox="0 0 24 24">${IC[k]||''}</svg>`; }
+// YS brand mark — the square + open-funnel glyph from the logo. Fill-based (not a
+// stroke icon), so it lives outside the IC registry. `color` defaults to currentColor.
+function brandMark(px, color){
+  return `<svg width="${px}" height="${px}" viewBox="0 0 100 100" fill="${color||'currentColor'}" aria-hidden="true" style="flex-shrink:0">`
+    + `<rect x="40" y="20" width="20" height="20" rx="2"/>`
+    + `<path d="M16 44 H84 L60 80 H40 Z M50 64 L34 44 H66 Z" fill-rule="evenodd"/></svg>`;
+}
 
 function navItems() {
   const u = S.user; if (!u) return [];
@@ -941,7 +971,7 @@ function renderLogin() {
   document.getElementById('app').innerHTML = `
     <div class="login-pg">
       <div class="login-card">
-        <div class="login-logo"><div class="icon">${icLg('cross')}</div><h1>Youth Connection</h1><p>Sign in to continue</p></div>
+        <div class="login-logo"><div class="login-badge">${brandMark(42, '#fff')}</div><h1>Youth Connection</h1><p>Youth Society Brisbane · Sign in to continue</p></div>
         <div id="lerr"></div>
         <div class="fg"><label class="fl">Username</label><input class="fi" id="lemail" type="text" placeholder="" autocomplete="username"></div>
         <div class="fg"><label class="fl">Password</label><input class="fi" id="lpw" type="password" placeholder="••••••••" autocomplete="current-password"></div>
@@ -1005,12 +1035,14 @@ function _hGradeMini(label, studs, avgWk, gLg) {
   const sUniq = studs.filter(s => s.svcAttended > 0).length;
   const gUniq = studs.filter(s => s.grpAttended > 0).length;
   const gAvg = gLg ? gLg.current.avgPerWeek : 0;
-  const cell = (v, lbl) => `<div style="text-align:center"><span style="font-size:13px;font-weight:800">${v}</span><div style="font-size:8px;color:var(--ink-faint);text-transform:uppercase">${lbl}</div></div>`;
-  return `<div style="padding:5px 0;border-top:1px solid var(--paper-dark)">
-    <div style="font-size:11px;font-weight:700;color:var(--ink-mid);margin-bottom:3px">${label}</div>
+  const cell = (v, lbl, dim) => `<div style="text-align:center;background:${dim?'#eef0fb':'var(--paper)'};border-radius:6px;padding:4px 2px"><div style="font-family:var(--font-display);font-size:13px;font-weight:700${dim?';opacity:.72':''}">${v}</div><div style="font-size:11px;color:var(--ink-faint);font-weight:700;text-transform:uppercase">${lbl}</div></div>`;
+  const cap = (t) => `<span style="text-align:center;font-size:11px;font-weight:800;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.03em">${t}</span>`;
+  return `<div style="padding:6px 0;border-top:1px solid var(--paper-dark)">
+    <div style="font-size:11px;font-weight:800;color:var(--ink-mid);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em">${label}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px">
-      ${cell(sUniq,'Svc uniq')}${cell(avgWk,'Svc/wk')}${cell(gUniq,'Grp uniq')}${cell(gAvg,'Grp/wk')}
+      ${cell(sUniq,'Seen')}${cell(avgWk,'Weekly')}${cell(gUniq,'Seen',true)}${cell(gAvg,'Weekly',true)}
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px">${cap('Youth')}${cap('Group')}</div>
   </div>`;
 }
 function _hAttTile(label, studs, avgWk, opts) {
@@ -1022,16 +1054,16 @@ function _hAttTile(label, studs, avgWk, opts) {
   const grpAvg = (opts.grpAvgWk != null) ? opts.grpAvgWk : 0;
   const drop = !!opts.dropId;
   const chev = drop ? `<span class="drop-chev" style="display:inline-block;color:var(--ink-faint);font-weight:800">›</span>` : '';
-  const inner = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${chev}<div style="font-size:11px;font-weight:700;color:var(--ink-mid)">${label}</div></div>`
+  const inner = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${chev}<div style="font-size:13px;font-weight:700;color:var(--ink-mid)">${label}</div></div>`
     + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center;margin-bottom:3px">
-    <div style="font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px">Youth</div>
-    <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800">${svcUniq}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
-    <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800">${avgWk}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Avg/wk</div></div>
+    <div style="font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px">Youth</div>
+    <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${svcUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
+    <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${avgWk}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly avg</div></div>
   </div>`
     + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center">
-    <div style="font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px;opacity:.8">Groups</div>
-    <div style="text-align:center;background:rgba(0,0,0,.04);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800;opacity:.8">${grpUniq}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
-    <div style="text-align:center;background:rgba(0,0,0,.04);border-radius:4px;padding:3px 2px"><div style="font-size:15px;font-weight:800;opacity:.8">${grpAvg}</div><div style="font-size:8px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Avg/wk</div></div>
+    <div style="font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px;opacity:.8">Groups</div>
+    <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
+    <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpAvg}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly avg</div></div>
   </div>`;
   if (drop) {
     return `<div class="qcard drop" id="${opts.dropId}" style="padding:11px">`
@@ -1115,23 +1147,23 @@ async function _renderHomeInner(stale) {
   // max weeks any one group ran. Fall back to the per-student calc when stats absent.
   const grpAvgWk = lgStats ? lgStats.overall.current.avgPerWeek : (grpWeeks > 0 ? Math.round(grpAtt / grpWeeks) : 0);
 
-  let body = `<div style="background:linear-gradient(135deg,#1e3a5f,#2d5a8a);color:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px">`;
-  body += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:18px;font-weight:800;line-height:1.1;display:flex;align-items:center;gap:7px">${icN('users')} ${esc(u.displayName)}</div>${roleBadge(u)}</div>`;
-  body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><colgroup><col style="width:44%"><col style="width:28%"><col style="width:28%"></colgroup>`;
+  let body = `<div style="background:linear-gradient(150deg,var(--navy),#26276b);color:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px">`;
+  body += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-family:var(--font-display);font-size:19px;font-weight:700;letter-spacing:-.01em;line-height:1.1;display:flex;align-items:center;gap:7px">${icN('users')} ${esc(u.displayName)}</div>${roleBadge(u)}</div>`;
+  body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>`;
   body += `<thead><tr>
-    <th style="font-size:8px;font-weight:700;opacity:.45;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:3px">This term</th>
-    <th style="font-size:8px;font-weight:700;opacity:.55;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Unique</th>
-    <th style="font-size:8px;font-weight:700;opacity:.55;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Avg/wk</th>
+    <th style="font-size:11px;font-weight:700;opacity:.55;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:4px">This term</th>
+    <th style="font-size:11px;font-weight:700;opacity:.6;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:4px">Unique</th>
+    <th style="font-size:11px;font-weight:700;opacity:.6;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:4px">Weekly avg</th>
   </tr></thead><tbody>`;
   body += `<tr style="background:rgba(255,255,255,.1)">
-    <td style="font-size:11px;font-weight:800;opacity:.75;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td>
-    <td style="text-align:center;padding:5px 4px"><span style="font-size:19px;font-weight:800">${svcUniq}</span></td>
-    <td style="text-align:center;padding:5px 4px;border-radius:0 6px 6px 0"><span style="font-size:19px;font-weight:800">${svcAvg}</span></td>
+    <td style="font-size:13px;font-weight:700;opacity:.82;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td>
+    <td style="text-align:center;padding:5px 4px"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em">${svcUniq}</span></td>
+    <td style="text-align:center;padding:5px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em">${svcAvg}</span></td>
   </tr>`;
   body += `<tr style="background:rgba(255,255,255,.05)">
-    <td style="font-size:11px;font-weight:800;opacity:.6;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Groups</td>
-    <td style="text-align:center;padding:5px 4px"><span style="font-size:19px;font-weight:800;opacity:.8">${grpUniq}</span></td>
-    <td style="text-align:center;padding:5px 4px;border-radius:0 6px 6px 0"><span style="font-size:19px;font-weight:800;opacity:.8">${grpAvgWk}</span></td>
+    <td style="font-size:13px;font-weight:700;opacity:.62;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Groups</td>
+    <td style="text-align:center;padding:5px 4px"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em;opacity:.82">${grpUniq}</span></td>
+    <td style="text-align:center;padding:5px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em;opacity:.82">${grpAvgWk}</span></td>
   </tr></tbody></table>`;
 
   // Previous-term summary
@@ -1145,16 +1177,16 @@ async function _renderHomeInner(stale) {
     const pGrpUniq = sc.filter(s => s.prevGrpAttended > 0).length;
     const pGrpRun = pGrpEnr.length ? Math.max(...pGrpEnr.map(s => s.prevGrpTotal)) : 0;
     const pGrpAvg = lgStats ? lgStats.overall.previous.avgPerWeek : (pGrpRun > 0 ? Math.round(pGrpAtt / pGrpRun) : 0);
-    body += `<button onclick="_toggleHomePrev()" style="margin-top:6px;background:rgba(255,255,255,.1);border:none;color:#fff;opacity:.7;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:6px;padding:3px 8px;cursor:pointer;display:flex;align-items:center;gap:5px"><span id="home-prev-chev" style="display:inline-block;transition:transform .15s">›</span> Prev term</button>`;
+    body += `<button onclick="_toggleHomePrev()" style="margin-top:6px;background:rgba(255,255,255,.1);border:none;color:#fff;opacity:.75;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:6px;padding:4px 9px;cursor:pointer;display:flex;align-items:center;gap:5px"><span id="home-prev-chev" style="display:inline-block;transition:transform .15s">›</span> Prev term</button>`;
     body += `<div id="home-prev-body" style="display:none">`;
-    body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:5px"><colgroup><col style="width:44%"><col style="width:28%"><col style="width:28%"></colgroup>`;
+    body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin-top:5px"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>`;
     body += `<thead><tr>
-      <th style="font-size:7px;font-weight:700;opacity:.3;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:2px">Prev term</th>
-      <th style="font-size:7px;font-weight:700;opacity:.3;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:2px">Unique</th>
-      <th style="font-size:7px;font-weight:700;opacity:.3;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:2px">Avg/wk</th>
+      <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:3px">Prev term</th>
+      <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Unique</th>
+      <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Weekly avg</th>
     </tr></thead><tbody>`;
-    if (pSvcTot > 0) body += `<tr style="background:rgba(255,255,255,.06)"><td style="font-size:10px;font-weight:800;opacity:.45;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td><td style="text-align:center;padding:3px 4px"><span style="font-size:13px;font-weight:800;opacity:.6">${pSvcUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-size:13px;font-weight:800;opacity:.6">${pSvcAvg}</span></td></tr>`;
-    if (pGrpTot > 0) body += `<tr style="background:rgba(255,255,255,.03)"><td style="font-size:10px;font-weight:800;opacity:.4;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Groups</td><td style="text-align:center;padding:3px 4px"><span style="font-size:13px;font-weight:800;opacity:.5">${pGrpUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-size:13px;font-weight:800;opacity:.5">${pGrpAvg}</span></td></tr>`;
+    if (pSvcTot > 0) body += `<tr style="background:rgba(255,255,255,.06)"><td style="font-size:12px;font-weight:700;opacity:.5;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcAvg}</span></td></tr>`;
+    if (pGrpTot > 0) body += `<tr style="background:rgba(255,255,255,.03)"><td style="font-size:12px;font-weight:700;opacity:.45;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Groups</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpAvg}</span></td></tr>`;
     body += `</tbody></table>`;
     body += `</div>`;
   }
@@ -2284,7 +2316,7 @@ async function renderMyStudents() {
     if (leader) {
       body += `<div class="card" style="text-align:center;padding:18px;margin-bottom:16px">
         <div style="font-size:36px;margin-bottom:8px">${leader.gender === 'female' ? '♀' : leader.gender === 'male' ? '♂' : '⚥'}</div>
-        <div style="font-size:18px;font-weight:800">${esc(leader.fullName)}</div>
+        <div style="font-family:var(--font-display);font-size:19px;font-weight:700;letter-spacing:-.01em">${esc(leader.fullName)}</div>
         <div style="font-size:13px;color:var(--ink-mid);margin-top:4px">Gr ${leader.grades?.join(', ') || 'All'} · ${leader.gender || 'any gender'}</div>
       </div>`;
     }
@@ -2495,7 +2527,7 @@ async function renderMyQuad() {
               <div class="li-sub" style="margin-top:3px">Gr ${s.grade||'—'} · ${s.gender}</div>
               <div style="display:flex;gap:16px;margin-top:8px">
                 <div>
-                  <div style="font-size:10px;color:var(--ink-faint);font-weight:700;text-transform:uppercase">Service</div>
+                  <div style="font-size:11px;color:var(--ink-faint);font-weight:700;text-transform:uppercase">Service</div>
                   <div style="font-size:13px;font-weight:700;color:${pct<50?'var(--danger)':'var(--ink)'}">${s.svcAttended}/${s.svcTotal} (${pct}%)</div>
                   <div class="pb" style="width:80px">${pBar(pct)}</div>
                 </div>
@@ -4383,7 +4415,7 @@ function rHub(){
   const m=model();
   const partPct=m.kpis.act?Math.round(m.kpis.inLG/m.kpis.act*100):0;
   const decl=m.groups.filter(g=>g.trend==='declining').length;
-  let b='<div class="card" style="background:linear-gradient(135deg,#12233b,#1a3a6b);color:#fff;padding:15px">'
+  let b='<div class="card" style="background:linear-gradient(150deg,#1a1af2,#0a0a2e);color:#fff;padding:15px">'
     +'<div style="font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;opacity:.7">'+esc(scopeLabel()||'This term')+'</div>'
     +'<div style="display:flex;gap:18px;margin-top:7px">'
     +'<div><div style="font-size:1.3rem;font-weight:800">'+m.kpis.act+'</div><div style="font-size:.56rem;opacity:.75;text-transform:uppercase">Active youth</div></div>'
@@ -4413,7 +4445,7 @@ function rOverview(){
     +'<div class="stat"><div class="stat-v">'+k.decisions+'</div><div class="stat-l">Decisions</div><div class="ca-dlt fl">this term</div></div>'
     +'</div>';
   const max=m.rungs[0].v||1;
-  const cols=['#0f1f3a','#1b3a6b','#2563eb','#4a82f0','#7aa8f7'];
+  const cols=['#0a0a2e','#1414a0','#1a1af2','#5b5bf7','#9a9afb'];
   b+='<div class="card"><div class="ca-ct">Integration ladder</div>'+m.rungs.map((r,i)=>'<div class="ca-lrow"><div class="ca-lname">'+r.lb+'</div><div class="ca-lbar"><div class="ca-lfill" style="width:'+Math.max(8,Math.round(r.v/max*100))+'%;background:'+cols[i]+'">'+r.v+'</div></div></div>').join('')+'</div>';
   const row=(g,chip)=>'<div class="ca-alr" onclick="CA.showGroup(\''+g.id+'\')"><div style="font-size:.78rem;font-weight:600">'+esc(g.name)+'</div>'+chip+'</div>';
   const tops=m.groups.slice().sort((a,b)=>b.trendPct-a.trendPct||b.va-a.va).slice(0,2);
@@ -4453,7 +4485,7 @@ function rOverview(){
 function fopen(){FO=!FO;rerender();}
 function rFunnel(){
   const m=model(),R=m.rungs;
-  const cols=[['#16294a','#0f1f3a'],['#234a85','#1b3a6b'],['#3672ee','#2563eb'],['#5b8ff2','#4a82f0'],['#8cb3f8','#7aa8f7']];
+  const cols=[['#16164d','#0a0a2e'],['#2020b0','#1414a0'],['#3b3bf5','#1a1af2'],['#6b6bf8','#5b5bf7'],['#a5a5fb','#9a9afb']];
   const convs=[];for(let i=1;i<R.length;i++)convs.push(R[i-1].v?Math.round(R[i].v/R[i-1].v*100):0);
   const leak=convs.indexOf(Math.min(...convs));
   let f='<div class="ca-fw">';
@@ -4952,7 +4984,7 @@ function buildDeck(){
     +'<div class="pn-col"><h4>Data-visualisation suggestions</h4><ul>'+(s.vizSuggest||[]).map(v=>'<li>'+esc(v)+'</li>').join('')+'</ul></div>'
     +'<div class="pn-col pn-obj"><h4>Likely objections &amp; persuasive responses</h4>'+(s.objections||[]).map(o=>'<div class="obj"><p class="q">&ldquo;'+esc(o.q)+'&rdquo;</p><p class="a">'+esc(o.a)+'</p></div>').join('')+'</div>'
     +'</div></aside></section>';
-  const CSS=':root{--navy:#12233b;--blue:#2563eb;--accent:#2563eb;--ink:#1f2937;--muted:#647488;--ok:#15803d;--warn:#dc2626;--line:#e8edf4;--bg:#f4f7fc;}'
+  const CSS=':root{--navy:#0a0a2e;--blue:#1a1af2;--accent:#1a1af2;--ink:#1f2937;--muted:#647488;--ok:#15803d;--warn:#dc2626;--line:#e8edf4;--bg:#f4f7fc;}'
     +'*{box-sizing:border-box;margin:0;padding:0;} html{-webkit-text-size-adjust:100%;}'
     +'body{font:16px/1.6 system-ui,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg);}'
     +'.deck{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:34px 18px 84px;}'
@@ -4976,7 +5008,7 @@ function buildDeck(){
     +'.frow{display:grid;grid-template-columns:minmax(120px,1.6fr) 5fr auto;align-items:center;gap:12px;}'
     +'.flabel{font-size:.92rem;font-weight:600;color:var(--ink);}'
     +'.ftrack{background:#eef2f8;border-radius:8px;height:26px;overflow:hidden;}'
-    +'.fbar{display:block;height:100%;background:#2563eb;border-radius:8px;}'
+    +'.fbar{display:block;height:100%;background:#1a1af2;border-radius:8px;}'
     +'.fbar.leaky{background:var(--warn);} .fval{font-weight:800;font-size:1.05rem;} .fval.leaky{color:var(--warn);}'
     +'.bignum{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:8px 0;}'
     +'.bignum b{font-size:clamp(3rem,9vw,6rem);line-height:1;font-weight:800;color:var(--warn);letter-spacing:-.03em;}'
@@ -4996,7 +5028,7 @@ function buildDeck(){
     +'.qfrow{display:grid;grid-template-columns:minmax(80px,1.5fr) 4fr auto;align-items:center;gap:7px;margin-bottom:4px;}'
     +'.qflb{font-size:.75rem;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
     +'.qftrack{background:#e2e8f0;border-radius:5px;height:14px;overflow:hidden;}'
-    +'.qfbar{display:block;height:100%;background:#2563eb;border-radius:5px;}'
+    +'.qfbar{display:block;height:100%;background:#1a1af2;border-radius:5px;}'
     +'.qfval{font-size:.8rem;font-weight:800;}'
     +'.vizwrap{margin:6px 0;} .spark{width:100%;max-width:680px;height:auto;display:block;}'
     +'.vcap{font-size:.8rem;color:var(--muted);margin-top:6px;}'
