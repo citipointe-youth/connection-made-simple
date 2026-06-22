@@ -2254,16 +2254,18 @@ async function renderUpcomingBirthdays() {
     const birthYear = Number(String(s.dateOfBirth).slice(0, 4));
     const turns = birthYear > 1900 ? when.getFullYear() - birthYear : null;
     const phone = s.mobile || s.parentPhone;
-    body += `<div class="li">
+    body += `<div class="li" style="position:relative;align-items:flex-start">
       <div class="li-body">
-        <div class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</div>
-        <div class="li-sub">Yr ${s.grade || '—'} · ${s.gender}${turns != null ? ' · turns ' + turns : ''}</div>
+        <div style="padding-right:56px">
+          <div class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</div>
+          <div class="li-sub">Yr ${s.grade || '—'} · ${s.gender}${turns != null ? ' · turns ' + turns : ''}</div>
+        </div>
         ${(leadersByStudent[s.id] || []).length
           ? `<div style="font-size:12px;margin-top:4px;color:var(--accent-dark);font-weight:600;display:flex;align-items:center;gap:5px">${icS('users')}<span>${leadersByStudent[s.id].map(esc).join(', ')}</span></div>`
           : `<div style="font-size:12px;margin-top:4px;color:var(--ink-faint)">No leader connected</div>`}
         ${phone ? `<div style="font-size:12px;margin-top:4px;color:var(--ink-mid)" onclick="event.stopPropagation()">${s.mobile ? `<span style="font-weight:600">Mobile:</span> ${phoneLink(s.mobile)}` : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? `<span style="font-weight:600">Parent:</span> ${phoneLink(s.parentPhone)}` : ''}</div>` : ''}
       </div>
-      <div class="li-right" style="text-align:right">
+      <div style="position:absolute;top:13px;right:13px;text-align:right">
         <div style="font-weight:800;font-size:14px">${f.day} ${f.month}</div>
         <div style="font-size:11px;color:var(--ink-faint)">${f.weekday}</div>
       </div>
