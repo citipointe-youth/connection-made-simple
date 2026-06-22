@@ -849,7 +849,7 @@ function icEmpty(k){ return `<svg class="empty-icon" viewBox="0 0 24 24">${IC[k]
 function brandMark(px, color){
   return `<svg width="${px}" height="${px}" viewBox="0 0 100 100" fill="${color||'currentColor'}" aria-hidden="true" style="flex-shrink:0">`
     + `<rect x="40" y="20" width="20" height="20" rx="2"/>`
-    + `<path d="M16 44 H84 L60 80 H40 Z M50 64 L34 44 H66 Z" fill-rule="evenodd"/></svg>`;
+    + `<path d="M16 42 L33 42 L50 64 L67 42 L84 42 L50 86 Z"/></svg>`;
 }
 
 function navItems() {
@@ -875,6 +875,7 @@ function navItems() {
     // quick actions:
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
+    { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
     { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' },
   ];
   // Admin: Home | Leaders & Connect | Trends | At Risk + quick actions
@@ -1058,12 +1059,12 @@ function _hAttTile(label, studs, avgWk, opts) {
     + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center;margin-bottom:3px">
     <div style="font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px">Youth</div>
     <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${svcUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
-    <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${avgWk}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly avg</div></div>
+    <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${avgWk}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`
     + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center">
     <div style="font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px;opacity:.8">Groups</div>
     <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Unique</div></div>
-    <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpAvg}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly avg</div></div>
+    <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpAvg}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`;
   if (drop) {
     return `<div class="qcard drop" id="${opts.dropId}" style="padding:11px">`
@@ -2214,9 +2215,16 @@ function _fmtUpcoming(date) {
   return { weekday: WD[date.getDay()], day: date.getDate(), month: MON[date.getMonth()], monthName: FULL[date.getMonth()] };
 }
 async function renderUpcomingBirthdays() {
-  if (!_allCached('/students')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
-  let students = [];
-  try { students = await API.get('/students'); } catch {}
+  if (!_allCached('/students', '/leaders', '/connections')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+  let students = [], leaders = [], conns = [];
+  try { [students, leaders, conns] = await Promise.all([
+    API.get('/students').catch(() => []),
+    API.get('/leaders').catch(() => []),
+    API.get('/connections').catch(() => []),
+  ]); } catch {}
+  const leaderName = {}; for (const l of (leaders || [])) leaderName[l.id] = l.fullName;
+  const leadersByStudent = {};
+  for (const a of (conns || [])) { (leadersByStudent[a.studentId] = leadersByStudent[a.studentId] || []).push(leaderName[a.leaderId] || 'Unknown'); }
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const cap = new Date(today.getFullYear(), today.getMonth() + 2, today.getDate());
@@ -2250,6 +2258,9 @@ async function renderUpcomingBirthdays() {
       <div class="li-body">
         <div class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</div>
         <div class="li-sub">Yr ${s.grade || '—'} · ${s.gender}${turns != null ? ' · turns ' + turns : ''}</div>
+        ${(leadersByStudent[s.id] || []).length
+          ? `<div style="font-size:12px;margin-top:4px;color:var(--accent-dark);font-weight:600;display:flex;align-items:center;gap:5px">${icS('users')}<span>${leadersByStudent[s.id].map(esc).join(', ')}</span></div>`
+          : `<div style="font-size:12px;margin-top:4px;color:var(--ink-faint)">No leader connected</div>`}
         ${phone ? `<div style="font-size:12px;margin-top:4px;color:var(--ink-mid)" onclick="event.stopPropagation()">${s.mobile ? `<span style="font-weight:600">Mobile:</span> ${phoneLink(s.mobile)}` : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? `<span style="font-weight:600">Parent:</span> ${phoneLink(s.parentPhone)}` : ''}</div>` : ''}
       </div>
       <div class="li-right" style="text-align:right">
@@ -4559,12 +4570,12 @@ function rGroups(){
   const rc='text-align:right;padding:7px 8px;white-space:nowrap';
   b+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.72rem">'
     +'<thead><tr style="color:var(--ca-muted)"><th style="text-align:left;padding:8px 10px">Lifegroup</th>'
-    +['Enrolled','Unique','Visits/unique','Run','Avg this','Avg last'].map(h=>'<th style="'+rc+'">'+h+'</th>').join('')
+    +['Enrolled','Unique','Visits/unique','Run','Weekly'].map(h=>'<th style="'+rc+'">'+h+'</th>').join('')
     +'</tr></thead><tbody>';
   for(const r of rows){
     b+='<tr style="border-top:1px solid var(--ca-line)"><td style="padding:7px 10px;font-weight:600">'+esc(r.name)+'</td>'
       +'<td style="'+rc+'">'+r.enrolled+'</td><td style="'+rc+'">'+r.unique+'</td><td style="'+rc+'">'+r.vpu+'</td>'
-      +'<td style="'+rc+'">'+r.run+'</td><td style="'+rc+'">'+r.avgT+'</td><td style="'+rc+'">'+r.avgL+'</td></tr>';
+      +'<td style="'+rc+'">'+r.run+'</td><td style="'+rc+'">'+r.avgT+'</td></tr>';
   }
   b+='</tbody></table></div>';
   caShell(b,'ca-groups');
