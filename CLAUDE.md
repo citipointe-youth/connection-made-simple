@@ -219,6 +219,9 @@ Transaction mode means no session-level prepared statements — fine for this ap
   `_auditLgStats(sel, prev)` assembles the `byQuad→grades→lifegroups` shape `lifegroupRows()`
   expects. No live `/lifegroups/stats` call. (This needs `audits` in the SW `API_RE` — see
   the SW gotcha — or a stale snapshot is served and the table reads empty.)
+- **Term filtering in the SPA (`model()`):** connect/decision rows are filtered by `inPeriod(r.date)` against the selected term's `startDate`/`endDate` (ISO string comparison). Undated rows are always included. Team rows carry no dates — for a specific term, a team member only reaches stage 5 if they also attended that term (`sA>0 || gA>0`); YTD counts the full roster.
+- **CRM CSV parsing (`parseRows` / `parseMatrixRows`):** `parseRows` handles lean one-row-per-person exports with a name column and an optional date column; the date column is matched by exact name first ("date", "decision date", "connect date") then by any header containing `\bdate\b` that isn't birth/DOB-related. `parseMatrixRows` handles the service-attendance matrix format (date-format column headers, Y/yes/1/true cells per row per session) — connect takes the earliest Y date, decision takes the latest. `upload()` tries matrix first for connect/decision, falls back to `parseRows`.
+- **Known edge case:** the term `endDate` is the Monday of the last service week. Decisions/connects recorded on the Friday of that same week fall after `endDate` and are excluded from the term (attributed to neither term, but appear in YTD).
 - **v1 limitations:** the Friday session sparkline depends on live `/trends` (null in audit
   mode, since `load()` sets `trends:null`) → it renders empty in the audit; the
   funnel/overview/people/Lifegroup-Health work per-term. Term ordinals derive from each
