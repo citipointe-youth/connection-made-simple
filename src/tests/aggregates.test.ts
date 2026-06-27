@@ -47,10 +47,10 @@ describe('computeStudentAggregates — service', () => {
 
 describe('computeStudentAggregates — lifegroup', () => {
   const weekStartById = new Map<string, string>([
-    ['w-prev', '2026-02-09'],   // previous term (Mon of 2026-02-13 week)
-    ['w-gap', '2026-03-16'],    // holiday gap → excluded
-    ['w-cur1', '2026-04-13'],   // current term
-    ['w-cur2', '2026-04-20'],   // current term
+    ['w-prev', '2026-02-07'],   // previous term (Sat of 2026-02-13 week)
+    ['w-gap', '2026-03-14'],    // holiday gap → excluded
+    ['w-cur1', '2026-04-11'],   // current term
+    ['w-cur2', '2026-04-18'],   // current term
   ]);
 
   it('counts grp weeks per term and excludes holiday-gap weeks', () => {
@@ -87,9 +87,9 @@ describe('computeStudentAggregates — lifegroup', () => {
   it('falls back to lifegroup-week gaps for term boundaries when no valid service data', () => {
     // Clean two-term week set (no intermediate gap week that would create a 3rd term).
     const wk = new Map<string, string>([
-      ['w-prev', '2026-02-09'],   // previous term (single week)
-      ['w-cur1', '2026-04-13'],   // current term
-      ['w-cur2', '2026-04-20'],   // current term
+      ['w-prev', '2026-02-07'],   // previous term (single week)
+      ['w-cur1', '2026-04-11'],   // current term
+      ['w-cur2', '2026-04-18'],   // current term
     ]);
     const r = computeStudentAggregates({
       termGapDays: 14,

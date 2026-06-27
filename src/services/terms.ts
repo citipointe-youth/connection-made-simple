@@ -25,14 +25,14 @@ export type TermKey = 'current' | 'previous' | null;
 
 const MS_PER_DAY = 86_400_000;
 
-// Map any date to the Monday on/before it (the start of its Mon–Sun week). Term
+// Map any date to the Saturday on/before it (the start of its Sat–Fri week). Term
 // boundaries are computed on week-bucketed dates so that service sessions (which
-// fall on Fridays) and lifegroup weeks (bucketed to their Monday) classify into
+// fall on Fridays) and lifegroup weeks (bucketed to their Saturday) classify into
 // the same term even at the term's edges.
-export function mondayOf(isoDate: string): string {
+export function saturdayOf(isoDate: string): string {
   const d = new Date(isoDate + 'T00:00:00Z');
   if (isNaN(d.getTime())) return isoDate;
-  const offset = (d.getUTCDay() + 6) % 7; // days since this week's Monday
+  const offset = (d.getUTCDay() + 1) % 7; // days since this week's Saturday
   d.setUTCDate(d.getUTCDate() - offset);
   return d.toISOString().slice(0, 10);
 }

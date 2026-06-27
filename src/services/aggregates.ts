@@ -1,4 +1,4 @@
-import { computeTerms, classifyDate, mondayOf, type Terms } from './terms';
+import { computeTerms, classifyDate, saturdayOf, type Terms } from './terms';
 
 // Per-student, term-scoped attendance aggregate. svcTotal/prevSvcTotal are NOT
 // here because they are global (the same valid-session count for every student);
@@ -41,9 +41,9 @@ export function computeStudentAggregates(input: AggregateInput): AggregateResult
 
   // Term boundaries: valid service dates are authoritative; fall back to
   // lifegroup-week dates when there is no service data yet. All dates are
-  // bucketed to their Monday so service (Friday) and lifegroup (Monday) weeks
+  // bucketed to their Saturday so service (Friday) and lifegroup (Monday) weeks
   // share one week-aligned boundary.
-  const validWeeks = serviceSessions.filter((s) => s.valid).map((s) => mondayOf(s.date));
+  const validWeeks = serviceSessions.filter((s) => s.valid).map((s) => saturdayOf(s.date));
   const boundarySource = validWeeks.length > 0 ? validWeeks : [...weekStartById.values()];
   const terms = computeTerms(boundarySource, termGapDays);
 
@@ -54,7 +54,7 @@ export function computeStudentAggregates(input: AggregateInput): AggregateResult
   let prevSvcTotal = 0;
   for (const s of serviceSessions) {
     if (!s.valid) continue;
-    const t = classifyDate(mondayOf(s.date), terms);
+    const t = classifyDate(saturdayOf(s.date), terms);
     if (t === 'current') { sessionTerm.set(s.id, 'current'); svcTotal++; }
     else if (t === 'previous') { sessionTerm.set(s.id, 'previous'); prevSvcTotal++; }
   }

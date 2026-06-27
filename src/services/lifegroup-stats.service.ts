@@ -10,7 +10,7 @@ import type {
 import type { Actor } from '../core/entities/user';
 import type { Quad } from '../core/types/enums';
 import { QUADS, QUAD_LABELS } from '../core/types/enums';
-import { computeTerms, classifyDate, mondayOf, type Terms } from './terms';
+import { computeTerms, classifyDate, saturdayOf, type Terms } from './terms';
 import { ResponseCache } from '../utils/response-cache';
 
 const _cache = new ResponseCache<LifegroupStatsData>(60_000);
@@ -114,9 +114,9 @@ export function makeLifegroupStatsService(
       const weekStartById = new Map(weeks.map((w) => [w.id, w.weekStart]));
       const lifegroupById = new Map(lifegroups.map((l) => [l.id, l]));
 
-      // Term boundaries: valid service dates (Monday-bucketed) are authoritative;
+      // Term boundaries: valid service dates (Saturday-bucketed) are authoritative;
       // fall back to lifegroup-week dates when there is no service data.
-      const validDates = sessions.filter((s) => s.isValid).map((s) => mondayOf(s.sessionDate));
+      const validDates = sessions.filter((s) => s.isValid).map((s) => saturdayOf(s.sessionDate));
       const boundarySource = validDates.length > 0 ? validDates : [...weekStartById.values()];
       const terms = computeTerms(boundarySource, settings.termGapDays);
 
@@ -126,7 +126,7 @@ export function makeLifegroupStatsService(
       let validSvcCurrent = 0, validSvcPrevious = 0;
       for (const s of sessions) {
         if (!s.isValid) continue;
-        const t = classifyDate(mondayOf(s.sessionDate), terms);
+        const t = classifyDate(saturdayOf(s.sessionDate), terms);
         if (t === 'current') validSvcCurrent++;
         else if (t === 'previous') validSvcPrevious++;
       }

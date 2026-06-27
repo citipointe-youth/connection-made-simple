@@ -22,14 +22,14 @@ import { BadRequestError } from '../core/errors/app-error';
 import { computeStatus } from './atrisk.service';
 import { computeStudentAggregates, emptyStudentAggregate, type AggregateResult } from './aggregates';
 
-// A "week" runs Monday→Sunday — the calendar week that contains that week's
-// Friday service. Map any meeting date to the Monday on/before it so lifegroup
+// A "week" runs Saturday→Friday — the calendar week that contains that week's
+// Friday service. Map any meeting date to the Saturday on/before it so lifegroup
 // attendance is bucketed per week (a group that meets twice in a week counts as
 // one week).
 function weekStartOf(isoDate: string): string {
   const d = new Date(isoDate + 'T00:00:00Z');
   if (isNaN(d.getTime())) return isoDate;
-  const offset = (d.getUTCDay() + 6) % 7; // days since this week's Monday
+  const offset = (d.getUTCDay() + 1) % 7; // days since this week's Saturday
   d.setUTCDate(d.getUTCDate() - offset);
   return d.toISOString().slice(0, 10);
 }

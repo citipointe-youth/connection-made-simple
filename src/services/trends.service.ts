@@ -8,7 +8,7 @@ import type {
 import type { Actor } from '../core/entities/user';
 import type { Quad } from '../core/types/enums';
 import { QUADS, QUAD_LABELS } from '../core/types/enums';
-import { computeTerms, classifyDate, mondayOf, type Terms } from './terms';
+import { computeTerms, classifyDate, saturdayOf, type Terms } from './terms';
 import { ResponseCache } from '../utils/response-cache';
 
 // Module-level cache — survives across requests on the same warm serverless instance.
@@ -162,10 +162,10 @@ export function makeTrendsService(
       // home page that reads them — scoped to "this term".
       const validDates = sortedSessions
         .filter((s) => isValidSession(s.id))
-        .map((s) => mondayOf(s.sessionDate));
+        .map((s) => saturdayOf(s.sessionDate));
       const terms = computeTerms(validDates, settings.termGapDays);
       const isCurrentSession = (sess: { id: string; sessionDate: string }): boolean =>
-        isValidSession(sess.id) && classifyDate(mondayOf(sess.sessionDate), terms) === 'current';
+        isValidSession(sess.id) && classifyDate(saturdayOf(sess.sessionDate), terms) === 'current';
 
       const buildPoints = (memberIds: Set<string> | null, totalPresent: number): SessionPoint[] =>
         sortedSessions.map((sess) => {
@@ -197,7 +197,7 @@ export function makeTrendsService(
       let prevAtt = 0, prevWeeks = 0;
       for (const sess of sortedSessions) {
         if (!isValidSession(sess.id)) continue;
-        const term = classifyDate(mondayOf(sess.sessionDate), terms);
+        const term = classifyDate(saturdayOf(sess.sessionDate), terms);
         const attended = attendedBySession.get(sess.id) ?? new Set<string>();
         if (term === 'current') { for (const id of attended) curUniq.add(id); }
         else if (term === 'previous') { prevAtt += attended.size; prevWeeks++; for (const id of attended) prevUniq.add(id); }

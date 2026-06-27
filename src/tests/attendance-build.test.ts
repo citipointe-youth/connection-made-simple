@@ -54,9 +54,9 @@ describe('buildGroupModel', () => {
 
 describe('buildLifegroupStats', () => {
   it('computes per-term per-lifegroup stats bucketed by term', () => {
-    // Boundary source is Monday-bucketed in production (computeYearAggregates),
-    // so lifegroup Mondays align with the term ranges.
-    const terms = computeAllTerms(['2026-02-02', '2026-02-09', '2026-04-20', '2026-04-27'], 14); // T1 (Feb), T2 (Apr)
+    // Boundary source is Saturday-bucketed in production (computeYearAggregates),
+    // so lifegroup weekStarts (also Saturdays) align with the term ranges.
+    const terms = computeAllTerms(['2026-02-07', '2026-02-14', '2026-04-18', '2026-04-25'], 14); // T1 (Feb), T2 (Apr)
     const stats = buildLifegroupStats([{
       name: 'Grade 9 Girls Lifegroup',
       meetings: ['2026-02-09', '2026-04-20'], // one week in T1, one in T2

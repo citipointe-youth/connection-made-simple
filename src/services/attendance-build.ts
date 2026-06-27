@@ -36,11 +36,11 @@ export function normaliseServiceDate(key: string): string | null {
   return `${year}-${mon}-${day}`;
 }
 
-// Monday on/before a date — the week bucket (matches import.service weekStartOf).
+// Saturday on/before a date — the week bucket (matches import.service weekStartOf).
 function weekStartOf(isoDate: string): string {
   const d = new Date(isoDate + 'T00:00:00Z');
   if (isNaN(d.getTime())) return isoDate;
-  const offset = (d.getUTCDay() + 6) % 7;
+  const offset = (d.getUTCDay() + 1) % 7;
   d.setUTCDate(d.getUTCDate() - offset);
   return d.toISOString().slice(0, 10);
 }
