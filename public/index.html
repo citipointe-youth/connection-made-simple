@@ -13,7 +13,11 @@
 <meta name="apple-mobile-web-app-title" content="Connection">
 <meta name="theme-color" content="#1a1af2">
 <link rel="manifest" href="/manifest.json">
-<link rel="apple-touch-icon" href="/icons/icon.svg">
+<!-- iOS "Add to Home Screen" needs a raster PNG here; it can't rasterize the SVG for the
+     installed tile and falls back to a page screenshot (white/black). -->
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 <title>Youth Connection</title>
 <style>
 /* Display face — self-hosted Space Grotesk (geometric, echoes the YS logo).
