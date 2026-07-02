@@ -379,6 +379,15 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 /* ── TWO-LINE NAV LABEL ── */
 .ni-lbl{display:flex;flex-direction:column;align-items:center;line-height:1.15}
 
+/* ── Reusable help tooltip (?) — hover on desktop, tap on mobile. Ported from
+   the Camp Platform sister app. Use helpTip('plain text') in any markup. ── */
+.htip{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1px solid var(--accent);background:var(--chip);color:var(--accent);font-size:11px;font-weight:800;line-height:1;cursor:pointer;position:relative;padding:0;font-family:inherit;vertical-align:middle;flex:0 0 auto}
+.htip-pop{position:absolute;z-index:200;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:max-content;max-width:240px;background:var(--navy);color:#fff;border-radius:10px;padding:9px 11px;font-size:.74rem;line-height:1.45;font-weight:500;text-align:left;box-shadow:0 10px 28px rgba(10,10,46,.32);opacity:0;visibility:hidden;transition:opacity .12s;white-space:normal}
+.htip-pop::before{content:"";position:absolute;bottom:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-bottom-color:var(--navy)}
+.htip:hover .htip-pop,.htip.open .htip-pop{opacity:1;visibility:visible}
+.htip.tip-left .htip-pop{left:auto;right:0;transform:none}
+.htip.tip-left .htip-pop::before{left:auto;right:6px;transform:none}
+
 /* ── CA MODULE CSS START ── */
 :root{--ca-navy:#0a0a2e;--ca-blue:#1a1af2;--ca-teal:#0ea5a4;--ca-amber:#f59e0b;--ca-rose:#e11d48;--ca-green:#16a34a;--ca-paper:#f4f7fc;--ca-card:#fff;--ca-ink:#1f2937;--ca-muted:#647488;--ca-line:#e8edf4;--ca-chip:#ececff;--ca-r:14px;--ca-rs:11px;--ca-sh:0 3px 10px rgba(10,10,46,.06);}
 .ca-cw{background:#fef3c7;color:#92660b}
@@ -549,6 +558,35 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+// helpTip(text[,opts]) — small "?" bubble explaining a feature in plain language.
+// Shows on hover (desktop) and tap (mobile). opts.left anchors the bubble to the
+// right edge for icons that end a heading row. Ported from the Camp Platform app.
+function helpTip(text, opts) {
+  const o = opts || {};
+  return `<button type="button" class="htip${o.left ? ' tip-left' : ''}" aria-label="Help: ${esc(text)}" onclick="_toggleTip(event,this)">?<span class="htip-pop">${esc(text)}</span></button>`;
+}
+function _toggleTip(e, btn) {
+  e.stopPropagation();
+  const open = btn.classList.contains('open');
+  document.querySelectorAll('.htip.open').forEach(t => t.classList.remove('open'));
+  if (!open) { btn.classList.add('open'); _clampTip(btn); }
+}
+// Keeps the bubble fully on-screen regardless of where the "?" sits: resets to the
+// CSS-default position, measures, then nudges horizontally so neither edge runs
+// past the viewport (8px margin). Runs on tap and via a delegated hover listener.
+function _clampTip(btn) {
+  const pop = btn.querySelector('.htip-pop');
+  if (!pop) return;
+  const left = btn.classList.contains('tip-left');
+  pop.style.transform = left ? 'none' : 'translateX(-50%)';
+  const r = pop.getBoundingClientRect(), m = 8, vw = document.documentElement.clientWidth;
+  let shift = 0;
+  if (r.right > vw - m) shift = (vw - m) - r.right;
+  if (r.left + shift < m) shift = m - (r.left + shift);
+  if (shift) pop.style.transform = left ? `translateX(${shift}px)` : `translateX(calc(-50% + ${shift}px))`;
+}
+document.addEventListener('click', e => { if (!e.target.closest('.htip')) document.querySelectorAll('.htip.open').forEach(t => t.classList.remove('open')); });
+document.addEventListener('mouseover', e => { const b = e.target.closest && e.target.closest('.htip'); if (b) _clampTip(b); });
 function go(page) { S.page = page; render(); }
 function toast(msg, dur = 2500) {
   const el = document.getElementById('toast');
