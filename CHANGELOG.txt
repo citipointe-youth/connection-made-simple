@@ -405,3 +405,29 @@ HELP TOOLTIPS  (2026-07-02)
   Settings destructive actions, Save Defaults, Import, and Add Account
   (admin/director)
 - Bumped public/sw.js CACHE to force eviction of the previous cached HTML shell
+
+-------------------------------------------------------------------------------
+SECURITY HARDENING BATCH  (2026-07-03)
+-------------------------------------------------------------------------------
+Independent security assessment + fixes, none of which change user-facing
+behaviour or add friction:
+- Fixed stored-XSS: student/leader/account names were passed raw through
+  inline onclick attributes and into innerHTML (undo toast, reset-password and
+  delete-account modals) in five places. Names now travel only as IDs through
+  event handlers; the actual display text is looked up from the trusted
+  in-memory model and escaped at the render sink. showUndoToast also escapes
+  its own message centrally as a backstop.
+- auth.service.ts now refuses to boot in production if SESSION_SECRET is
+  missing, instead of logging a warning and running with a forgeable fallback
+  secret.
+- Added the security-headers batch already shipped on the Camp Platform sister
+  app: X-Powered-By disabled, HSTS (prod), Cross-Origin-Opener-Policy +
+  Cross-Origin-Resource-Policy same-origin, and Cache-Control: no-store on all
+  API/export responses (static assets stay cacheable).
+- Password minimum raised from 6 to 8 characters for new/changed passwords
+  (existing accounts unaffected — login has no length floor).
+- Reviewed and found no action needed: npm audit (0 vulnerabilities in
+  production dependencies — all 12 findings are in devDependencies/Vercel CLI
+  tooling), SQL injection surface (all queries use postgres.js tagged
+  templates), RBAC (access-control.ts), and error handling (prod hides
+  internal error details from clients).
