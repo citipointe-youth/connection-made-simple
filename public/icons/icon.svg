@@ -3,6 +3,6 @@
   <!-- Youth Society V mark (matches brandMark() in index.html), square raised for more separation from the V -->
   <g transform="scale(5.12)" fill="white">
     <rect x="40" y="14" width="20" height="20" rx="2"/>
-    <path d="M16 42 L33 42 L50 64 L67 42 L84 42 L50 86 Z"/>
+    <path d="M16 42 L33 42 L44 64 L56 64 L67 42 L84 42 L62 84 L38 84 Z"/>
   </g>
 </svg>
