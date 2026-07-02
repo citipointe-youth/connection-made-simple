@@ -11,7 +11,7 @@ import { NotFoundError, BadRequestError, ConflictError } from '../core/errors/ap
 const CreateUserSchema = z.object({
   displayName: z.string().min(1),
   email: z.string().min(1),
-  password: z.string().min(6),
+  password: z.string().min(8),
   role: z.enum(['grade', 'quad', 'director', 'admin']),
   grade: z.number().int().min(7).max(12).nullable().optional(),
   quad: z.enum(['g79', 'b79', 'g1012', 'b1012']).nullable().optional(),
@@ -107,7 +107,7 @@ export function makeAccountService(users: IUserRepository): AccountService {
       assertCan(actor, 'admin:manage');
       const existing = await users.findById(id);
       if (!existing) throw new NotFoundError('User not found');
-      if (newPassword.length < 6) throw new BadRequestError('Password must be at least 6 characters');
+      if (newPassword.length < 8) throw new BadRequestError('Password must be at least 8 characters');
       const passwordHash = await hashPassword(newPassword);
       await users.save({ ...existing, passwordHash, updatedAt: new Date().toISOString() });
     },
