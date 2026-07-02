@@ -45,6 +45,12 @@
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
 }
+/* Top loading bar (#nprog): a thin accent bar that animates whenever a real network
+   request is in flight (driven from API's r() via _npStart/_npDone, ported from the
+   camp app's #nprog). Cached GETs never reach r(), so instant navigations don't flash
+   the bar. Tune colour/height in this one rule. */
+#nprog{position:fixed;top:0;left:0;height:3px;width:0;z-index:1000;background:linear-gradient(90deg,var(--accent),var(--accent-dark));border-radius:0 2px 2px 0;opacity:0;transition:width .18s ease,opacity .3s ease;pointer-events:none;box-shadow:0 0 8px rgba(26,26,242,.55)}
+#nprog.on{opacity:1}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{font-size:16px;-webkit-text-size-adjust:100%;overflow-x:hidden;touch-action:pan-x pan-y}
 @media(min-width:768px){html{font-size:17px}}
@@ -437,11 +443,39 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 </style>
 </head>
 <body>
+<div id="nprog"></div>
 <div id="app"></div>
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="undo-toast"></div>
 <div id="modal-root"></div>
 <script>
+// Top loading bar (#nprog) driver — reference-counted so overlapping fetches (e.g. a
+// parallel Promise.all) hold the bar until the LAST one finishes. Creeps toward 90%
+// while in flight, then snaps to 100% and fades. Only real network requests call this
+// (from API's r()); a Cache hit in API.get returns before ever calling r(), so cached
+// navigations never flash the bar. Ported from the camp app's #nprog driver.
+let _npCount = 0, _npTimer = null, _npVal = 0, _npFadeTimer = null, _npResetTimer = null;
+function _npStart() {
+  _npCount++;
+  if (_npCount > 1) return;
+  const el = document.getElementById('nprog'); if (!el) return;
+  clearTimeout(_npFadeTimer); clearTimeout(_npResetTimer);
+  _npVal = 8; el.classList.add('on'); el.style.width = _npVal + '%';
+  clearInterval(_npTimer);
+  _npTimer = setInterval(() => { _npVal += Math.max(0.4, (90 - _npVal) * 0.09); if (_npVal >= 90) _npVal = 90; el.style.width = _npVal + '%'; }, 170);
+}
+function _npDone() {
+  if (_npCount > 0) _npCount--;
+  if (_npCount > 0) return;
+  const el = document.getElementById('nprog'); if (!el) return;
+  clearInterval(_npTimer); _npTimer = null;
+  el.style.width = '100%';
+  _npFadeTimer = setTimeout(() => {
+    if (_npCount === 0) el.classList.remove('on');
+    _npResetTimer = setTimeout(() => { if (_npCount === 0) el.style.width = '0'; }, 320);
+  }, 180);
+}
+
 // ============================================================
 // API ADAPTER
 // ============================================================
@@ -453,6 +487,7 @@ const API = (() => {
   let _t = localStorage.getItem('yap_token') || null;
   const hdr = () => ({ 'Content-Type': 'application/json', ...(_t ? { Authorization: `Bearer ${_t}` } : {}) });
   async function r(method, path, body, timeoutMs) {
+    _npStart();
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(new Error('Request timed out')), timeoutMs || 25000);
     try {
@@ -461,6 +496,7 @@ const API = (() => {
       return res.json();
     } finally {
       clearTimeout(timer);
+      _npDone();
     }
   }
   const _inflight = new Map();
