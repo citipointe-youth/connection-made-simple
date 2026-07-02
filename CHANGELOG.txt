@@ -393,3 +393,15 @@ production PWA for connection ministry management. Key milestones:
                          executive deck
   Admin                — Clear Service/Group Data action, editable emails,
                          allocation import/export CSV round-trip
+
+-------------------------------------------------------------------------------
+HELP TOOLTIPS  (2026-07-02)
+-------------------------------------------------------------------------------
+- Ported the Camp Platform sister app's helpTip() "?" bubble pattern (hover on
+  desktop, tap on mobile, auto-clamped so it never runs off either screen edge)
+- Added 11 tooltips across three role-scoped budgets: At-Risk, Leaders &
+  Connect, and Home (grade/quad/director shared screens); the Connection Audit
+  hub, Funnel, Lifegroup Health, and People export (director/admin); Admin
+  Settings destructive actions, Save Defaults, Import, and Add Account
+  (admin/director)
+- Bumped public/sw.js CACHE to force eviction of the previous cached HTML shell
