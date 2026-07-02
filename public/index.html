@@ -3844,11 +3844,11 @@ async function renderAdminView(settings, users) {
         <div class="destructive-header">Destructive Actions</div>
         <div style="display:flex;flex-direction:column;gap:10px">
           <div>
-            <button class="btn btn-secondary btn-full" onclick="confirmType({title:'Clear Service & Group Data?',word:'CLEAR',danger:false,body:'This deletes all service and lifegroup attendance. Students (grade, age, phone), their connections and leaders are kept.',onConfirm:()=>adminAction('/admin/clear-service-group','✓ Service/group data cleared')})">Clear Service/Group Data</button>
+            <button class="btn btn-secondary btn-full" onclick="confirmType({title:'Clear Service & Group Data?',word:'CLEAR',danger:false,body:'This deletes all service and lifegroup attendance. Students (grade, age, phone), their connections and leaders are kept.',onConfirm:()=>adminAction('/admin/clear-service-group','✓ Service/group data cleared',{force:true,confirmWipe:CONFIRM_WIPE_STRING})})">Clear Service/Group Data</button>
             <div class="help-text" style="margin-top:4px">Clears all service + lifegroup attendance; keeps students, connections, leaders &amp; accounts</div>
           </div>
           <div>
-            <button class="btn btn-danger btn-full" onclick="confirmType({title:'Full Reset?',word:'RESET',danger:true,body:'This permanently deletes all students, leaders, connections and attendance. Accounts are kept. This cannot be undone.',onConfirm:()=>adminAction('/admin/reset','✓ Full reset complete')})">Full Reset</button>
+            <button class="btn btn-danger btn-full" onclick="confirmType({title:'Full Reset?',word:'RESET',danger:true,body:'This permanently deletes all students, leaders, connections and attendance. Accounts are kept. This cannot be undone.',onConfirm:()=>adminAction('/admin/reset','✓ Full reset complete',{force:true,confirmWipe:CONFIRM_WIPE_STRING})})">Full Reset</button>
             <div class="help-text" style="margin-top:4px">Clears students, leaders, connections &amp; all data (keeps accounts)</div>
           </div>
         </div>
@@ -3929,9 +3929,13 @@ async function saveSettings() {
   } catch (e) { toast(e.message); }
 }
 
-async function adminAction(path, msg) {
+// Mirrors the server's admin.service.ts CONFIRM_WIPE_STRING — required by the
+// wipe guard on POST /admin/reset and /admin/clear-service-group.
+const CONFIRM_WIPE_STRING = 'I understand this cannot be undone';
+
+async function adminAction(path, msg, body) {
   try {
-    await API.post(path, {}); Cache.clear(); toast(msg);
+    await API.post(path, body || {}); Cache.clear(); toast(msg);
     if ((path === '/admin/reset' || path === '/admin/clear-service-group') && window.CA) CA.reset(); /*CA-HOOK*/
     go('home');
   } catch (e) { toast(e.message); }
