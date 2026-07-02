@@ -1376,7 +1376,7 @@ async function _renderHomeInner(stale) {
             return `<div style="flex:1"><div class="pb"><div class="pb-f ${pct >= 80 ? 'fill-g' : pct >= 50 ? 'fill-a' : 'fill-r'}" style="width:${pct}%"></div></div>
               <div style="font-size:11px;color:var(--ink-mid);text-align:right">${con}/${tot} (${pct}%)</div></div>`;
           };
-          body += '<div class="sh">Connection by Grade</div><div class="card" style="padding:12px">';
+          body += '<div class="sh">Connection by Grade ' + helpTip('Only counts students who attended a service or lifegroup this term or last. Students who have never attended are not counted as unconnected.') + '</div><div class="card" style="padding:12px">';
           body += `<div style="display:flex;align-items:center;gap:12px;padding-bottom:4px;font-size:10px;font-weight:800;color:var(--ink-faint);text-transform:uppercase">
             <div style="width:54px"></div><div style="flex:1;text-align:center">♀ Girls</div><div style="flex:1;text-align:center">♂ Boys</div></div>`;
           for (const gr of grades) {
@@ -1392,7 +1392,7 @@ async function _renderHomeInner(stale) {
       } else if (u.role === 'quad' && stats.byGrade) {
         const vg = stats.byGrade.filter(g => g.totalStudents > 0);
         if (vg.length) {
-          body += '<div class="sh">Connection by Grade</div><div class="card" style="padding:12px">';
+          body += '<div class="sh">Connection by Grade ' + helpTip('Only counts students who attended a service or lifegroup this term or last. Students who have never attended are not counted as unconnected.') + '</div><div class="card" style="padding:12px">';
           for (const g of vg) {
             const pct = g.totalStudents > 0 ? Math.round(g.connectedStudents / g.totalStudents * 100) : 0;
             body += `<div style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--paper-dark)">
@@ -1996,7 +1996,7 @@ function renderConnectView() {
     <div class="ph">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <div>
-          <div class="ph-title">Leaders &amp; Connect</div>
+          <div class="ph-title">Leaders &amp; Connect ${helpTip('Search and connect are scoped to your grade and gender. You can add students from other grades, but only ones matching your gender.')}</div>
           <div class="ph-sub">${connectedCount}/${totalStudents} students connected · ${visLeaders.length} leader${visLeaders.length!==1?'s':''}</div>
         </div>
         <div style="display:flex;gap:6px">
@@ -2770,7 +2770,7 @@ async function renderAtRisk() {
   let body = `
     <div class="ph">
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <div><div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('alert')} At Risk</div><div class="ph-sub">${flagged} need attention${sections.rising.length?` · ${sections.rising.length} rising`:''}</div></div>
+        <div><div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('alert')} At Risk ${helpTip('Stopped means no attendance in either stream this term. Declining or Mixed means a stream rate dropped 20+ points vs last term - calculated automatically, no manual thresholds.')}</div><div class="ph-sub">${flagged} need attention${sections.rising.length?` · ${sections.rising.length} rising`:''}</div></div>
         ${['director','admin'].includes(u.role)?`<button class="btn btn-secondary btn-sm" onclick="recomputeAtRisk()">Recompute</button>`:''}
       </div>
     </div>`;
