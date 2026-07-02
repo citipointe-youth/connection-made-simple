@@ -1884,17 +1884,36 @@ let _aS = { students:[], leaders:[], allocs:{}, gf:new Set(), df:new Set() };
 // _pickerCtx = { leaderId, leaderGender, leaderName }
 let _pickerCtx = null;
 
+const CONNECT_PATHS = ['/students', '/leaders', '/connections'];
+let _connectRevalidating = false;
+function _revalidateConnect() {
+  if (_connectRevalidating) return;
+  _connectRevalidating = true;
+  Promise.all(CONNECT_PATHS.map(p => API.get(p).catch(() => null)))
+    .then(() => { if (S.page === 'leaders') return renderConnect(); })
+    .catch(() => {})
+    .finally(() => { _connectRevalidating = false; });
+}
 async function renderConnect() {
-  if (!_allCached('/students', '/leaders', '/connections')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
-  await loadConnectData();
+  const _pg = S.page;
+  const allFresh = CONNECT_PATHS.every(p => Cache.get(p) !== null);
+  const haveStale = CONNECT_PATHS.every(p => Cache.getStale(p) !== null);
+  if (allFresh || haveStale) {
+    await loadConnectData(p => Promise.resolve(Cache.getStale(p)));
+    if (!allFresh) _revalidateConnect();
+  } else {
+    setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+    await loadConnectData(p => API.get(p));
+    if (S.page !== _pg) return;
+  }
   renderConnectView();
 }
 
-async function loadConnectData() {
+async function loadConnectData(G) {
   const [students, leaders, connectsRaw] = await Promise.all([
-    API.get('/students').catch(() => []),
-    API.get('/leaders').catch(() => []),
-    API.get('/connections').catch(() => []),
+    G('/students').catch(() => []),
+    G('/leaders').catch(() => []),
+    G('/connections').catch(() => []),
   ]);
   const allocs = {};
   for (const a of connectsRaw) { if (!allocs[a.studentId]) allocs[a.studentId]=[]; allocs[a.studentId].push(a.leaderId); }
@@ -2261,14 +2280,35 @@ function _fmtUpcoming(date) {
   const FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   return { weekday: WD[date.getDay()], day: date.getDate(), month: MON[date.getMonth()], monthName: FULL[date.getMonth()] };
 }
+const BIRTHDAYS_PATHS = ['/students', '/leaders', '/connections'];
+let _birthdaysRevalidating = false;
+function _revalidateBirthdays() {
+  if (_birthdaysRevalidating) return;
+  _birthdaysRevalidating = true;
+  Promise.all(BIRTHDAYS_PATHS.map(p => API.get(p).catch(() => null)))
+    .then(() => { if (S.page === 'birthdays') return renderUpcomingBirthdays(); })
+    .catch(() => {})
+    .finally(() => { _birthdaysRevalidating = false; });
+}
 async function renderUpcomingBirthdays() {
-  if (!_allCached('/students', '/leaders', '/connections')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+  const _pg = S.page;
+  const allFresh = BIRTHDAYS_PATHS.every(p => Cache.get(p) !== null);
+  const haveStale = BIRTHDAYS_PATHS.every(p => Cache.getStale(p) !== null);
   let students = [], leaders = [], conns = [];
-  try { [students, leaders, conns] = await Promise.all([
-    API.get('/students').catch(() => []),
-    API.get('/leaders').catch(() => []),
-    API.get('/connections').catch(() => []),
-  ]); } catch {}
+  if (allFresh || haveStale) {
+    students = Cache.getStale('/students') || [];
+    leaders = Cache.getStale('/leaders') || [];
+    conns = Cache.getStale('/connections') || [];
+    if (!allFresh) _revalidateBirthdays();
+  } else {
+    setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+    try { [students, leaders, conns] = await Promise.all([
+      API.get('/students').catch(() => []),
+      API.get('/leaders').catch(() => []),
+      API.get('/connections').catch(() => []),
+    ]); } catch {}
+    if (S.page !== _pg) return;
+  }
   const leaderName = {}; for (const l of (leaders || [])) leaderName[l.id] = l.fullName;
   const leadersByStudent = {};
   for (const a of (conns || [])) { (leadersByStudent[a.studentId] = leadersByStudent[a.studentId] || []).push(leaderName[a.leaderId] || 'Unknown'); }
@@ -2326,12 +2366,33 @@ function fmtBday(iso) {
   return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : String(iso);
 }
 
+const MYSTUDENTS_PATHS = ['/leaders', '/students'];
+let _myStudentsRevalidating = false;
+function _revalidateMyStudents() {
+  if (_myStudentsRevalidating) return;
+  _myStudentsRevalidating = true;
+  Promise.all(MYSTUDENTS_PATHS.map(p => API.get(p).catch(() => null)))
+    .then(() => { if (S.page === 'my-students') return renderMyStudents(); })
+    .catch(() => {})
+    .finally(() => { _myStudentsRevalidating = false; });
+}
 async function renderMyStudents() {
-  if (!_allCached('/leaders', '/students')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
-  const [leaders, allStudents] = await Promise.all([
-    API.get('/leaders').catch(() => []),
-    API.get('/students').catch(() => []),
-  ]);
+  const _pg = S.page;
+  const allFresh = MYSTUDENTS_PATHS.every(p => Cache.get(p) !== null);
+  const haveStale = MYSTUDENTS_PATHS.every(p => Cache.getStale(p) !== null);
+  let leaders, allStudents;
+  if (allFresh || haveStale) {
+    leaders = Cache.getStale('/leaders') || [];
+    allStudents = Cache.getStale('/students') || [];
+    if (!allFresh) _revalidateMyStudents();
+  } else {
+    setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+    [leaders, allStudents] = await Promise.all([
+      API.get('/leaders').catch(() => []),
+      API.get('/students').catch(() => []),
+    ]);
+    if (S.page !== _pg) return;
+  }
   const bdayOf = {};
   for (const s of allStudents) bdayOf[s.id] = s.dateOfBirth;
 
@@ -2623,10 +2684,29 @@ function restoreArFilter() {
   } catch {}
 }
 
+const ATRISK_PATHS = ['/students'];
+let _atRiskRevalidating = false;
+function _revalidateAtRisk() {
+  if (_atRiskRevalidating) return;
+  _atRiskRevalidating = true;
+  Promise.all(ATRISK_PATHS.map(p => API.get(p).catch(() => null)))
+    .then(() => { if (S.page === 'at-risk') return renderAtRisk(); })
+    .catch(() => {})
+    .finally(() => { _atRiskRevalidating = false; });
+}
 async function renderAtRisk() {
-  setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+  const _pg = S.page;
+  const allFresh = ATRISK_PATHS.every(p => Cache.get(p) !== null);
+  const haveStale = ATRISK_PATHS.every(p => Cache.getStale(p) !== null);
   let allStu = [];
-  try { allStu = await API.get('/students'); } catch {}
+  if (allFresh || haveStale) {
+    allStu = Cache.getStale('/students') || [];
+    if (!allFresh) _revalidateAtRisk();
+  } else {
+    setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+    try { allStu = await API.get('/students'); } catch {}
+    if (S.page !== _pg) return;
+  }
   const u = S.user;
 
   // The /students list is role-scoped (grade/gender) server-side; apply the page's
@@ -2754,15 +2834,37 @@ async function submitAtRiskUpdate(studentId) {
 // ============================================================
 let _sS = { students:[], leaderNames:new Set(), search:'', gf:new Set(), df:new Set() };
 
+const STUDENTS_PATHS = ['/students', '/leaders'];
+let _studentsRevalidating = false;
+function _revalidateStudents() {
+  if (_studentsRevalidating) return;
+  _studentsRevalidating = true;
+  Promise.all(STUDENTS_PATHS.map(p => API.get(p).catch(() => null)))
+    .then(() => { if (S.page === 'students') return renderStudents(); })
+    .catch(() => {})
+    .finally(() => { _studentsRevalidating = false; });
+}
 async function renderStudents() {
-  if (!_allCached('/students')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+  const _pg = S.page;
   // Leaders are fetched alongside students so they can be hidden from the search
   // (a person who both leads and appears in the service export shows up as a
-  // student row otherwise).
-  const [students, leaders] = await Promise.all([
-    API.get('/students').catch(() => []),
-    API.get('/leaders').catch(() => []),
-  ]);
+  // student row otherwise). Both paths now gate the spinner (previously only
+  // /students did, even though /leaders was fetched too).
+  const allFresh = STUDENTS_PATHS.every(p => Cache.get(p) !== null);
+  const haveStale = STUDENTS_PATHS.every(p => Cache.getStale(p) !== null);
+  let students, leaders;
+  if (allFresh || haveStale) {
+    students = Cache.getStale('/students') || [];
+    leaders = Cache.getStale('/leaders') || [];
+    if (!allFresh) _revalidateStudents();
+  } else {
+    setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+    [students, leaders] = await Promise.all([
+      API.get('/students').catch(() => []),
+      API.get('/leaders').catch(() => []),
+    ]);
+    if (S.page !== _pg) return;
+  }
   _sS.students = students || [];
   _sS.leaderNames = new Set((leaders || []).map(l => (l.fullName || '').trim().toLowerCase()).filter(Boolean));
   renderStudentView();
@@ -3343,10 +3445,29 @@ async function exportTrendsCSV() {
 // ============================================================
 // IMPORT
 // ============================================================
+const IMPORT_PATHS = ['/import/history'];
+let _importRevalidating = false;
+function _revalidateImport() {
+  if (_importRevalidating) return;
+  _importRevalidating = true;
+  Promise.all(IMPORT_PATHS.map(p => API.get(p).catch(() => null)))
+    .then(() => { if (S.page === 'import') return renderImport(); })
+    .catch(() => {})
+    .finally(() => { _importRevalidating = false; });
+}
 async function renderImport() {
-  if (!_allCached('/import/history')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+  const _pg = S.page;
+  const allFresh = IMPORT_PATHS.every(p => Cache.get(p) !== null);
+  const haveStale = IMPORT_PATHS.every(p => Cache.getStale(p) !== null);
   let history = [];
-  try { history = await API.get('/import/history'); } catch {}
+  if (allFresh || haveStale) {
+    history = Cache.getStale('/import/history') || [];
+    if (!allFresh) _revalidateImport();
+  } else {
+    setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+    try { history = await API.get('/import/history'); } catch {}
+    if (S.page !== _pg) return;
+  }
 
   let body = `
     <div class="ph"><div class="ph-title">Import Data</div><div class="ph-sub">Upload CSV files to update students and attendance</div></div>
@@ -3783,13 +3904,34 @@ function parseCSV(csv) {
 // ============================================================
 let _adminTab = 'settings';
 
+const ADMIN_PATHS = ['/settings', '/accounts/users'];
+let _adminRevalidating = false;
+function _revalidateAdmin() {
+  if (_adminRevalidating) return;
+  _adminRevalidating = true;
+  Promise.all(ADMIN_PATHS.map(p => API.get(p).catch(() => null)))
+    .then(() => { if (S.page === 'admin') return renderAdmin(); })
+    .catch(() => {})
+    .finally(() => { _adminRevalidating = false; });
+}
 async function renderAdmin() {
   if (S.user?.role !== 'admin') { go('home'); return; }
-  if (!_allCached('/settings', '/accounts/users')) setApp(shell('<div class="loading"><div class="spin"></div></div>'));
-  const [settings, users] = await Promise.all([
-    API.get('/settings').catch(() => ({})),
-    API.get('/accounts/users').catch(() => []),
-  ]);
+  const _pg = S.page;
+  const allFresh = ADMIN_PATHS.every(p => Cache.get(p) !== null);
+  const haveStale = ADMIN_PATHS.every(p => Cache.getStale(p) !== null);
+  let settings, users;
+  if (allFresh || haveStale) {
+    settings = Cache.getStale('/settings') || {};
+    users = Cache.getStale('/accounts/users') || [];
+    if (!allFresh) _revalidateAdmin();
+  } else {
+    setApp(shell('<div class="loading"><div class="spin"></div></div>'));
+    [settings, users] = await Promise.all([
+      API.get('/settings').catch(() => ({})),
+      API.get('/accounts/users').catch(() => []),
+    ]);
+    if (S.page !== _pg) return;
+  }
   renderAdminView(settings, users);
 }
 
