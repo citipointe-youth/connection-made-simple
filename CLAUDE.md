@@ -381,3 +381,7 @@ service worker (`public/sw.js`) — those were left fully intact.
   the escaping + CSP above; switch to an httpOnly cookie if that ever regresses.
 - **CORS:** in production, `CORS_ORIGINS` defaults to the prod domain (never `*`); override
   via env. **`SESSION_SECRET` must be set in production** or tokens can be forged.
+- **Never commit Supabase CLI local state.** `supabase/.temp/` is gitignored (2026-07-03) — it
+  holds the linked-project ref / pooler URL / tool versions and must stay out of git. Use explicit
+  paths (not `git add -A`) when committing so untracked local dirs (`supabase/.temp/`, `_design/`)
+  aren't swept in.
