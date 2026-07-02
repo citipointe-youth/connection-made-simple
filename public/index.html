@@ -4694,7 +4694,7 @@ function scopeBar(){
   let termCtl='<span class="ca-chip2'+(TERM==='ALL'?' on':'')+'" onclick="CA.setTerm(\'ALL\')">Year to date</span>';
   for(const t of terms){const ip=(AUDIT.perTerm[t.key]||{}).inProgress;termCtl+='<span class="ca-chip2'+(TERM===t.key?' on':'')+'" onclick="CA.setTerm(\''+t.key+'\')">T'+t.ordinal+(ip?' • live':'')+'</span>';}
   return '<div class="ca-scope">'
-    +'<div class="ca-scope-row"><span class="ca-scope-lb">Year</span><div class="ca-scope-ctl">'+yearCtl+'</div></div>'
+    +'<div class="ca-scope-row"><span class="ca-scope-lb">Year '+helpTip('This is a frozen snapshot from your last year-to-date upload, not live data. Re-upload in the Data tab to refresh it.')+'</span><div class="ca-scope-ctl">'+yearCtl+'</div></div>'
     +'<div class="ca-scope-row"><span class="ca-scope-lb">Period</span><div class="ca-scope-ctl">'+termCtl+'</div></div>'
     +'</div>';
 }
@@ -4815,7 +4815,7 @@ function rFunnel(){
   const qc={};for(const p of stuck){const q=p.s&&p.s.quad;if(q)qc[q]=(qc[q]||0)+1;}
   const worst=Object.entries(qc).sort((a,b)=>b[1]-a[1])[0];
   let b=tabs('ca-funnel');
-  b+='<div class="card"><div class="ca-ct">This term&#39;s conversion</div><div style="font-size:.62rem;color:var(--ca-muted);margin-bottom:10px">'+R[0].lb+' → '+R[4].lb+'</div>'+f+'</div>';
+  b+='<div class="card"><div class="ca-ct">This term&#39;s conversion '+helpTip('Stages run First contact, Friday, Regular, Lifegroup, then Student team. Each bar shows how many people reached that stage this term.')+'</div><div style="font-size:.62rem;color:var(--ca-muted);margin-bottom:10px">'+R[0].lb+' → '+R[4].lb+'</div>'+f+'</div>';
   b+='<div class="card" style="background:#fff5f5;border-left:3px solid var(--ca-rose)"><div style="font-size:.66rem;font-weight:800;color:#b91c1c;text-transform:uppercase;letter-spacing:.05em">Biggest leak</div><div style="font-size:.78rem;margin-top:3px">'+R[leak].lb+' → '+R[leak+1].lb+' loses <b>'+lost+' people</b>.'+(worst?' Largest cluster: '+(QLBL[worst[0]]||worst[0])+' ('+worst[1]+').':'')+'</div></div>';
   b+='<button class="btn btn-secondary btn-full" onclick="CA.fquad()">'+(FQ?'Hide quad funnels ▴':'View funnel per quad ▾')+'</button>';
   if(FQ){
@@ -4865,6 +4865,7 @@ function rGroups(){
   if(LGQ)rows=rows.filter(r=>r.quad===LGQ);
   rows.sort((a,b)=>b.unique-a.unique||a.name.localeCompare(b.name));
   let b=tabs('ca-groups');
+  b+='<div class="ca-ct" style="margin-bottom:6px">Lifegroup Health '+helpTip('A named lifegroup average divides by the weeks that group actually ran. Grade, quad and overall averages divide by valid services in the term instead, so they are not directly comparable.')+'</div>';
   // Quad filter buttons.
   b+='<div class="ca-fch">'
     +'<span class="chip '+(LGQ===''?'c-accent':'c-neutral')+'" style="cursor:pointer" onclick="CA.lgfilter(\'\')">All</span>'
@@ -4920,7 +4921,7 @@ function plist(){
   }
   if(!list.length)b+='<div class="card" style="text-align:center;color:var(--ca-muted);font-size:.78rem">No people match</div>';
   if(list.length>PF.cap)b+='<button class="btn btn-secondary btn-full" onclick="CA.pmore()">Show more ('+(list.length-PF.cap)+' remaining)</button>';
-  b+='<button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="CA.exportMenu()">Export follow-up CSV — by quad</button>';
+  b+='<div style="display:flex;align-items:center;gap:6px;margin-top:8px"><button class="btn btn-secondary" style="flex:1" onclick="CA.exportMenu()">Export follow-up CSV — by quad</button>'+helpTip('Downloads a CSV of people worth a follow-up in one quad: name, phone, reason (e.g. declining attendance) and score.',{left:true})+'</div>';
   return b;
 }
 function rPeople(){
