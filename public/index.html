@@ -3576,77 +3576,35 @@ function clearAllImportHistory() {
   });
 }
 
-// ── XLSX READER (no library — uses the browser's native DecompressionStream) ──
-// Reads sheet 1 of an .xlsx ArrayBuffer into a 2D array of strings. Date-styled numeric
-// cells are converted to ISO yyyy-mm-dd so the existing CSV parsers work unchanged.
+// ── XLSX READER (lazy SheetJS) ────────────────────────────────
+// Reads the first sheet of an .xlsx/.xls ArrayBuffer into a 2D array of strings, with date
+// cells emitted as ISO yyyy-mm-dd so the existing CSV parsers work unchanged. Backed by the
+// vendored SheetJS build (public/vendor/xlsx.full.min.js), lazy-loaded on first use so it never
+// weighs on normal navigation. Replaced the hand-rolled DecompressionStream reader for
+// robustness on arbitrary Excel exports (legacy .xls, 1904 date system, sheet order, format
+// variants) — this is a medical/compliance roster where a silent misparse is the worst outcome.
+let _xlsxLoading=null;
+function _ensureXlsx(){
+  if(window.XLSX)return Promise.resolve();
+  if(_xlsxLoading)return _xlsxLoading;
+  _xlsxLoading=new Promise((resolve,reject)=>{
+    const s=document.createElement("script");
+    s.src="vendor/xlsx.full.min.js";
+    s.onload=()=>window.XLSX?resolve():reject(new Error("Excel reader failed to initialise"));
+    s.onerror=()=>{_xlsxLoading=null;reject(new Error("Could not load the Excel reader — export the sheet as CSV and re-upload."));};
+    document.head.appendChild(s);
+  });
+  return _xlsxLoading;
+}
 async function readXlsx(buf){
-  if(typeof DecompressionStream==='undefined')throw new Error('This browser cannot read Excel files — export the sheet as CSV and re-upload.');
-  const u8=new Uint8Array(buf),dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
-  if(u8.length>3&&dv.getUint32(0,true)===0xE011CFD0)throw new Error('Legacy .xls files are not supported — save as .xlsx or export as CSV.');
-  let eocd=-1;
-  for(let i=u8.length-22;i>=Math.max(0,u8.length-22-65536);i--){if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}}
-  if(eocd<0)throw new Error('Not a valid .xlsx file.');
-  const count=dv.getUint16(eocd+10,true);let off=dv.getUint32(eocd+16,true);
-  const td=new TextDecoder();
-  const entries={};
-  for(let i=0;i<count;i++){
-    if(dv.getUint32(off,true)!==0x02014b50)break;
-    const method=dv.getUint16(off+10,true),csize=dv.getUint32(off+20,true),nlen=dv.getUint16(off+28,true),elen=dv.getUint16(off+30,true),clen=dv.getUint16(off+32,true),lho=dv.getUint32(off+42,true);
-    entries[td.decode(u8.subarray(off+46,off+46+nlen))]={method,csize,lho};
-    off+=46+nlen+elen+clen;
-  }
-  async function zfile(name){
-    const en=entries[name];if(!en)return null;
-    const nlen=dv.getUint16(en.lho+26,true),elen=dv.getUint16(en.lho+28,true);
-    const start=en.lho+30+nlen+elen;
-    const bytes=u8.subarray(start,start+en.csize);
-    if(en.method===0)return td.decode(bytes);
-    const stream=new ReadableStream({start(c){c.enqueue(bytes);c.close();}}).pipeThrough(new DecompressionStream('deflate-raw'));
-    return td.decode(await new Response(stream).arrayBuffer());
-  }
-  const unesc=x=>String(x).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#(\d+);/g,(m,n)=>String.fromCharCode(+n)).replace(/&amp;/g,'&');
-  const shared=[];
-  const ssXml=await zfile('xl/sharedStrings.xml');
-  if(ssXml)for(const m of ssXml.matchAll(/<si>([\s\S]*?)<\/si>/g))
-    shared.push(unesc((m[1].match(/<t[^>]*>([\s\S]*?)<\/t>/g)||[]).map(t=>t.replace(/<[^>]+>/g,'')).join('')));
-  const dateXf=new Set();
-  const stXml=await zfile('xl/styles.xml');
-  if(stXml){
-    const custom={};
-    for(const m of stXml.matchAll(/<numFmt[^>]*numFmtId="(\d+)"[^>]*formatCode="([^"]*)"/g))custom[+m[1]]=m[2];
-    const isDate=id=>(id>=14&&id<=22)||(id>=45&&id<=47)||(custom[id]!==undefined&&/[ymd]/i.test(custom[id].replace(/\[[^\]]*\]/g,'').replace(/"[^"]*"/g,'')));
-    const xfs=stXml.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/);
-    if(xfs){let i=0;for(const m of xfs[1].matchAll(/<xf\b[^>]*/g)){const fm=/numFmtId="(\d+)"/.exec(m[0]);if(fm&&isDate(+fm[1]))dateXf.add(i);i++;}}
-  }
-  const sheetName=entries['xl/worksheets/sheet1.xml']?'xl/worksheets/sheet1.xml':Object.keys(entries).filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort()[0];
-  if(!sheetName)throw new Error('No worksheet found in the .xlsx file.');
-  const xml=await zfile(sheetName);
-  const colIdx=l=>{let n=0;for(const c of l)n=n*26+(c.charCodeAt(0)-64);return n-1;};
-  const serialToIso=n=>new Date(Math.round((n-25569)*864e5)).toISOString().slice(0,10); // 25569 = 1970-01-01 in Excel's 1900 system
-  const rows=[];
-  for(const rm of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)){
-    const row=[];
-    for(const cm of rm[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){
-      const a=cm[1],inner=cm[2]||'';
-      const rf=/r="([A-Z]+)\d+"/.exec(a);
-      const ci=rf?colIdx(rf[1]):row.length;
-      const t=(/(?:^|\s)t="([^"]+)"/.exec(a)||[])[1];
-      const si=(/(?:^|\s)s="(\d+)"/.exec(a)||[])[1];
-      let v='';
-      if(t==='inlineStr')v=unesc((inner.match(/<t[^>]*>([\s\S]*?)<\/t>/g)||[]).map(x=>x.replace(/<[^>]+>/g,'')).join(''));
-      else{const vm=/<v[^>]*>([\s\S]*?)<\/v>/.exec(inner);v=vm?vm[1]:'';}
-      if(t==='s')v=shared[+v]??'';
-      else if(t==='b')v=v==='1'?'TRUE':'FALSE';
-      else if(t!=='inlineStr'){
-        if(v!==''&&si!==undefined&&dateXf.has(+si)&&!isNaN(parseFloat(v)))v=serialToIso(parseFloat(v));
-        else v=unesc(v);
-      }
-      while(row.length<ci)row.push('');
-      row[ci]=String(v);
-    }
-    rows.push(row);
-  }
-  return rows;
+  await _ensureXlsx();
+  const wb=XLSX.read(new Uint8Array(buf),{type:"array",cellDates:true});
+  const first=wb.SheetNames&&wb.SheetNames[0];
+  const ws=first&&wb.Sheets[first];
+  if(!ws)throw new Error("The workbook has no readable sheet — export as CSV and re-upload.");
+  const p2=n=>String(n).padStart(2,"0");
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});
+  return aoa.map(r=>(r||[]).map(c=>c instanceof Date?(c.getFullYear()+"-"+p2(c.getMonth()+1)+"-"+p2(c.getDate())):(c==null?"":String(c))));
 }
 function rowsToCsv(rows){return rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(',')).join('\r\n');}
 

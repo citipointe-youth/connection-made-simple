@@ -289,7 +289,14 @@ No emoji or Unicode symbol characters anywhere in the SPA — everything is SVG.
 
 ### Service worker (`public/sw.js`)
 
-- Cache name: `cms-v9` (bump on breaking changes to force eviction)
+- Cache name: `cms-v11` (bump on breaking changes to force eviction)
+- **Excel import** (all upload points — main import, allocations, every Connection Audit slot):
+  `readXlsx(buf)` now uses the vendored **SheetJS** build (`public/vendor/xlsx.full.min.js`),
+  **lazy-loaded** via `_ensureXlsx()` only when an Excel file is chosen (same-origin, so CSP
+  `script-src 'self'` allows it). It returns the same 2D string array (ISO dates) the callers
+  expect, so `rowsToCsv`→`parseCSV`/`parseAllocationCSV`/`parseMatrixRows` are unchanged. Swapped
+  from the old hand-rolled DecompressionStream reader for robustness on arbitrary Excel exports
+  (legacy `.xls`, 1904 date system, sheet order). `_extractHeaderDate` accepts ISO + DD/MM/YYYY.
 - HTML shell (`/`): **network-first** — always fetches fresh HTML when online, falls back to cache offline
 - API routes: **network-only** (never cached), matched by `API_RE`
 - Other assets: **cache-first**
