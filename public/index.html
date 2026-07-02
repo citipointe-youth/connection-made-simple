@@ -719,7 +719,7 @@ function showUndoToast(msg, undoFn) {
   const el = document.getElementById('undo-toast');
   if (_undo.timer) clearTimeout(_undo.timer);
   _undo.pending = undoFn;
-  el.innerHTML = `<span>${msg}</span><button onclick="execUndo()">Undo</button>`;
+  el.innerHTML = `<span>${esc(msg)}</span><button onclick="execUndo()">Undo</button>`;
   el.classList.add('show');
   _undo.timer = setTimeout(() => { el.classList.remove('show'); _undo.pending = null; }, 5000);
 }
@@ -1797,7 +1797,7 @@ async function showLeaderDetail(id) {
     <div class="sh">Assigned Students (${students.length})</div>
     ${students.length ? studRows : '<p style="color:var(--ink-faint);font-size:13px;padding:12px 0">No students assigned yet</p>'}
     <div style="display:flex;gap:8px;margin-top:16px">
-      ${canEdit?`<button class="btn btn-primary btn-sm" onclick="closeModal();openStudentPicker('${id}','${leader.gender||''}','${leader.fullName.replace(/'/g,"\\'")}')">${icS('link')} Add Students</button>`:''}
+      ${canEdit?`<button class="btn btn-primary btn-sm" onclick="closeModal();openStudentPicker('${id}','${leader.gender||''}')">${icS('link')} Add Students</button>`:''}
       ${canEdit?`<button class="btn btn-secondary btn-sm" onclick="closeModal();showEditLeader('${id}')">${icS('edit')} Edit</button>`:''}
       <button class="btn btn-secondary btn-sm" onclick="closeModal()">Close</button>
     </div>`);
@@ -1888,14 +1888,14 @@ function confirmDelLeader(id, name) {
   modal(`<div class="mo-title">Remove leader?</div>
     <p style="color:var(--ink-mid);margin-bottom:20px"><strong>${esc(name)}</strong> will be removed${n ? ` and <strong>${n} student${n!==1?'s':''}</strong> disconnected` : ''}.</p>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-danger" style="flex:1" onclick="doDelLeader('${id}','${name.replace(/'/g,"\\'")}')">Remove</button>
+      <button class="btn btn-danger" style="flex:1" onclick="doDelLeader('${id}')">Remove</button>
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
     </div>`);
 }
 
 // Delete a leader, then offer Undo: re-create the leader and re-connect the same
 // students. Captures the leader record + its connected studentIds before deleting.
-async function doDelLeader(id, name) {
+async function doDelLeader(id) {
   let leader, studentIds = [];
   try { leader = await API.get(`/leaders/${id}`); } catch {}
   studentIds = Object.entries(_aS.allocs || {}).filter(([, ids]) => (ids || []).includes(id)).map(([sid]) => sid);
@@ -1904,7 +1904,7 @@ async function doDelLeader(id, name) {
     Cache.del('/leaders', '/connections', '/overview', '/at-risk');
     closeModal();
     renderConnect();
-    showUndoToast(`Removed ${name}`, async () => {
+    showUndoToast(`Removed ${leader ? leader.fullName : 'leader'}`, async () => {
       try {
         const recreated = await API.post('/leaders', { fullName: leader.fullName, gender: leader.gender || '', grades: leader.grades || [] });
         for (const sid of studentIds) { try { await API.post('/connections', { studentId: sid, leaderId: recreated.id }); } catch {} }
@@ -2034,7 +2034,7 @@ function renderConnectView() {
             <div class="connect-stud-name">${esc(s.firstName)} ${esc(s.lastName)}</div>
             <div class="connect-stud-meta">Gr ${s.grade||'—'} · ${s.gender}${p!==null?' · '+p+'%':''}</div>
           </div>
-          ${canEdit?`<button class="btn btn-ghost btn-sm" style="padding:4px 6px;color:var(--danger)" onclick="removeConnectWithUndo('${s.id}','${l.id}','${s.firstName} ${s.lastName}','${l.fullName}')" aria-label="Disconnect ${esc(s.firstName)} ${esc(s.lastName)} from ${esc(l.fullName)}">×</button>`:''}
+          ${canEdit?`<button class="btn btn-ghost btn-sm" style="padding:4px 6px;color:var(--danger)" onclick="removeConnectWithUndo('${s.id}','${l.id}')" aria-label="Disconnect ${esc(s.firstName)} ${esc(s.lastName)} from ${esc(l.fullName)}">×</button>`:''}
         </div>`;
       }
       if (assignedStudents.length > 8) {
@@ -2052,7 +2052,7 @@ function renderConnectView() {
         <div class="connect-count-label" style="margin-top:6px">
           <span><b>${n}</b> student${n!==1?'s':''} allocated</span>
         </div>
-        ${canEdit?`<button class="connect-add-btn" onclick="openStudentPicker('${l.id}','${l.gender||''}','${l.fullName.replace(/'/g,"\\'")}')">+ Add Students</button>`:''}
+        ${canEdit?`<button class="connect-add-btn" onclick="openStudentPicker('${l.id}','${l.gender||''}')">+ Add Students</button>`:''}
         ${assignedStudents.length?`<div class="connect-students">${studentRows}</div>`:''}
       </div>`;
     }
@@ -2069,16 +2069,17 @@ function toggleAF(type, val) {
 }
 
 // ── STUDENT PICKER MODAL (replaces tiny <select> — works at 60+ students) ──
-function openStudentPicker(leaderId, leaderGender, leaderName) {
+function openStudentPicker(leaderId, leaderGender) {
   const leader = (_aS.leaders || []).find(l => l.id === leaderId);
   const leaderGrades = (leader && leader.grades) ? leader.grades : [];
+  const leaderName = leader ? leader.fullName : 'Leader';
   _pickerCtx = { leaderId, leaderGender, leaderName };
   const assignedForLeader = new Set(
     _aS.students.filter(s => _aS.allocs[s.id]?.includes(leaderId)).map(s => s.id)
   );
 
   modal(`
-    <div class="mo-title">Add Students → ${leaderName}</div>
+    <div class="mo-title">Add Students → ${esc(leaderName)}</div>
     <div style="position:relative;margin-bottom:4px">
       <input class="picker-search" id="picker-q" placeholder="Search by name to add anyone…" oninput="filterPicker()" autofocus>
     </div>
@@ -2268,7 +2269,11 @@ async function remPick(studentId) {
 // Repaint the page behind the open picker so leader counts stay current.
 function pickerSyncBg() { render(); }
 
-async function removeConnectWithUndo(studentId, leaderId, studentName, leaderName) {
+async function removeConnectWithUndo(studentId, leaderId) {
+  const s = _aS.students.find(x => x.id === studentId);
+  const l = _aS.leaders.find(x => x.id === leaderId);
+  const studentName = s ? `${s.firstName} ${s.lastName}` : 'Student';
+  const leaderName = l ? l.fullName : 'Leader';
   try {
     await API.del(`/connections/${studentId}/${leaderId}`);
     Cache.del('/connections', '/overview', '/at-risk');
@@ -2851,7 +2856,7 @@ function showAtRiskUpdate(studentId, name, currentStatus) {
   const opts = statuses.map(s => `<option value="${s}" ${s===currentStatus?'selected':''}>${s.charAt(0).toUpperCase()+s.slice(1)}</option>`).join('');
   modal(`
     <div class="mo-title">Update At-Risk Status</div>
-    <p style="color:var(--ink-mid);margin-bottom:14px"><strong>${name}</strong></p>
+    <p style="color:var(--ink-mid);margin-bottom:14px"><strong>${esc(name)}</strong></p>
     <div class="fg"><label class="fl">Status</label><select class="fs" id="ar-status">${opts}</select></div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-primary" style="flex:1" onclick="submitAtRiskUpdate('${studentId}')">Update</button>
@@ -3987,10 +3992,10 @@ async function renderAdminView(settings, users) {
             <div class="li-sub">${esc(u.email)}</div>
           </div>
           <div class="li-right">
-            <button class="btn btn-ghost btn-sm" onclick="showEditUser('${u.id}')" title="Edit account" aria-label="Edit ${u.displayName}">${icS('edit')}</button>
-            <button class="btn btn-ghost btn-sm" onclick="showSetPassword('${u.id}','${u.displayName.replace(/'/g,"\\'")}') " title="Reset password" aria-label="Reset password for ${u.displayName}">${icS('key')}</button>
-            <button class="btn btn-ghost btn-sm" onclick="toggleUserStatus('${u.id}','${u.status}')" title="${u.status==='active'?'Deactivate':'Activate'}" aria-label="${u.status==='active'?'Deactivate':'Activate'} ${u.displayName}">${u.status==='active'?icS('lock'):icS('unlock')}</button>
-            <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="confirmDelUser('${u.id}','${u.displayName.replace(/'/g,"\\'")}') " aria-label="Delete ${u.displayName}">${icS('trash')}</button>
+            <button class="btn btn-ghost btn-sm" onclick="showEditUser('${u.id}')" title="Edit account" aria-label="Edit ${esc(u.displayName)}">${icS('edit')}</button>
+            <button class="btn btn-ghost btn-sm" onclick="showSetPassword('${u.id}')" title="Reset password" aria-label="Reset password for ${esc(u.displayName)}">${icS('key')}</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleUserStatus('${u.id}','${u.status}')" title="${u.status==='active'?'Deactivate':'Activate'}" aria-label="${u.status==='active'?'Deactivate':'Activate'} ${esc(u.displayName)}">${u.status==='active'?icS('lock'):icS('unlock')}</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="confirmDelUser('${u.id}')" aria-label="Delete ${esc(u.displayName)}">${icS('trash')}</button>
           </div>
         </div>`;
       }
@@ -4142,7 +4147,7 @@ function showAddUser() {
     <div id="uerr"></div>
     <div class="fg"><label class="fl">Display Name</label><input class="fi" id="u-name" placeholder="Grade 9"></div>
     <div class="fg"><label class="fl">Username ${helpTip('For a grade login, add g or b to the end (e.g. grade9g) to scope that account to one gender. Leave it off and the account sees both genders.')}</label><input class="fi" id="u-email" type="text" placeholder="grade9"></div>
-    <div class="fg"><label class="fl">Password</label><input class="fi" id="u-pw" type="password" placeholder="Min 6 chars"></div>
+    <div class="fg"><label class="fl">Password</label><input class="fi" id="u-pw" type="password" placeholder="Min 8 chars"></div>
     <div class="fg"><label class="fl">Role</label>
       <select class="fs" id="u-role" onchange="toggleUserRoleFields();suggestEmail()">
         <option value="grade">Grade</option>
@@ -4237,12 +4242,13 @@ async function submitEditUser(id) {
   } catch (e) { document.getElementById('uerr').innerHTML=`<div class="alert al-err">${e.message}</div>`; }
 }
 
-function showSetPassword(id, name) {
+function showSetPassword(id) {
+  const u = (_adminData.users || []).find(x => x.id === id);
   modal(`
     <div class="mo-title">Reset Password</div>
-    <p style="color:var(--ink-mid);margin-bottom:14px">Set a new password for <strong>${name}</strong></p>
+    <p style="color:var(--ink-mid);margin-bottom:14px">Set a new password for <strong>${esc(u ? u.displayName : 'this account')}</strong></p>
     <div id="uerr"></div>
-    <div class="fg"><label class="fl">New Password (min 6 chars)</label><input class="fi" id="u-newpw" type="password" placeholder="New password"></div>
+    <div class="fg"><label class="fl">New Password (min 8 chars)</label><input class="fi" id="u-newpw" type="password" placeholder="New password"></div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-primary" style="flex:1" onclick="submitSetPassword('${id}')">Set Password</button>
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -4251,7 +4257,7 @@ function showSetPassword(id, name) {
 
 async function submitSetPassword(id) {
   const password = document.getElementById('u-newpw')?.value;
-  if (!password || password.length < 6) { document.getElementById('uerr').innerHTML='<div class="alert al-err">Password must be at least 6 characters</div>'; return; }
+  if (!password || password.length < 8) { document.getElementById('uerr').innerHTML='<div class="alert al-err">Password must be at least 8 characters</div>'; return; }
   try {
     await API.post('/accounts/users/password', { id, password });
     closeModal(); toast('Password updated');
@@ -4268,9 +4274,10 @@ async function toggleUserStatus(id, currentStatus) {
   } catch (e) { toast(e.message); }
 }
 
-function confirmDelUser(id, name) {
+function confirmDelUser(id) {
+  const u = (_adminData.users || []).find(x => x.id === id);
   modal(`<div class="mo-title">Delete Account?</div>
-    <p style="color:var(--ink-mid);margin-bottom:20px">Delete account for <strong>${name}</strong>?</p>
+    <p style="color:var(--ink-mid);margin-bottom:20px">Delete account for <strong>${esc(u ? u.displayName : 'this account')}</strong>?</p>
     <div style="display:flex;gap:8px">
       <button class="btn btn-danger" style="flex:1" onclick="doDelUser('${id}')">Delete</button>
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
