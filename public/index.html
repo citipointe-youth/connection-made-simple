@@ -3510,7 +3510,7 @@ async function renderImport() {
   let body = `
     <div class="ph"><div class="ph-title">Import Data</div><div class="ph-sub">Upload CSV files to update students and attendance</div></div>
     <div class="card">
-      <div class="card-title" style="margin-bottom:6px">Import Attendance</div>
+      <div class="card-title" style="margin-bottom:6px">Import Attendance ${helpTip('Each import recalculates both service and lifegroup term stats from scratch. If you only upload one type, re-upload the other afterwards too so both stay accurate.')}</div>
       <p style="font-size:13px;color:var(--ink-mid);margin-bottom:12px">
         Drop a <strong>Service</strong> or <strong>Group</strong> attendance export from Elvanto/UCare — we'll detect which it is.<br>
         Columns and dates are detected automatically. CSV or .xlsx, up to 10MB.
@@ -4054,10 +4054,10 @@ async function renderAdminView(settings, users) {
     body += `<div class="card" style="display:flex;flex-direction:column;gap:10px">
       <div>
         <button class="btn btn-secondary btn-full" onclick="if(confirm('Save current users and leaders as year defaults?'))adminAction('/admin/save-defaults','✓ Defaults saved')">Save Defaults</button>
-        <div class="help-text" style="margin-top:4px">Snapshots accounts + leaders as baseline for next year</div>
+        <div class="help-text" style="margin-top:4px;display:flex;align-items:center;gap:5px">Snapshots accounts + leaders as baseline for next year ${helpTip('Saves a snapshot of current accounts and leaders you can refer back to later. Does not touch students, connections or attendance.')}</div>
       </div>
       <div class="destructive-section">
-        <div class="destructive-header">Destructive Actions</div>
+        <div class="destructive-header">Destructive Actions ${helpTip('Clear Service/Group Data only deletes attendance - students, leaders and connections stay. Full Reset also deletes students, leaders and connections (accounts are always kept).')}</div>
         <div style="display:flex;flex-direction:column;gap:10px">
           <div>
             <button class="btn btn-secondary btn-full" onclick="confirmType({title:'Clear Service & Group Data?',word:'CLEAR',danger:false,body:'This deletes all service and lifegroup attendance. Students (grade, age, phone), their connections and leaders are kept.',onConfirm:()=>adminAction('/admin/clear-service-group','✓ Service/group data cleared',{force:true,confirmWipe:CONFIRM_WIPE_STRING})})">Clear Service/Group Data</button>
@@ -4183,7 +4183,7 @@ function showAddUser() {
     <div class="mo-title">Add Account</div>
     <div id="uerr"></div>
     <div class="fg"><label class="fl">Display Name</label><input class="fi" id="u-name" placeholder="Grade 9"></div>
-    <div class="fg"><label class="fl">Username</label><input class="fi" id="u-email" type="text" placeholder="grade9"></div>
+    <div class="fg"><label class="fl">Username ${helpTip('For a grade login, add g or b to the end (e.g. grade9g) to scope that account to one gender. Leave it off and the account sees both genders.')}</label><input class="fi" id="u-email" type="text" placeholder="grade9"></div>
     <div class="fg"><label class="fl">Password</label><input class="fi" id="u-pw" type="password" placeholder="Min 6 chars"></div>
     <div class="fg"><label class="fl">Role</label>
       <select class="fs" id="u-role" onchange="toggleUserRoleFields();suggestEmail()">
