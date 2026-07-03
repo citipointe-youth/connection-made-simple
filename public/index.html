@@ -849,11 +849,19 @@ function fmtPhone(p) {
   if (d.length <= 7) return d.slice(0, 4) + ' ' + d.slice(4);
   return d.slice(0, 4) + ' ' + d.slice(4, 7) + ' ' + d.slice(7);
 }
-// Tap-to-call: confirm first, then hand off to the dialer (no-op on desktop if cancelled).
+// Tap-to-call: show a Call / Message / Cancel action sheet (iOS's native tel:
+// confirmation can't be extended with a Message option, so we build our own).
 function callPhone(raw) {
   const d = String(raw || '').replace(/[^\d+]/g, '');
   if (!d) return;
-  if (confirm('Call ' + fmtPhone(raw) + '?')) window.location.href = 'tel:' + d;
+  modal(`
+    <div class="mo-title">${esc(fmtPhone(raw))}</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" onclick="closeModal();window.location.href='tel:${d}'">Call</button>
+      <button class="btn btn-secondary" onclick="closeModal();window.location.href='sms:${d}'">Message</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    </div>
+  `);
 }
 function phoneLink(raw) {
   if (!raw) return '';
@@ -1028,36 +1036,35 @@ function brandMark(px, color){
 
 function navItems() {
   const u = S.user; if (!u) return [];
-  // Grade: Home | My Students | Leaders & Connect | At Risk  (Trends + Student Search in quick actions)
+  // Grade: Home | At Risk & Rising | My Students | Connect Setup  (Trends + Birthdays in quick actions)
   if (u.role === 'grade') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
+    { id:'at-risk',    ic:'alert',    label:'At Risk & Rising',  mbl:'<span class="ni-lbl"><span>At Risk</span><span style="opacity:.75;font-size:8px">&amp; Rising</span></span>' },
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
-    { id:'leaders',    ic:'users',    label:'Leaders & Connect', mbl:'<span class="ni-lbl"><span>Leaders</span><span style="opacity:.75;font-size:8px">&amp; Connect</span></span>' },
-    { id:'at-risk',    ic:'alert',    label:'At Risk',           mbl:'At Risk' },
+    { id:'leaders',    ic:'users',    label:'Connect Setup',     mbl:'Connect Setup' },
     // quick actions:
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
-    { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
     // { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' }, // PUSH-HIDDEN
   ];
-  // Quad: Home | Leaders & Connect | Trends | At Risk
+  // Quad: Home | Connect Setup | Trends | At Risk & Rising
   if (u.role === 'quad') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
-    { id:'leaders',    ic:'users',    label:'Leaders & Connect', mbl:'<span class="ni-lbl"><span>Leaders</span><span style="opacity:.75;font-size:8px">&amp; Connect</span></span>' },
+    { id:'leaders',    ic:'users',    label:'Connect Setup',     mbl:'Connect Setup' },
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
-    { id:'at-risk',    ic:'alert',    label:'At Risk',           mbl:'At Risk' },
+    { id:'at-risk',    ic:'alert',    label:'At Risk & Rising',  mbl:'<span class="ni-lbl"><span>At Risk</span><span style="opacity:.75;font-size:8px">&amp; Rising</span></span>' },
     // quick actions:
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
     // { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' }, // PUSH-HIDDEN
   ];
-  // Admin: Home | Leaders & Connect | Trends | At Risk + quick actions
+  // Admin: Home | Connect Setup | Trends | At Risk & Rising + quick actions
   if (u.role === 'admin') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
-    { id:'leaders',    ic:'users',    label:'Leaders & Connect', mbl:'<span class="ni-lbl"><span>Leaders</span><span style="opacity:.75;font-size:8px">&amp; Connect</span></span>' },
+    { id:'leaders',    ic:'users',    label:'Connect Setup',     mbl:'Connect Setup' },
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
-    { id:'at-risk',    ic:'alert',    label:'At Risk',           mbl:'At Risk' },
+    { id:'at-risk',    ic:'alert',    label:'At Risk & Rising',  mbl:'<span class="ni-lbl"><span>At Risk</span><span style="opacity:.75;font-size:8px">&amp; Rising</span></span>' },
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
@@ -1068,9 +1075,9 @@ function navItems() {
   // Director: same as admin minus admin tile
   return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
-    { id:'leaders',    ic:'users',    label:'Leaders & Connect', mbl:'<span class="ni-lbl"><span>Leaders</span><span style="opacity:.75;font-size:8px">&amp; Connect</span></span>' },
+    { id:'leaders',    ic:'users',    label:'Connect Setup',     mbl:'Connect Setup' },
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
-    { id:'at-risk',    ic:'alert',    label:'At Risk',           mbl:'At Risk' },
+    { id:'at-risk',    ic:'alert',    label:'At Risk & Rising',  mbl:'<span class="ni-lbl"><span>At Risk</span><span style="opacity:.75;font-size:8px">&amp; Rising</span></span>' },
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
@@ -1236,7 +1243,7 @@ function _hAttTile(label, studs, avgWk, opts) {
     <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${avgWk}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`
     + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center">
-    <div style="font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px;opacity:.8">Groups</div>
+    <div style="font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:46px;opacity:.8">Lifegroups</div>
     <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Seen</div></div>
     <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpAvg}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`;
@@ -1330,7 +1337,7 @@ async function _renderHomeInner(stale) {
   const grpAvgWk = lgStats ? lgStats.overall.current.avgPerWeek : (grpWeeks > 0 ? Math.round(grpAtt / grpWeeks) : 0);
 
   let body = `<div style="background:linear-gradient(150deg,var(--navy),#26276b);color:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px">`;
-  body += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-family:var(--font-display);font-size:19px;font-weight:700;letter-spacing:-.01em;line-height:1.1;display:flex;align-items:center;gap:7px">${icN('users')} ${esc(u.displayName)}</div>${roleBadge(u)}</div>`;
+  body += `<div style="display:flex;align-items:center;margin-bottom:6px"><div style="font-family:var(--font-display);font-size:19px;font-weight:700;letter-spacing:-.01em;line-height:1.1;display:flex;align-items:center;gap:7px">${icN('users')} ${esc(u.displayName)}</div></div>`;
   body += `<table style="width:100%;border-collapse:collapse;table-layout:fixed"><colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>`;
   body += `<thead><tr>
     <th style="font-size:11px;font-weight:700;opacity:.55;text-transform:uppercase;letter-spacing:.04em;text-align:left;padding-bottom:4px">This term</th>
@@ -1343,7 +1350,7 @@ async function _renderHomeInner(stale) {
     <td style="text-align:center;padding:5px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em">${svcAvg}</span></td>
   </tr>`;
   body += `<tr style="background:rgba(255,255,255,.05)">
-    <td style="font-size:13px;font-weight:700;opacity:.62;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Groups</td>
+    <td style="font-size:13px;font-weight:700;opacity:.62;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Lifegroups</td>
     <td style="text-align:center;padding:5px 4px"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em;opacity:.82">${grpUniq}</span></td>
     <td style="text-align:center;padding:5px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em;opacity:.82">${grpAvgWk}</span></td>
   </tr></tbody></table>`;
@@ -1368,7 +1375,7 @@ async function _renderHomeInner(stale) {
       <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Weekly</th>
     </tr></thead><tbody>`;
     if (pSvcTot > 0) body += `<tr style="background:rgba(255,255,255,.06)"><td style="font-size:12px;font-weight:700;opacity:.5;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcAvg}</span></td></tr>`;
-    if (pGrpTot > 0) body += `<tr style="background:rgba(255,255,255,.03)"><td style="font-size:12px;font-weight:700;opacity:.45;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Groups</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpAvg}</span></td></tr>`;
+    if (pGrpTot > 0) body += `<tr style="background:rgba(255,255,255,.03)"><td style="font-size:12px;font-weight:700;opacity:.45;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Lifegroups</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpAvg}</span></td></tr>`;
     body += `</tbody></table>`;
     body += `</div>`;
   }
@@ -1389,7 +1396,7 @@ async function _renderHomeInner(stale) {
     // ── Quick action tiles ABOVE the breakdown ──
     const qa = quickActionItems();
     if (qa.length) {
-      body += '<div class="sh">Quick Actions</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">';
+      body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">';
       for (const x of qa) {
         const warn = x.id === 'at-risk' && stats.atRiskTotal > 0;
         body += `<button class="btn btn-secondary" style="justify-content:flex-start${warn ? ';border-color:var(--danger);color:var(--danger)' : ''}" onclick="go('${x.id}')">${icS(x.ic)} ${x.label}</button>`;
@@ -1403,7 +1410,7 @@ async function _renderHomeInner(stale) {
     if (u.role === 'grade') body += '<div id="home-followup"></div>';
 
     {
-      // Connection Summary for grade logins now lives on Leaders & Connect (Rec 4a).
+      // Connection Summary for grade logins now lives on Connect Setup (Rec 4a).
       // Director/Admin: Attendance by Quad — tap to expand per-grade rows
       if (['admin', 'director'].includes(u.role)) {
         const vq = (stats.byQuad || []).filter(q => q.totalStudents > 0);
@@ -1524,7 +1531,7 @@ async function renderHomeFollowup() {
     try { leaders = await API.get('/leaders'); } catch {}
     if (!leaders.length) { host.innerHTML = ''; return; }
     const opts = leaders.map(l => `<option value="${l.id}">${esc(l.fullName)}</option>`).join('');
-    host.innerHTML = `<div class="sh">This week's follow-up</div>
+    host.innerHTML = `<div class="sh" style="font-size:15px">This week's follow-up ${helpTip("These are students who've attended a service or lifegroup recently.")}</div>
       <div class="card" style="padding:14px">
         <div style="font-size:13px;color:var(--ink-mid);margin-bottom:8px">Tell us who you are to see your students to follow up with this week.</div>
         <select class="fs" id="home-leader-pick"><option value="">— Choose your name —</option>${opts}</select>
@@ -1541,12 +1548,12 @@ async function renderHomeFollowup() {
   const changeBtn = `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="setMyLeaderId(null);renderHomeFollowup()">Not you?</button>`;
   // Each "not seen" list reflects the most recent session/week — label it with the
   // Friday that ends that Sat–Fri week so the leader knows which week they're chasing up.
-  const svcWeek = data.latestSvcDate ? ` · Week ending ${_fridayLabel(data.latestSvcDate)}` : '';
-  const grpWeek = data.latestGrpDate ? ` · Week ending ${_fridayLabel(data.latestGrpDate)}` : '';
-  let h = `<div class="sh" style="display:flex;align-items:center;justify-content:space-between"><span>This week's follow-up · ${esc(data.leader.fullName)}</span>${changeBtn}</div>`;
+  const svcTitle = 'Not Seen Last Friday' + (data.latestSvcDate ? ` (${_fridayLabel(data.latestSvcDate)})` : '');
+  const grpTitle = 'Not At A Lifegroup Last Week' + (data.latestGrpDate ? ` (ending ${_fridayLabel(data.latestGrpDate)})` : '');
+  let h = `<div class="sh" style="display:flex;align-items:center;justify-content:space-between;font-size:15px"><span>This week's follow-up · ${esc(data.leader.fullName)} ${helpTip("These are students who've attended a service or lifegroup recently.")}</span>${changeBtn}</div>`;
   h += _followupListHtml('Birthdays this week', data.birthdays, 'No birthdays this week');
-  h += _followupListHtml('Not seen at Friday' + svcWeek, data.notSeenService, data.latestSvcDate ? 'Everyone was seen' : 'No service data yet');
-  h += _followupListHtml('Not seen at Lifegroup' + grpWeek, data.notSeenGroup, data.latestGrpDate ? 'Everyone was seen' : 'No lifegroup data yet');
+  h += _followupListHtml(svcTitle, data.notSeenService, data.latestSvcDate ? 'Everyone was seen' : 'No service data yet');
+  h += _followupListHtml(grpTitle, data.notSeenGroup, data.latestGrpDate ? 'Everyone was seen' : 'No lifegroup data yet');
   host.innerHTML = h;
 }
 
@@ -1561,19 +1568,17 @@ function _fridayLabel(iso) {
   return `${d.getDate()}/${d.getMonth() + 1}`;
 }
 
-// One follow-up list as a compact card. Shows name + grade/gender + tap-to-call;
-// deliberately NO at-risk/declining marker (per spec).
+// One follow-up list as a compact card. Shows name only (grade/gender/birthday
+// omitted to keep rows compact) + tap-to-call; deliberately NO at-risk/declining marker (per spec).
 function _followupListHtml(title, items, emptyMsg) {
   let h = `<div class="card" style="padding:12px;margin-bottom:10px">
     <div style="font-size:12px;font-weight:800;color:var(--ink-mid);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px">${title} (${items.length})</div>`;
   if (!items.length) { h += `<div style="font-size:13px;color:var(--ink-faint)">${emptyMsg}</div></div>`; return h; }
   for (const s of items) {
-    const bd = fmtBday(s.dateOfBirth);
     const phone = s.mobile || s.parentPhone;
     h += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--paper-dark)">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:14px">${esc(s.fullName)}</div>
-        <div style="font-size:12px;color:var(--ink-mid)">Yr ${s.grade||'—'} · ${s.gender}${bd ? ' · ' + bd : ''}</div>
       </div>
       ${phone ? `<div style="font-size:13px;white-space:nowrap" onclick="event.stopPropagation()">${phoneLink(phone)}</div>` : ''}
     </div>`;
@@ -2084,15 +2089,23 @@ function renderConnectView() {
     `<button class="fc ${df.has(g)?'on':''}" onclick="toggleAF('d','${g}')" aria-pressed="${df.has(g)}">${g.charAt(0).toUpperCase()+g.slice(1)}</button>`
   ).join('') : '';
 
-  const gradeHint = (u?.role === 'grade')
-    ? `<div class="alert al-info" style="margin-bottom:10px">Tap "Add Students" on any leader to search. You can add students from other grades if they match the leader's gender.</div>`
-    : '';
+  const unallocated = connectable.filter(s => !connectedStudentIds.has(s.id)).sort(_pickByFirst);
+  const unallocList = unallocated.length
+    ? unallocated.map(s => `<div style="padding:6px 0;border-top:1px solid var(--paper-dark);font-size:13px">${esc(s.firstName)} ${esc(s.lastName)} <span style="color:var(--ink-mid);font-size:11px">Gr ${s.grade || '—'} · ${s.gender}</span></div>`).join('')
+    : `<div style="font-size:13px;color:var(--ink-faint);padding:6px 0">Everyone is allocated!</div>`;
+  const unallocDrop = `<div class="card drop" id="connect-unalloc" style="margin-bottom:12px">
+    <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('connect-unalloc')">
+      <span class="drop-chev" style="font-size:12px;color:var(--ink-faint);font-weight:800">›</span>
+      <div style="flex:1;font-size:13px;font-weight:700">Unallocated students (${unallocated.length})</div>
+    </div>
+    <div class="drop-body">${unallocList}</div>
+  </div>`;
 
   let body = `
     <div class="ph">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <div>
-          <div class="ph-title">Leaders &amp; Connect ${helpTip('Search and connect are scoped to your grade and gender. You can add students from other grades, but only ones matching your gender.')}</div>
+          <div class="ph-title">Connect Setup ${helpTip('Search and connect are scoped to your grade and gender. You can add students from other grades, but only ones matching your gender.')}</div>
           <div class="ph-sub">${connectedCount}/${totalStudents} students connected · ${visLeaders.length} leader${visLeaders.length!==1?'s':''}</div>
         </div>
         <div style="display:flex;gap:6px">
@@ -2101,12 +2114,12 @@ function renderConnectView() {
         </div>
       </div>
     </div>
-    ${gradeHint}
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">
       <div class="stat"><div class="stat-v">${totalStudents}</div><div class="stat-l">Total</div></div>
       <div class="stat"><div class="stat-v" style="color:var(--success)">${connectedCount}</div><div class="stat-l">Connected</div></div>
       <div class="stat"><div class="stat-v" style="color:var(--warn)">${Math.max(0, totalStudents - connectedCount)}</div><div class="stat-l">Pending</div></div>
     </div>
+    ${unallocDrop}
     ${gChips ? `<div class="filter-row" role="group" aria-label="Filter by grade">
       <span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Grade:</span>${gChips}
     </div>` : ''}
@@ -2479,17 +2492,16 @@ async function renderUpcomingBirthdays() {
     if (key !== curKey) { curKey = key; body += `<div class="sh">${f.monthName}</div>`; }
     const birthYear = Number(String(s.dateOfBirth).slice(0, 4));
     const turns = birthYear > 1900 ? when.getFullYear() - birthYear : null;
-    const phone = s.mobile || s.parentPhone;
     body += `<div class="li" style="position:relative;align-items:flex-start">
       <div class="li-body">
         <div style="padding-right:56px">
           <div class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</div>
-          <div class="li-sub">Yr ${s.grade || '—'} · ${s.gender}${turns != null ? ' · turns ' + turns : ''}</div>
+          ${turns != null ? `<div class="li-sub">Turns ${turns}</div>` : ''}
         </div>
         ${(leadersByStudent[s.id] || []).length
           ? `<div style="font-size:12px;margin-top:4px;color:var(--accent-dark);font-weight:600;display:flex;align-items:center;gap:5px">${icS('users')}<span>${leadersByStudent[s.id].map(esc).join(', ')}</span></div>`
           : `<div style="font-size:12px;margin-top:4px;color:var(--ink-faint)">No leader connected</div>`}
-        ${phone ? `<div style="font-size:12px;margin-top:4px;color:var(--ink-mid)" onclick="event.stopPropagation()">${s.mobile ? `<span style="font-weight:600">Mobile:</span> ${phoneLink(s.mobile)}` : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? `<span style="font-weight:600">Parent:</span> ${phoneLink(s.parentPhone)}` : ''}</div>` : ''}
+        ${s.mobile ? `<div style="font-size:12px;margin-top:4px;color:var(--ink-mid)" onclick="event.stopPropagation()"><span style="font-weight:600">Mobile:</span> ${phoneLink(s.mobile)}</div>` : ''}
       </div>
       <div style="position:absolute;top:13px;right:13px;text-align:right">
         <div style="font-weight:800;font-size:14px">${f.day} ${f.month}</div>
@@ -2568,18 +2580,9 @@ async function renderMyStudents() {
   body += `<div class="fg"><label class="fl">I am…</label><select class="fs" onchange="_msLeader=this.value;setMyLeaderId(this.value||null);renderMyStudents()"><option value="">— Choose a leader —</option>${opts}</select></div>`;
 
   if (_msLeader) {
-    const leader = leaders.find(l => l.id === _msLeader);
     let summary;
     try { summary = await API.get(`/connections/leader/${_msLeader}/summary`); } catch {}
     const students = (summary?.students || []).slice().sort((a, b) => (a.fullName || '').localeCompare(b.fullName || ''));
-
-    if (leader) {
-      body += `<div class="card" style="text-align:center;padding:18px;margin-bottom:16px">
-        <div style="font-size:36px;margin-bottom:8px">${leader.gender === 'female' ? '♀' : leader.gender === 'male' ? '♂' : '⚥'}</div>
-        <div style="font-family:var(--font-display);font-size:19px;font-weight:700;letter-spacing:-.01em">${esc(leader.fullName)}</div>
-        <div style="font-size:13px;color:var(--ink-mid);margin-top:4px">Gr ${leader.grades?.join(', ') || 'All'} · ${leader.gender || 'any gender'}</div>
-      </div>`;
-    }
 
     body += `<div class="sh">My Students (${students.length})</div>`;
     if (!students.length) {
@@ -2591,10 +2594,10 @@ async function renderMyStudents() {
         const bd = fmtBday(s.dateOfBirth ?? bdayOf[s.id]);
         body += `<div class="li" style="cursor:pointer" onclick="showStudentDetail('${s.id}')">
           <div class="li-body">
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span class="li-title">${esc(s.fullName)}</span>${riskChip(s.atRiskStatus)}
+            <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
+              <span class="li-title">${esc(s.fullName)}</span>
+              <span style="font-size:11px;color:var(--ink-mid)">Yr ${s.grade || '—'} · ${s.gender}${bd ? ' · ' + bd : ''}</span>${riskChip(s.atRiskStatus)}
             </div>
-            <div class="li-sub">Yr ${s.grade || '—'} · ${s.gender}${bd ? ' · ' + bd : ''}</div>
             ${termRow('Fridays', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
             ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
             ${(s.mobile || s.parentPhone) ? `<div style="font-size:12px;margin-top:4px;color:var(--ink-mid)" onclick="event.stopPropagation()">${s.mobile ? `<span style="font-weight:600">Mobile:</span> ${phoneLink(s.mobile)}` : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? `<span style="font-weight:600">Parent:</span> ${phoneLink(s.parentPhone)}` : ''}</div>` : ''}
@@ -2871,7 +2874,7 @@ async function renderAtRisk() {
   let body = `
     <div class="ph">
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <div><div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('alert')} At Risk ${helpTip('Stopped means no attendance in either stream this term. Declining or Mixed means a stream rate dropped 20+ points vs last term - calculated automatically, no manual thresholds.')}</div><div class="ph-sub">${flagged} need attention${sections.rising.length?` · ${sections.rising.length} rising`:''}</div></div>
+        <div><div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('alert')} At Risk & Rising ${helpTip('Stopped means no attendance in either stream this term. Declining or Mixed means a stream rate dropped 20+ points vs last term - calculated automatically, no manual thresholds.')}</div><div class="ph-sub">${flagged} need attention${sections.rising.length?` · ${sections.rising.length} rising`:''}</div></div>
         ${['director','admin'].includes(u.role)?`<button class="btn btn-secondary btn-sm" onclick="recomputeAtRisk()">Recompute</button>`:''}
       </div>
     </div>`;
@@ -4662,8 +4665,17 @@ function model(){
   // When a specific term is selected, filter connect/decision rows to that term's date range.
   // Undated rows are always included. Team rows have no dates — for a specific term, a team
   // member only counts toward stage 5 if they also attended in that term (see stage logic below).
+  // Period bounds for connect/decision rows. A specific term uses its own range;
+  // year-to-date ('ALL') bounds to the UNION of the audit's term dates — these CRM
+  // exports carry the full submission history (prior-year rows, and even stray
+  // future-dated entries like a mis-typed "decision date"), and without a bound the
+  // YTD funnel counted all of them. Term views were already bounded; this makes YTD
+  // consistent. Undated rows are still always included.
   const tObj=TERM!=='ALL'&&AUDIT?(AUDIT.terms||[]).find(t=>t.key===TERM):null;
-  const inPeriod=d=>!d||!tObj||(d>=tObj.startDate&&d<=tObj.endDate);
+  let pStart=null,pEnd=null;
+  if(tObj){pStart=tObj.startDate;pEnd=tObj.endDate;}
+  else if(AUDIT){for(const t of (AUDIT.terms||[])){if(t.startDate&&(pStart==null||t.startDate<pStart))pStart=t.startDate;if(t.endDate&&(pEnd==null||t.endDate>pEnd))pEnd=t.endDate;}}
+  const inPeriod=d=>!d||pStart==null||(d>=pStart&&d<=pEnd);
   for(const r of st.uploads.team.rows){const k=norm(r.name);if(!k)continue;mk(k,r.name).team=true;}
   for(const r of st.uploads.connect.rows){const k=norm(r.name);if(!k||!inPeriod(r.date))continue;const x=mk(k,r.name);x.hasConnect=true;if(r.date&&(!x.connect||r.date<x.connect))x.connect=r.date;}
   for(const r of st.uploads.decision.rows){const k=norm(r.name);if(!k||!inPeriod(r.date))continue;const x=mk(k,r.name);x.hasDecision=true;if(r.date&&(!x.decision||r.date>x.decision))x.decision=r.date;}
