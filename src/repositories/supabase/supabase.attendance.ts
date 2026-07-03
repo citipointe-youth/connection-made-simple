@@ -39,7 +39,7 @@ function dateIso(v: unknown): string {
 function toServiceSession(row: Record<string, unknown>): ServiceSession {
   return {
     id: row['id'] as string,
-    importId: row['import_id'] as string,
+    importId: (row['import_id'] as string | null) ?? null,
     sessionDate: dateOnly(row['session_date']),
     sessionName: row['session_name'] as string,
     isRegular: row['is_regular'] as boolean,
@@ -72,7 +72,7 @@ function toLifegroup(row: Record<string, unknown>): Lifegroup {
 function toLifegroupWeek(row: Record<string, unknown>): LifegroupWeek {
   return {
     id: row['id'] as string,
-    importId: row['import_id'] as string,
+    importId: (row['import_id'] as string | null) ?? null,
     weekNum: row['week_num'] as number,
     weekKey: row['week_key'] as string,
     weekStart: dateOnly(row['week_start']),

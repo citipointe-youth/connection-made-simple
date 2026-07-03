@@ -3563,7 +3563,7 @@ async function renderImport() {
 }
 
 async function deleteImportEntry(id) {
-  if (!confirm('Delete this import record?')) return;
+  if (!confirm('Remove this import from the history log? Attendance data is kept.')) return;
   try {
     await API.del(`/import/history/${id}`);
     Cache.clear();
@@ -3577,7 +3577,7 @@ async function deleteImportEntry(id) {
 function clearAllImportHistory() {
   confirmType({
     title: 'Clear Import History?', word: 'CLEAR', danger: false,
-    body: 'Deletes all import history records. This cannot be undone.',
+    body: 'Removes the import history log only. Your students and attendance data are kept — to clear attendance use Admin → Clear Service/Group data.',
     onConfirm: async () => {
       try { await API.del('/import/history'); Cache.clear(); await renderImport(); }
       catch (e) { alert('Failed to clear history: ' + (e.message || e)); }
@@ -3716,12 +3716,21 @@ async function detectAndPreview(file) {
 
   const rows = parseCSV(text);
   if (!rows.length) { statusEl.innerHTML = '<div class="alert al-err">Couldn\'t recognise this as a Service or Group attendance export. Check the file.</div>'; return; }
-  previewServiceImport(file.name, rows);
+  await previewServiceImport(file.name, rows);
 }
 
 // Service preview: new vs existing students, plus any unrecognised grades.
-function previewServiceImport(filename, rows) {
-  const existing = new Set((Cache.get('/students') || []).map(s => `${(s.firstName||'').trim().toLowerCase()} ${(s.lastName||'').trim().toLowerCase()}`));
+async function previewServiceImport(filename, rows) {
+  // Match the server's new-vs-known logic against CURRENT students. The 30s cache
+  // (Cache.get) returns null once expired AND is wiped by Cache.clear() after every
+  // import, so relying on it made a re-upload show everyone as "new" with 0 updates.
+  // Fetch fresh (falling back to the last-known list, then empty) before counting.
+  let studentList = Cache.get('/students');
+  if (!studentList) {
+    try { studentList = await API.get('/students'); }
+    catch { studentList = Cache.getStale('/students') || []; }
+  }
+  const existing = new Set((studentList || []).map(s => `${(s.firstName||'').trim().toLowerCase()} ${(s.lastName||'').trim().toLowerCase()}`));
   let nu = 0; const grades = new Set(); let unknownGrade = 0;
   for (const r of rows) {
     const key = `${(r.first_name||'').trim().toLowerCase()} ${(r.last_name||'').trim().toLowerCase()}`;

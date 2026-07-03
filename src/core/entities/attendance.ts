@@ -3,7 +3,9 @@ import type { ID, ISODateString } from '../types/common';
 // A single service session (weekly gathering)
 export interface ServiceSession {
   id: ID;
-  importId: string;
+  // null once its originating import-history row has been cleared (the FK is
+  // ON DELETE SET NULL) — the session data itself is retained. Set at import time.
+  importId: string | null;
   sessionDate: string;
   sessionName: string;
   isRegular: boolean;
@@ -33,7 +35,9 @@ export interface Lifegroup {
 // A weekly lifegroup meeting
 export interface LifegroupWeek {
   id: ID;
-  importId: string;
+  // null once its originating import-history row has been cleared (the FK is
+  // ON DELETE SET NULL) — the week data itself is retained. Set at import time.
+  importId: string | null;
   weekNum: number;
   weekKey: string;
   weekStart: string;

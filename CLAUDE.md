@@ -60,10 +60,24 @@ Seed data only runs when `PERSISTENCE=memory`. Production uses `PERSISTENCE=supa
 | At-risk | `GET /at-risk`, `POST /at-risk/recompute` |
 | Trends | `GET /trends` |
 | Lifegroup stats | `GET /lifegroups/stats` (per-lifegroup/grade/quad/overall, current + previous term + weekly series) |
-| Import | `POST /import/csv`, `GET /import/history` |
+| Import | `POST /import/csv`, `GET /import/history`, `DELETE /import/history` (clear log), `DELETE /import/history/:id` (remove one) |
 | Settings | `GET/PATCH /settings` |
 | Admin | `POST /admin/reset` (clears students+leaders+connections+all data), `POST /admin/clear-service-group` (clears service/lifegroup data, **keeps** students+connections+leaders, resets student aggregates), `POST /admin/save-defaults`, `GET /admin/audit` |
 | Accounts | `GET/POST /accounts/users`, `PATCH /accounts/users/:id`, etc. |
+
+**Clearing import history ≠ deleting data.** The Import screen's "Clear All" and per-row
+trash only remove `import_records` log rows. `service_sessions.import_id` /
+`lifegroup_weeks.import_id` are **`ON DELETE SET NULL`** (migration `013`; they were
+`CASCADE` before, which silently wiped attendance in production while the in-memory dev path
+didn't — a nasty divergence). Deleting the actual attendance is the job of admin → **Clear
+Service/Group data** (`clearServiceGroupData`), which deletes sessions/weeks/attendance
+directly and resets student aggregates. `import_id` is provenance only (imports are
+full-replace; `deleteByImport` is unused), so nulling it is safe.
+
+The Import screen's **new-vs-known preview** (`previewServiceImport`) counts against a fresh
+`/students` fetch, NOT the 30s `Cache.get` — that cache expires and is wiped by `Cache.clear()`
+after every import, which made a re-upload preview show everyone as "new" with 0 updates even
+though the server correctly matched them by name.
 
 ## Role hierarchy
 
