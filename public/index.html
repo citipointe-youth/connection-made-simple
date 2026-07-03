@@ -56,10 +56,14 @@
 #nprog{position:fixed;top:0;left:0;height:3px;width:0;z-index:1000;background:linear-gradient(90deg,var(--accent),var(--accent-dark));border-radius:0 2px 2px 0;opacity:0;transition:width .18s ease,opacity .3s ease;pointer-events:none;box-shadow:0 0 8px rgba(26,26,242,.55)}
 #nprog.on{opacity:1}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:16px;-webkit-text-size-adjust:100%;overflow-x:hidden;touch-action:pan-x pan-y}
+html{font-size:16px;-webkit-text-size-adjust:100%;overflow-x:hidden;touch-action:pan-x pan-y;overscroll-behavior-y:contain}
 @media(min-width:768px){html{font-size:17px}}
 @media(min-width:1280px){html{font-size:18px}}
-body{font-family:var(--font);color:var(--ink);background:var(--paper);min-height:100vh;overflow-x:hidden}
+/* overscroll-behavior-y:contain on the window scroller stops the native pull-to-refresh/
+   rubber-band bounce from dragging the whole page up/down past the sticky header and
+   fixed bottom nav (camp app hit the same "screen dragging" bug — same fix, ported here
+   since this SPA scrolls the window rather than a per-screen container). */
+body{font-family:var(--font);color:var(--ink);background:var(--paper);min-height:100vh;overflow-x:hidden;overscroll-behavior-y:contain}
 button{cursor:pointer;border:none;background:none;font-family:inherit;font-size:inherit}
 input,select,textarea{font-family:inherit;font-size:inherit}
 #app{display:flex;flex-direction:column;min-height:100vh;max-width:100%;overflow-x:hidden}
@@ -1041,7 +1045,7 @@ function navItems() {
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
     { id:'at-risk',    ic:'alert',    label:'At Risk & Rising',  mbl:'<span class="ni-lbl"><span>At Risk</span><span style="opacity:.75;font-size:8px">&amp; Rising</span></span>' },
     { id:'my-students',ic:'users',    label:'My Students',       mbl:'My Students' },
-    { id:'leaders',    ic:'users',    label:'Connect Setup',     mbl:'Connect Setup' },
+    { id:'leaders',    ic:'arrr',     label:'Connect Setup',     mbl:'<span class="ni-lbl"><span>Connect</span><span style="opacity:.75;font-size:8px">Setup</span></span>' },
     // quick actions:
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
@@ -1050,7 +1054,7 @@ function navItems() {
   // Quad: Home | Connect Setup | Trends | At Risk & Rising
   if (u.role === 'quad') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
-    { id:'leaders',    ic:'users',    label:'Connect Setup',     mbl:'Connect Setup' },
+    { id:'leaders',    ic:'arrr',     label:'Connect Setup',     mbl:'<span class="ni-lbl"><span>Connect</span><span style="opacity:.75;font-size:8px">Setup</span></span>' },
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
     { id:'at-risk',    ic:'alert',    label:'At Risk & Rising',  mbl:'<span class="ni-lbl"><span>At Risk</span><span style="opacity:.75;font-size:8px">&amp; Rising</span></span>' },
     // quick actions:
@@ -1062,7 +1066,7 @@ function navItems() {
   // Admin: Home | Connect Setup | Trends | At Risk & Rising + quick actions
   if (u.role === 'admin') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
-    { id:'leaders',    ic:'users',    label:'Connect Setup',     mbl:'Connect Setup' },
+    { id:'leaders',    ic:'arrr',     label:'Connect Setup',     mbl:'<span class="ni-lbl"><span>Connect</span><span style="opacity:.75;font-size:8px">Setup</span></span>' },
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
     { id:'at-risk',    ic:'alert',    label:'At Risk & Rising',  mbl:'<span class="ni-lbl"><span>At Risk</span><span style="opacity:.75;font-size:8px">&amp; Rising</span></span>' },
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
@@ -1075,7 +1079,7 @@ function navItems() {
   // Director: same as admin minus admin tile
   return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
-    { id:'leaders',    ic:'users',    label:'Connect Setup',     mbl:'Connect Setup' },
+    { id:'leaders',    ic:'arrr',     label:'Connect Setup',     mbl:'<span class="ni-lbl"><span>Connect</span><span style="opacity:.75;font-size:8px">Setup</span></span>' },
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
     { id:'at-risk',    ic:'alert',    label:'At Risk & Rising',  mbl:'<span class="ni-lbl"><span>At Risk</span><span style="opacity:.75;font-size:8px">&amp; Rising</span></span>' },
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
@@ -1531,7 +1535,7 @@ async function renderHomeFollowup() {
     try { leaders = await API.get('/leaders'); } catch {}
     if (!leaders.length) { host.innerHTML = ''; return; }
     const opts = leaders.map(l => `<option value="${l.id}">${esc(l.fullName)}</option>`).join('');
-    host.innerHTML = `<div class="sh" style="font-size:15px">This week's follow-up ${helpTip("These are students who've attended a service or lifegroup recently.")}</div>
+    host.innerHTML = `<div class="sh" style="font-size:15px">This week's follow-up ${helpTip("These are students who've attended a service or lifegroup recently, but weren't here last service.")}</div>
       <div class="card" style="padding:14px">
         <div style="font-size:13px;color:var(--ink-mid);margin-bottom:8px">Tell us who you are to see your students to follow up with this week.</div>
         <select class="fs" id="home-leader-pick"><option value="">— Choose your name —</option>${opts}</select>
@@ -1550,7 +1554,7 @@ async function renderHomeFollowup() {
   // Friday that ends that Sat–Fri week so the leader knows which week they're chasing up.
   const svcTitle = 'Not Seen Last Friday' + (data.latestSvcDate ? ` (${_fridayLabel(data.latestSvcDate)})` : '');
   const grpTitle = 'Not At A Lifegroup Last Week' + (data.latestGrpDate ? ` (ending ${_fridayLabel(data.latestGrpDate)})` : '');
-  let h = `<div class="sh" style="display:flex;align-items:center;justify-content:space-between;font-size:15px"><span>This week's follow-up · ${esc(data.leader.fullName)} ${helpTip("These are students who've attended a service or lifegroup recently.")}</span>${changeBtn}</div>`;
+  let h = `<div class="sh" style="display:flex;align-items:center;justify-content:space-between;font-size:13px"><span>This week's follow-up · ${esc(data.leader.fullName)} ${helpTip("These are students who've attended a service or lifegroup recently, but weren't here last service.")}</span>${changeBtn}</div>`;
   h += _followupListHtml('Birthdays this week', data.birthdays, 'No birthdays this week');
   h += _followupListHtml(svcTitle, data.notSeenService, data.latestSvcDate ? 'Everyone was seen' : 'No service data yet');
   h += _followupListHtml(grpTitle, data.notSeenGroup, data.latestGrpDate ? 'Everyone was seen' : 'No lifegroup data yet');
