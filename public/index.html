@@ -335,7 +335,12 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .connect-add-btn{width:100%;padding:11px;border-radius:var(--radius-sm);background:var(--accent-light);color:var(--accent-dark);font-size:14px;font-weight:700;cursor:pointer;border:none;transition:background .15s;text-align:center}
 .connect-add-btn:hover{background:#c7d2fe}
 .connect-add-btn:disabled{opacity:.45;cursor:not-allowed}
-.connect-students{margin-top:12px;border-top:1px solid var(--paper-dark);padding-top:10px;max-height:126px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.connect-students{margin-top:12px;border-top:1px solid var(--paper-dark);padding-top:10px;max-height:126px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--ink-faint) transparent}
+/* A native mobile scrollbar only flashes on touch and is easy to miss inside this short
+   3-row preview window, so keep a faint thumb always visible as a "there's more" hint. */
+.connect-students::-webkit-scrollbar{width:4px}
+.connect-students::-webkit-scrollbar-track{background:transparent}
+.connect-students::-webkit-scrollbar-thumb{background:rgba(148,163,184,.5);border-radius:2px}
 .connect-stud-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--paper-dark)}
 .connect-stud-row:last-child{border-bottom:none}
 .connect-stud-name{flex:1;font-size:14px;font-weight:600}
@@ -2137,7 +2142,7 @@ function renderConnectView() {
   const unallocDrop = `<div class="card drop" id="connect-unalloc" style="margin-bottom:12px">
     <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('connect-unalloc')">
       <span class="drop-chev" style="font-size:12px;color:var(--ink-faint);font-weight:800">›</span>
-      <div style="flex:1;font-size:13px;font-weight:700">Unallocated students (${unallocated.length})</div>
+      <div style="flex:1;font-size:13px;font-weight:700">Students not Connected (${unallocated.length})</div>
     </div>
     <div class="drop-body">${unallocList}</div>
   </div>`;
