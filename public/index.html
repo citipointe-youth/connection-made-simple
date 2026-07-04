@@ -4579,7 +4579,7 @@ function model(){
     const stage=x.team?5:1;
     people.push({id:'cax-'+h32(k),name:x.name,s:null,caOnly:true,stage,trend:'stable',score:scoreOf(stage,null,'stable'),connect:x.connect||null,decision:x.decision||null,conn:!!x.hasConnect,dec:!!x.hasDecision,team:!!x.team});
   }
-  const rungs=[[1,'First contact'],[2,'Came to Friday'],[3,'Regular'],[4,'Attended a lifegroup this term'],[5,'Student team']]
+  const rungs=[[1,'First contact'],[2,'Came to Youth'],[3,'Regular'],[4,'Attended a lifegroup this term'],[5,'Student team']]
     .map(([n,lb])=>({n,lb,v:people.filter(p=>p.stage>=n).length}));
   // KPIs
   const act=students.filter(s=>s.sA>0).length;
@@ -4687,7 +4687,7 @@ function rOverview(){
   let b='';
   b+='<div class="stat-grid">'
     +'<div class="stat"><div class="stat-v">'+k.act+'</div><div class="stat-l">Active youth</div>'+at+'</div>'
-    +'<div class="stat"><div class="stat-v">'+k.avgFri+'</div><div class="stat-l">Avg Friday</div>'+dl(k.svcD)+'</div>'
+    +'<div class="stat"><div class="stat-v">'+k.avgFri+'</div><div class="stat-l">Avg Youth</div>'+dl(k.svcD)+'</div>'
     +'<div class="stat"><div class="stat-v">'+k.inLG+'</div><div class="stat-l">In a lifegroup'+(k.act?' ('+Math.round(k.inLG/k.act*100)+'%)':'')+'</div>'+dl(k.grpD)+'</div>'
     +'<div class="stat"><div class="stat-v">'+k.decisions+'</div><div class="stat-l">Decisions</div>'+(noPrevCompare?'':'<div class="ca-dlt fl">this term</div>')+'</div>'
     +'</div>';
@@ -4749,7 +4749,7 @@ function rFunnel(){
   const qc={};for(const p of stuck){const q=p.s&&p.s.quad;if(q)qc[q]=(qc[q]||0)+1;}
   const worst=Object.entries(qc).sort((a,b)=>b[1]-a[1])[0];
   let b='';
-  b+='<div class="card"><div class="ca-ct">This term&#39;s conversion '+helpTip('Stages run First contact, Friday, Regular, Lifegroup, then Student team. Each bar shows how many people reached that stage this term.')+'</div><div style="font-size:.62rem;color:var(--ca-muted);margin-bottom:10px">'+R[0].lb+' → '+R[4].lb+'</div>'+f+'</div>';
+  b+='<div class="card"><div class="ca-ct">This term&#39;s conversion '+helpTip('Stages run First contact, Youth, Regular, Lifegroup, then Student team. Each bar shows how many people reached that stage this term.')+'</div><div style="font-size:.62rem;color:var(--ca-muted);margin-bottom:10px">'+R[0].lb+' → '+R[4].lb+'</div>'+f+'</div>';
   b+='<div class="card" style="background:#fff5f5;border-left:3px solid var(--ca-rose)"><div style="font-size:.66rem;font-weight:800;color:#b91c1c;text-transform:uppercase;letter-spacing:.05em">Biggest leak</div><div style="font-size:.78rem;margin-top:3px">'+R[leak].lb+' → '+R[leak+1].lb+' loses <b>'+lost+' people</b>.'+(worst?' Largest cluster: '+(QLBL[worst[0]]||worst[0])+' ('+worst[1]+').':'')+'</div></div>';
   b+='<button class="btn btn-secondary btn-full" onclick="CA.fquad()">'+(FQ?'Hide quad funnels ▴':'View funnel per quad ▾')+'</button>';
   if(FQ){
@@ -4825,13 +4825,13 @@ function showGroup(id){
     +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:.72rem;color:var(--ca-muted)">'+g.enrolled+' enrolled · '+g.active+' active · '+g.va+' visits/person · '+g.weeksRun+' weeks run</span>'+gChip(g)+'</div>';
   h+='<div style="max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid var(--ca-line)">';
   for(const s of g.mem.slice().sort((a,b)=>b.gA-a.gA)){
-    h+='<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--ca-line)"><div style="font-size:.8rem;font-weight:600">'+esc(s.fn+' '+s.ln)+'</div><div style="font-size:.72rem;color:var(--ca-muted)">'+s.gA+'/'+s.gT+' lifegroups · '+s.sA+'/'+s.sT+' Fridays</div></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--ca-line)"><div style="font-size:.8rem;font-weight:600">'+esc(s.fn+' '+s.ln)+'</div><div style="font-size:.72rem;color:var(--ca-muted)">'+s.gA+'/'+s.gT+' lifegroups · '+s.sA+'/'+s.sT+' Youth</div></div>';
   }
   h+='</div>';
   h+='<button class="btn btn-secondary btn-full" style="margin-top:12px" onclick="closeModal()">Close</button>';
   modal(h);
 }
-const STG={0:'No data',1:'First contact',2:'Friday',3:'Regular',4:'Lifegroup',5:'Student team'};
+const STG={0:'No data',1:'First contact',2:'Youth',3:'Regular',4:'Lifegroup',5:'Student team'};
 function plist(){
   const m=model();
   let list;
@@ -4883,7 +4883,7 @@ function showPerson(id){
   const tm=p.trend==='rising'?5:p.trend==='declining'?-10:0;
   let h='<div style="font-size:1rem;font-weight:800;margin-bottom:6px">'+esc(p.name)+'</div>';
   h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+(s?'<span class="chip c-neutral">Yr '+(s.grade||'—')+' · '+(s.gender==='female'?'F':'M')+'</span>':'<span class="chip ca-cw">Not in platform</span>')+'<span class="chip c-accent">Stage '+p.stage+' · '+STG[p.stage]+'</span>'+(p.trend==='rising'?'<span class="chip c-success">▲ Rising</span>':p.trend==='declining'?'<span class="chip c-danger">▼ Declining</span>':'')+'</div>';
-  h+='<div class="card" style="margin-bottom:10px"><div class="ca-ct">Score · '+p.score+'</div><div style="font-size:.74rem;line-height:1.8;color:var(--ca-muted)">Stage base <b style="color:var(--ca-ink)">'+base+'</b> · Consistency <b style="color:var(--ca-ink)">+'+cons+'</b>'+(s&&s.sT?' ('+s.sA+'/'+s.sT+' Fridays)':'')+' · Trend <b style="color:var(--ca-ink)">'+(tm>=0?'+':'')+tm+'</b></div></div>';
+  h+='<div class="card" style="margin-bottom:10px"><div class="ca-ct">Score · '+p.score+'</div><div style="font-size:.74rem;line-height:1.8;color:var(--ca-muted)">Stage base <b style="color:var(--ca-ink)">'+base+'</b> · Consistency <b style="color:var(--ca-ink)">+'+cons+'</b>'+(s&&s.sT?' ('+s.sA+'/'+s.sT+' Youth)':'')+' · Trend <b style="color:var(--ca-ink)">'+(tm>=0?'+':'')+tm+'</b></div></div>';
   const ev=[];
   if(p.connect)ev.push(['Connect card',p.connect]);
   if(p.decision)ev.push(['Decision',p.decision]);
@@ -4937,8 +4937,8 @@ function rData(){
     +'<button class="btn btn-secondary btn-sm" onclick="CA.pick(\''+kind+'\')">'+(staged?'Replace':'Choose')+'</button>'
     +'</div>';
   b+='<div class="sh">Upload year-to-date data</div><div class="card" style="padding:4px 13px">'
-    +slot('service','Service attendance — required','Year-to-date Friday export',PENDING.service?(PENDING._serviceFn||(PENDING.service.rows.length+' rows')):null)
-    +slot('group','Lifegroup attendance','Year-to-date group export',PENDING.group?(PENDING._groupFn||(PENDING.group.groups.length+' groups')):null)
+    +slot('service','Youth attendance — required','Year-to-date Youth export',PENDING.service?(PENDING._serviceFn||(PENDING.service.rows.length+' rows')):null)
+    +slot('group','Lifegroup attendance','Year-to-date Lifegroup export',PENDING.group?(PENDING._groupFn||(PENDING.group.groups.length+' groups')):null)
     +slot('team','Student Team CSV','Current team roster',PENDING.team.length?(PENDING._teamFn||(PENDING.team.length+' rows')):null)
     +slot('connect','New Connect CSV','Connect dates',PENDING.connect.length?(PENDING._connectFn||(PENDING.connect.length+' rows')):null)
     +slot('decision','Decision CSV','Decision dates',PENDING.decision.length?(PENDING._decisionFn||(PENDING.decision.length+' rows')):null)
@@ -4972,9 +4972,9 @@ function upload(kind,input){
     if(kind==='service'){
       if(parseGroupCSV(text)){toast('That looks like a Lifegroup export — use the Lifegroup slot');return;}
       const rows=parseCSV(text);
-      if(!rows.length){toast('Could not read that as a service attendance CSV');return;}
+      if(!rows.length){toast('Could not read that as a Youth attendance CSV');return;}
       PENDING.service={rows};PENDING._serviceFn=f.name;
-      toast(rows.length+' service rows staged');rerender();return;
+      toast(rows.length+' Youth rows staged');rerender();return;
     }
     if(kind==='group'){
       const grp=parseGroupCSV(text);
