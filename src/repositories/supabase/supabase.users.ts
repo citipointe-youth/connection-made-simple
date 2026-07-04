@@ -1,4 +1,5 @@
 import type { SqlClient } from './client';
+import { toIso } from './client';
 import type { IUserRepository } from '../interfaces/entity-repositories';
 import type { User } from '../../core/entities/user';
 import type { UserRole, Grade, Quad } from '../../core/types/enums';
@@ -13,8 +14,8 @@ function toUser(row: Record<string, unknown>): User {
     quad: (row['quad'] as Quad | null) ?? null,
     status: row['status'] as 'active' | 'inactive',
     passwordHash: (row['password_hash'] as string | null) ?? undefined,
-    createdAt: (row['created_at'] as Date).toISOString(),
-    updatedAt: (row['updated_at'] as Date).toISOString(),
+    createdAt: toIso(row['created_at']),
+    updatedAt: toIso(row['updated_at']),
   };
 }
 

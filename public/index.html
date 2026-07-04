@@ -1336,6 +1336,7 @@ function _hAttTile(label, studs, avgWk, opts) {
   // (weekly), supplied from /lifegroups/stats; falls back to 0 if absent.
   const grpAvg = (opts.grpAvgWk != null) ? opts.grpAvgWk : 0;
   const drop = !!opts.dropId;
+  const borderStyle = opts.borderColor ? `border-left-color:${opts.borderColor};` : '';
   const chev = drop ? `<span class="drop-chev" style="display:inline-block;color:var(--ink-faint);font-weight:800">›</span>` : '';
   const inner = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${chev}<div style="font-size:13px;font-weight:700;color:var(--ink-mid)">${label}</div></div>`
     + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center${opts.hideLifegroupRow ? '' : ';margin-bottom:3px'}">
@@ -1349,11 +1350,11 @@ function _hAttTile(label, studs, avgWk, opts) {
     <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpAvg}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`);
   if (drop) {
-    return `<div class="qcard drop" id="${opts.dropId}" style="padding:11px">`
+    return `<div class="qcard drop" id="${opts.dropId}" style="padding:11px;${borderStyle}">`
       + `<div class="drop-head" style="cursor:pointer" onclick="_drop('${opts.dropId}')">${inner}</div>`
       + `<div class="drop-body" style="margin-top:8px">${opts.gradeRows || ''}</div></div>`;
   }
-  return `<div class="qcard" style="padding:11px">${inner}</div>`;
+  return `<div class="qcard" style="padding:11px;${borderStyle}">${inner}</div>`;
 }
 
 // /connections is only needed by the admin/director "Connection by Grade" bars
@@ -1591,7 +1592,8 @@ async function _renderHomeInner(stale) {
               const gradeStuds = qStud.filter(s => s.grade === gr);
               gradeRows += _hGradeMini('Yr ' + gr + _gsfx(quadGender(q.quad)), gradeStuds, _hGradeSvcAvg(gradeStuds));
             }
-            body += _hAttTile(q.label, qStud, _hQuadAvg(trends, q.quad), { dropId: 'hq-' + q.quad, gradeRows, hideLifegroupRow: true });
+            const qBorder = quadGender(q.quad) === 'female' ? '#ec4899' : null;
+            body += _hAttTile(q.label, qStud, _hQuadAvg(trends, q.quad), { dropId: 'hq-' + q.quad, gradeRows, hideLifegroupRow: true, borderColor: qBorder });
           }
           body += '</div>';
         }
@@ -1698,6 +1700,7 @@ async function _saveFollowupSmsTemplate(leaderId) {
   try {
     await API.patch(`/leaders/${leaderId}/sms-template`, { smsTemplate: val || null });
     Cache.del('/leaders');
+    await API.get('/leaders'); // refetch now so _myCustomSmsTemplate()'s synchronous Cache.getStale read sees the new template immediately, not just after the next natural /leaders fetch
     toast('✓ Template saved');
   } catch (e) { toast(e.message); }
 }

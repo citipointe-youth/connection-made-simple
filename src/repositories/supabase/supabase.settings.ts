@@ -27,7 +27,7 @@ function toAdminAuditEntry(row: Record<string, unknown>): AdminAuditEntry {
     id: row['id'] as string,
     action: row['action'] as AdminAuditEntry['action'],
     performedBy: row['performed_by'] as string,
-    performedAt: (row['performed_at'] as Date).toISOString(),
+    performedAt: toIso(row['performed_at']),
     detail: row['detail'] as string,
   };
 }

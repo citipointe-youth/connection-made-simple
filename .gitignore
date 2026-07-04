@@ -8,3 +8,5 @@ data
 
 # Supabase CLI local state (never commit — may contain connection secrets)
 supabase/.temp/
+
+.vercel

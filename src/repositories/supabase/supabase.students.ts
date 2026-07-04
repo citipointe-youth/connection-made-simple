@@ -1,4 +1,5 @@
 import type { SqlClient } from './client';
+import { toIso } from './client';
 import type { IStudentRepository } from '../interfaces/entity-repositories';
 import type { Student } from '../../core/entities/student';
 import type { Quad } from '../../core/types/enums';
@@ -34,8 +35,8 @@ function toStudent(row: Record<string, unknown>): Student {
     prevGrpTotal: (row['prev_grp_total'] as number) ?? 0,
     atRiskStatus: (row['at_risk_status'] as Student['atRiskStatus']) ?? null,
     dataSource: (row['data_source'] as string | null) ?? null,
-    createdAt: (row['created_at'] as Date).toISOString(),
-    updatedAt: (row['updated_at'] as Date).toISOString(),
+    createdAt: toIso(row['created_at']),
+    updatedAt: toIso(row['updated_at']),
   };
 }
 
