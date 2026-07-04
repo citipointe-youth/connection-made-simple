@@ -4940,7 +4940,7 @@ function rData(){
     +slot('connect','New Connect CSV','Connect dates',PENDING.connect.length?(PENDING._connectFn||(PENDING.connect.length+' rows')):null)
     +slot('decision','Decision CSV','Decision dates',PENDING.decision.length?(PENDING._decisionFn||(PENDING.decision.length+' rows')):null)
     +slot('flows','People Flow CSV','Follow-up export',PENDING.flows.length?(PENDING._flowsFn||(PENDING.flows.length+' rows')):null)
-    +'<div style="padding:10px 0"><button class="btn btn-secondary btn-full" onclick="openExportGuide(\'audit\')">'+icS('info')+' How do I export the Team, Decision, New people &amp; Flow files?</button></div>'
+    +'<div style="padding:10px 0"><button class="btn btn-secondary btn-full" style="white-space:normal;text-align:left;line-height:1.35;height:auto" onclick="openExportGuide(\'audit\')">'+icS('info')+' How do I export the Team, Decision, New people &amp; Flow files?</button></div>'
     +'</div>';
   b+='<div class="card" style="display:flex;gap:10px;align-items:center;justify-content:space-between">'
     +'<div style="font-size:.66rem;color:var(--ca-muted);line-height:1.5">Saving computes the terms server-side and stores one audit for that year. Re-saving a year overwrites it. Other directors/admins can then load it.</div>'
