@@ -4680,14 +4680,16 @@ function rerender(){dispatch(S.page);}
 // ---------- screens ----------
 function rOverview(){
   const m=model(),k=m.kpis;
-  const dl=v=>v>0?'<div class="ca-dlt up">▲ +'+v+'% vs prev term</div>':v<0?'<div class="ca-dlt dn">▼ '+v+'% vs prev term</div>':'<div class="ca-dlt fl">− level vs prev term</div>';
-  const at=k.actTrend==='rising'?'<div class="ca-dlt up">▲ rising across term</div>':k.actTrend==='declining'?'<div class="ca-dlt dn">▼ declining across term</div>':'<div class="ca-dlt fl">− steady across term</div>';
+  const selTerm=(AUDIT&&AUDIT.terms||[]).find(t=>t.key===TERM);
+  const noPrevCompare=TERM==='ALL'||!!(selTerm&&selTerm.ordinal===1);
+  const dl=v=>noPrevCompare?'':(v>0?'<div class="ca-dlt up">▲ +'+v+'% vs prev term</div>':v<0?'<div class="ca-dlt dn">▼ '+v+'% vs prev term</div>':'<div class="ca-dlt fl">− level vs prev term</div>');
+  const at=noPrevCompare?'':(k.actTrend==='rising'?'<div class="ca-dlt up">▲ rising across term</div>':k.actTrend==='declining'?'<div class="ca-dlt dn">▼ declining across term</div>':'<div class="ca-dlt fl">− steady across term</div>');
   let b='';
   b+='<div class="stat-grid">'
     +'<div class="stat"><div class="stat-v">'+k.act+'</div><div class="stat-l">Active youth</div>'+at+'</div>'
     +'<div class="stat"><div class="stat-v">'+k.avgFri+'</div><div class="stat-l">Avg Friday</div>'+dl(k.svcD)+'</div>'
     +'<div class="stat"><div class="stat-v">'+k.inLG+'</div><div class="stat-l">In a lifegroup'+(k.act?' ('+Math.round(k.inLG/k.act*100)+'%)':'')+'</div>'+dl(k.grpD)+'</div>'
-    +'<div class="stat"><div class="stat-v">'+k.decisions+'</div><div class="stat-l">Decisions</div><div class="ca-dlt fl">this term</div></div>'
+    +'<div class="stat"><div class="stat-v">'+k.decisions+'</div><div class="stat-l">Decisions</div>'+(noPrevCompare?'':'<div class="ca-dlt fl">this term</div>')+'</div>'
     +'</div>';
   const max=m.rungs[0].v||1;
   const cols=['#0a0a2e','#1414a0','#1a1af2','#5b5bf7','#9a9afb'];
@@ -4695,15 +4697,15 @@ function rOverview(){
   const row=(g,chip)=>'<div class="ca-alr" onclick="CA.showGroup(\''+g.id+'\')"><div style="font-size:.78rem;font-weight:600">'+esc(g.name)+'</div>'+chip+'</div>';
   const hasTrend=m.groups.some(g=>g.trendPct!==0);
   const tops=m.groups.filter(g=>g.active>0).slice().sort((a,b)=>hasTrend?(b.trendPct-a.trendPct||b.active-a.active):(b.active-a.active||b.va-a.va)).slice(0,2);
-  b+='<div class="card"><div class="ca-ct">Group highlights</div>'
-    +(tops.length?tops.map(g=>row(g,'<span class="chip '+(hasTrend&&g.trendPct>0?'c-success':'c-neutral')+'">'+(hasTrend&&g.trendPct>0?'▲ +'+g.trendPct+'% · ':'')+g.active+' active</span>')).join(''):'<div style="font-size:.74rem;color:var(--ca-muted)">No group data yet</div>')
+  b+='<div class="card"><div class="ca-ct">Cohort highlights</div>'
+    +(tops.length?tops.map(g=>row(g,'<span class="chip '+(hasTrend&&g.trendPct>0?'c-success':'c-neutral')+'">'+(hasTrend&&g.trendPct>0?'▲ +'+g.trendPct+'% · ':'')+g.active+' active</span>')).join(''):'<div style="font-size:.74rem;color:var(--ca-muted)">No cohort data yet</div>')
     +'</div>';
   const aDecl=m.groups.filter(g=>g.trend==='declining').sort((a,b)=>a.trendPct-b.trendPct).map(g=>[g,'<span class="chip c-danger">▼ Declining '+g.trendPct+'%</span>']);
   const aZero=m.groups.filter(g=>g.enrolled>0&&g.active===0).map(g=>[g,'<span class="chip c-danger">No attendance this term</span>']);
   const aLoose=m.groups.filter(g=>g.loose&&g.active>0).map(g=>[g,'<span class="chip ca-cw">Low frequency · '+g.va.toFixed(1)+' avg visits</span>']);
   const alerts=[...aDecl,...aZero,...aLoose].slice(0,2);
-  b+='<div class="card"><div class="ca-ct">Group alerts</div>'
-    +(alerts.length?alerts.map(([g,c])=>row(g,c)).join(''):'<div style="font-size:.74rem;color:var(--ca-muted)">No alerts — groups look healthy</div>')
+  b+='<div class="card"><div class="ca-ct">Cohort alerts</div>'
+    +(alerts.length?alerts.map(([g,c])=>row(g,c)).join(''):'<div style="font-size:.74rem;color:var(--ca-muted)">No alerts — cohorts look healthy</div>')
     +'</div>';
   // New-person follow-up — per-leader flow performance (collapsible)
   b+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="CA.fopen()"><div class="ca-ct" style="margin-bottom:0">New-person follow-up</div><span class="chip c-neutral">'+(FO?'Hide ▴':'Leaders ▾')+'</span></div>';
