@@ -246,6 +246,8 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .sbar input{width:100%;padding:11px 14px 11px 40px;border:1.5px solid var(--paper-dark);border-radius:var(--radius-sm);font-size:15px;background:var(--paper-card);outline:none;transition:border-color .15s}
 .sbar input:focus{border-color:var(--accent)}
 .sbar .si{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-faint);pointer-events:none}
+.ph-search{flex:0 1 170px;min-width:130px;padding:7px 10px;border:1.5px solid var(--paper-dark);border-radius:var(--radius-sm);font-size:14px;background:var(--paper-card);outline:none;transition:border-color .15s}
+.ph-search:focus{border-color:var(--accent)}
 
 /* Alerts */
 .alert{padding:12px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
@@ -724,7 +726,11 @@ function _egDraw() {
 function _egTs(e) { _egTouchX = e.touches[0].clientX; }
 function _egTe(e) { if (_egTouchX == null) return; const dx = e.changedTouches[0].clientX - _egTouchX; _egTouchX = null; if (Math.abs(dx) > 48) _egGo(dx < 0 ? 1 : -1); }
 
-function go(page) { S.page = page; render(); }
+function go(page) {
+  if (page === 'at-risk' && S.page !== 'at-risk') _arNameFilter = '';
+  S.page = page;
+  render();
+}
 function toast(msg, dur = 2500) {
   const el = document.getElementById('toast');
   el.textContent = msg; el.classList.add('show');
@@ -2770,6 +2776,8 @@ async function exportConnectCSV() {
 // AT RISK
 // ============================================================
 let _arFilter = { grade:null, gender:null };
+let _arNameFilter = '';
+let _arScoped = [];
 let _trTab = 'svc';
 
 function saveArFilter() {
@@ -2816,10 +2824,7 @@ async function renderAtRisk() {
   // term — they aren't "at risk", they've simply never engaged.
   scoped = scoped.filter(_hasAttended);
 
-  const sections = { rising:[], mixed:[], declining:[], stopped:[], stable:[] };
-  for (const s of scoped) { const cat = attendQual(s).category; if (sections[cat]) sections[cat].push(s); }
-  for (const k of Object.keys(sections)) sections[k].sort((a,b)=>(a.firstName||'').localeCompare(b.firstName||''));
-  const flagged = sections.mixed.length + sections.declining.length + sections.stopped.length;
+  _arScoped = scoped;
 
   const arGrades = u.role==='grade' ? [] : u.role==='quad'
     ? (u.quad==='g79'||u.quad==='b79'?[7,8,9]:[10,11,12]) : [7,8,9,10,11,12];
@@ -2829,24 +2834,56 @@ async function renderAtRisk() {
 
   let body = `
     <div class="ph">
-      <div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('heart')} Health ${helpTip("All calculated automatically — no manual thresholds. Rising/Declining: a stream's rate moved 20+ points vs last term. Mixed: one stream up, one down. Stable: no 20-point swing either way.\nStopped: no attendance in either stream this term.")}</div>
+      <div class="ph-title" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+        <span style="display:flex;align-items:center;gap:7px">${icN('heart')} Health ${helpTip("All calculated automatically — no manual thresholds. Rising/Declining: a stream's rate moved 20+ points vs last term. Mixed: one stream up, one down. Stable: no 20-point swing either way.\nStopped: no attendance in either stream this term.")}</span>
+        <input id="ar-name-filter" type="text" placeholder="Find student…" value="${_arNameFilter.replace(/"/g,'&quot;')}" oninput="setArNameFilter(this.value)" class="ph-search" style="margin-left:auto">
+      </div>
     </div>`;
   if (arGrades.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Grade:</span>${gChips}<button class="fc ${!_arFilter.grade?'on':''}" onclick="setArFilter('grade',null)">All</button></div>`;
   if (arGenders.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Gender:</span>${dChips}<button class="fc ${!_arFilter.gender?'on':''}" onclick="setArFilter('gender',null)">All</button></div>`;
+  body += `<div id="ar-results">${_arSectionsHtml(scoped, u)}</div>`;
+  setApp(shell(body));
+  if (_arNameFilter) requestAnimationFrame(() => {
+    const el = document.getElementById('ar-name-filter');
+    if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch {} }
+  });
+}
 
-  // Sections: Rising / Mixed (one stream up, one down) / Declining / Stopped (neither this term).
-  const SEC = [
-    ['rising', 'Rising', '#065f46', 'arru'],
-    ['stable', 'Stable', '#475569', 'check'],
-    ['mixed', 'Mixed', '#92400e', 'arrr'],
-    ['declining', 'Declining', '#991b1b', 'arrd'],
-    ['stopped', 'Stopped', '#991b1b', 'alert'],
-  ];
+// Sections: Rising / Mixed (one stream up, one down) / Declining / Stopped (neither this term).
+const AR_SEC = [
+  ['rising', 'Rising', '#065f46', 'arru'],
+  ['stable', 'Stable', '#475569', 'check'],
+  ['mixed', 'Mixed', '#92400e', 'arrr'],
+  ['declining', 'Declining', '#991b1b', 'arrd'],
+  ['stopped', 'Stopped', '#991b1b', 'alert'],
+];
+
+// Renders the categorised section cards for the given (grade/gender-filtered) student
+// list, applying the current name filter on top. Split out from renderAtRisk so a
+// keystroke in the name filter can patch just this markup, not the whole page — that
+// keeps focus/caret in the input (see studSearch for the same pattern on Student Search).
+function _arSectionsHtml(scoped, u) {
+  const term = _arNameFilter.trim().toLowerCase();
+  let filtered = scoped;
+  if (term) {
+    filtered = scoped.filter(s => {
+      const fn = (s.firstName||'').toLowerCase();
+      const ln = (s.lastName||'').toLowerCase();
+      return fn.includes(term) || ln.includes(term) || `${fn} ${ln}`.trim().includes(term);
+    });
+  }
+
+  const sections = { rising:[], mixed:[], declining:[], stopped:[], stable:[] };
+  for (const s of filtered) { const cat = attendQual(s).category; if (sections[cat]) sections[cat].push(s); }
+  for (const k of Object.keys(sections)) sections[k].sort((a,b)=>(a.firstName||'').localeCompare(b.firstName||''));
+
+  let body = '';
   let any = false;
-  for (const [key, label, col, ic] of SEC) {
+  for (const [key, label, col, ic] of AR_SEC) {
     const items = sections[key];
     if (!items.length) continue;
     any = true;
+    const open = !!term;
     let cards = '';
     for (const s of items) {
       const _arPhone = s.mobile || s.parentPhone;
@@ -2869,17 +2906,21 @@ async function renderAtRisk() {
     }
     body += `<div class="card" style="margin-bottom:12px;border-left:4px solid ${col}">
       <div onclick="toggleArSection('${key}')" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:12px 16px;user-select:none">
-        <span id="ar-chev-${key}" style="display:inline-flex;color:var(--ink-mid)">${icS('chevr')}</span>
+        <span id="ar-chev-${key}" style="display:inline-flex;color:var(--ink-mid)">${icS(open?'chevd':'chevr')}</span>
         <strong style="color:${col};display:inline-flex;align-items:center;gap:4px">${icS(ic)} ${label}</strong>
         <span class="badge" style="margin-left:auto">${items.length}</span>
       </div>
-      <div id="ar-body-${key}" style="display:none;padding:0 12px 12px">
+      <div id="ar-body-${key}" style="display:${open?'':'none'};padding:0 12px 12px">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px">${cards}</div>
       </div>
     </div>`;
   }
-  if (!any) body += `<div class="empty">${icEmpty('check')}<div class="empty-title">Nothing flagged</div><div class="empty-sub">Attendance looks healthy this term</div></div>`;
-  setApp(shell(body));
+  if (!any) {
+    body = term
+      ? `<div class="empty">${icEmpty('xmark')}<div class="empty-title">No students match "${esc(_arNameFilter.trim())}"</div><div class="empty-sub">Try a different name, or clear the search</div></div>`
+      : `<div class="empty">${icEmpty('check')}<div class="empty-title">Nothing flagged</div><div class="empty-sub">Attendance looks healthy this term</div></div>`;
+  }
+  return body;
 }
 
 function toggleArSection(status) {
@@ -2895,6 +2936,14 @@ function setArFilter(key, val) {
   _arFilter[key] = val;
   saveArFilter();
   renderAtRisk();
+}
+
+// On keystroke, patch ONLY the results container — the input element stays in the
+// DOM so focus/caret position is preserved (same pattern as studSearch).
+function setArNameFilter(v) {
+  _arNameFilter = v;
+  const res = document.getElementById('ar-results');
+  if (res) res.innerHTML = _arSectionsHtml(_arScoped, S.user);
 }
 
 // ============================================================
