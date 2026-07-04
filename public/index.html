@@ -442,7 +442,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 /* ── Reusable help tooltip (?) — hover on desktop, tap on mobile. Ported from
    the Camp Platform sister app. Use helpTip('plain text') in any markup. ── */
 .htip{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1px solid var(--accent);background:var(--chip);color:var(--accent);font-size:11px;font-weight:800;line-height:1;cursor:pointer;position:relative;padding:0;font-family:inherit;vertical-align:middle;flex:0 0 auto}
-.htip-pop{position:absolute;z-index:200;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:max-content;max-width:240px;background:var(--navy);color:#fff;border-radius:10px;padding:9px 11px;font-size:.74rem;line-height:1.45;font-weight:500;text-align:left;box-shadow:0 10px 28px rgba(10,10,46,.32);opacity:0;visibility:hidden;transition:opacity .12s;white-space:normal}
+.htip-pop{position:absolute;z-index:200;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:max-content;max-width:240px;background:var(--navy);color:#fff;border-radius:10px;padding:9px 11px;font-size:.74rem;line-height:1.45;font-weight:500;text-align:left;box-shadow:0 10px 28px rgba(10,10,46,.32);opacity:0;visibility:hidden;transition:opacity .12s;white-space:pre-line}
 .htip-pop::before{content:"";position:absolute;bottom:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-bottom-color:var(--navy)}
 .htip:hover .htip-pop,.htip.open .htip-pop{opacity:1;visibility:visible}
 .htip.tip-left .htip-pop{left:auto;right:0;transform:none}
@@ -997,12 +997,12 @@ function _arQualChips(s) {
 }
 
 // "This term / last term" attendance line for service or groups.
-function termRow(label, curA, curT, prevA, prevT) {
+function termRow(label, curA, curT, prevA, prevT, noDanger) {
   const cp = curT > 0 ? Math.round(curA / curT * 100) : null;
   const pp = prevT > 0 ? Math.round(prevA / prevT * 100) : null;
   return `<div style="margin-top:6px">
     <div style="font-size:10px;color:var(--ink-faint);font-weight:700;text-transform:uppercase">${label}</div>
-    <div style="font-size:12px">This term: <b style="color:${cp!==null&&cp<50?'var(--danger)':'var(--ink)'}">${curT>0?curA+'/'+curT+' ('+cp+'%)':'—'}</b>${prevT>0?` · <span style="color:var(--ink-faint)">Last term: ${prevA}/${prevT} (${pp}%)</span>`:''}</div>
+    <div style="font-size:12px">This term: <b style="color:${cp!==null&&cp<50&&!noDanger?'var(--danger)':'var(--ink)'}">${curT>0?curA+'/'+curT+' ('+cp+'%)':'—'}</b>${prevT>0?` · <span style="color:var(--ink-faint)">Last term: ${prevA}/${prevT} (${pp}%)</span>`:''}</div>
   </div>`;
 }
 function riskChip(s) {
@@ -2132,7 +2132,10 @@ function renderConnectView() {
 
   const unallocated = connectable.filter(s => !connectedStudentIds.has(s.id)).sort(_pickByFirst);
   const unallocList = unallocated.length
-    ? unallocated.map(s => `<div style="padding:6px 0;border-top:1px solid var(--paper-dark);font-size:13px;cursor:pointer" onclick="showStudentDetail('${s.id}')">${esc(s.firstName)} ${esc(s.lastName)} <span style="color:var(--ink-mid);font-size:11px">Gr ${s.grade || '—'} · ${s.gender}</span></div>`).join('')
+    ? unallocated.map(s => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--paper-dark);font-size:13px">
+        <div>${esc(s.firstName)} ${esc(s.lastName)} <span style="color:var(--ink-mid);font-size:11px">Gr ${s.grade || '—'} · ${s.gender}</span></div>
+        <button class="btn btn-ghost btn-sm" style="padding:4px 6px;background:#eef0fb;color:var(--accent-dark);flex:none" onclick="showStudentDetail('${s.id}')" aria-label="View profile for ${esc(s.firstName)} ${esc(s.lastName)}">Profile</button>
+      </div>`).join('')
     : `<div style="font-size:13px;color:var(--ink-faint);padding:6px 0">Everyone is allocated!</div>`;
   const unallocDrop = `<div class="card drop" id="connect-unalloc" style="margin-bottom:12px">
     <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('connect-unalloc')">
@@ -2778,7 +2781,7 @@ async function renderAtRisk() {
 
   let body = `
     <div class="ph">
-      <div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('heart')} Health ${helpTip("Rising/Declining: a stream's rate moved 20+ points vs last term. Mixed: one stream up, one down. Stable: no 20-point swing either way. Stopped: no attendance in either stream this term. All calculated automatically — no manual thresholds.")}</div>
+      <div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('heart')} Health ${helpTip("All calculated automatically — no manual thresholds. Rising/Declining: a stream's rate moved 20+ points vs last term. Mixed: one stream up, one down. Stable: no 20-point swing either way.\nStopped: no attendance in either stream this term.")}</div>
     </div>`;
   if (arGrades.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Grade:</span>${gChips}<button class="fc ${!_arFilter.grade?'on':''}" onclick="setArFilter('grade',null)">All</button></div>`;
   if (arGenders.length) body += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Gender:</span>${dChips}<button class="fc ${!_arFilter.gender?'on':''}" onclick="setArFilter('gender',null)">All</button></div>`;
@@ -2810,8 +2813,8 @@ async function renderAtRisk() {
               <span>Gr ${s.grade||'—'} · ${s.gender}</span>
               ${_arQualChips(s)}
             </div>
-            ${termRow('Service', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
-            ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
+            ${termRow('Youth', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal, true)}
+            ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal, true):''}
             ${_arPhone ? `<div style="margin-top:4px;font-size:13px">${!s.mobile && s.parentPhone ? '<span style="font-weight:600">Parent: </span>' : ''}${phoneLink(_arPhone)}</div>` : ''}
           </div>
         </div>`;
@@ -2918,14 +2921,14 @@ function _studentResultsHtml(vis) {
           ${qualChips(s)}
         </div>
         <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender}${fmtBday(s.dateOfBirth) ? ' · ' + fmtBday(s.dateOfBirth) : ''} ${quadChip(s.quad)}</div>
-        ${termRow('Service', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
+        ${termRow('Youth', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
         ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
       </div>
       <div class="li-right" style="color:var(--ink-faint)">›</div>
     </div>`;
   }
   h += '</div>';
-  h += `<div class="desk"><table class="dt"><thead><tr><th>Name</th><th>Gr</th><th>Gender</th><th>DOB</th><th>Quad</th><th>Service (this / last)</th><th>Lifegroup (this / last)</th><th>Status</th><th></th></tr></thead><tbody>`;
+  h += `<div class="desk"><table class="dt"><thead><tr><th>Name</th><th>Gr</th><th>Gender</th><th>DOB</th><th>Quad</th><th>Youth (this / last)</th><th>Lifegroup (this / last)</th><th>Status</th><th></th></tr></thead><tbody>`;
   for (const s of vis) {
     const pct = svcPct(s);
     const psvc = s.prevSvcTotal > 0 ? Math.round(s.prevSvcAttended / s.prevSvcTotal * 100) + '%' : '—';
@@ -3192,6 +3195,23 @@ function _lgGradeBlock(g, showPrev, gsfx, id) {
   h += `</div></div>`;
   return h;
 }
+// Same content as _lgGradeBlock but WITHOUT its own collapsible wrapper — for
+// nesting a grade's lifegroups directly inside an already-collapsible parent
+// (e.g. Trends' per-quad drop) so opening the parent goes straight to the
+// lifegroups instead of requiring a second click on a nested grade drop.
+function _lgGradeInline(g, showPrev, gsfx) {
+  gsfx = gsfx || '';
+  let h = `<div style="padding:7px 0;border-top:1px solid var(--paper-dark)">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;font-size:13px;font-weight:700">Year ${g.grade}${gsfx}</div>
+      <span style="font-size:12px;color:var(--ink-mid)">${g.current.uniqueAttenders} seen · ${g.current.avgPerWeek} weekly</span>
+    </div>`;
+  if (showPrev && (g.previous.uniqueAttenders > 0 || g.previous.members > 0)) h += `<div style="font-size:11px;color:var(--ink-faint);padding:0 0 4px 0">prev term: ${g.previous.uniqueAttenders} seen · ${g.previous.avgPerWeek} weekly</div>`;
+  if (g.lifegroups && g.lifegroups.length) for (const lg of g.lifegroups) h += _lgGroupRow(lg, showPrev);
+  else h += `<div style="font-size:12px;color:var(--ink-faint);padding:4px 0 6px 0">No lifegroups ran this term</div>`;
+  h += `</div>`;
+  return h;
+}
 
 const TREND_PATHS = ['/students', '/overview', '/trends', '/lifegroups/stats'];
 let _trendsRevalidating = false;
@@ -3269,7 +3289,7 @@ async function renderTrends() {
   const QUAD_COLORS = { g79:'#ec4899', b79:'#3b82f6', g1012:'#8b5cf6', b1012:'#10b981' };
 
   let body = `<div class="ph"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-    <div><div class="ph-title">Attendance Trends</div><div class="ph-sub">Service &amp; lifegroup overview</div></div>
+    <div><div class="ph-title">Attendance Trends</div><div class="ph-sub">Youth &amp; lifegroup overview</div></div>
     ${canExport?'<button class="btn btn-secondary btn-sm" onclick="exportTrendsCSV()">Export CSV</button>':''}
   </div></div>`;
 
@@ -3448,8 +3468,10 @@ async function renderTrends() {
           if (q.previous.uniqueAttenders>0 || q.previous.members>0) body += `<div style="font-size:11px;color:var(--ink-faint);padding-left:20px;margin-top:2px">prev term: ${q.previous.uniqueAttenders} seen · ${q.previous.avgPerWeek} weekly</div>`;
           body += `<div class="drop-body">`;
           // Use the quad's own GENDERED per-grade breakdown (not the combined byGrade).
+          // _lgGradeInline (not _lgGradeBlock) — opening the quad goes straight to each
+          // grade's lifegroups, no separate per-grade drop to click through first.
           const gradeStats = q.grades || [];
-          if (gradeStats.length) for (const g of gradeStats) body += _lgGradeBlock(g, true, _gsfx(quadGender(q.quad)), 'tlqg-' + q.quad + '-' + g.grade);
+          if (gradeStats.length) for (const g of gradeStats) body += _lgGradeInline(g, true, _gsfx(quadGender(q.quad)));
           else body += `<div style="font-size:12px;color:var(--ink-faint);padding:6px 0 4px 20px">No lifegroups ran this term</div>`;
           body += '</div></div>';
         }
