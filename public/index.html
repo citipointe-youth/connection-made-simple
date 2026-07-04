@@ -4297,7 +4297,7 @@ async function doDelUser(id) {
 const CA=(()=>{
 const KEY='ca_audit_v4'; // v4: audit-specific uploads start EMPTY (no demo seed); bump evicts old seeded state
 let st=null,warnOff=false,mdl=null,D=null; // D = {students,trends,settings} cache; st.uploads has team/connect/decision/flows
-const PF={q:'',stage:'',quad:'',dec:false,cap:60};
+const PF={q:'',stage:'',quad:'',cap:60};
 let GF='',FQ=false;
 let FO=false; // overview: follow-up leader table open
 // ── Server-stored audit state (replaces the old localStorage uploads) ──
@@ -4839,7 +4839,6 @@ function plist(){
   else list=m.people.filter(p=>p.stage>0);
   if(PF.stage)list=list.filter(p=>p.stage===+PF.stage);
   if(PF.quad)list=list.filter(p=>p.s&&p.s.quad===PF.quad);
-  if(PF.dec)list=list.filter(p=>p.trend==='declining');
   list=list.slice().sort((a,b)=>b.score-a.score||(a.name<b.name?-1:1));
   let b='';
   for(const p of list.slice(0,PF.cap)){
@@ -4849,7 +4848,7 @@ function plist(){
     const meta=s?'<span>Yr '+(s.grade||'—')+' · '+(s.gender==='female'?'F':'M')+'</span>':'<span class="chip ca-cw">Not in platform</span>';
     const declChip=p.trend==='declining'?'<span class="chip c-danger">▼ Declining</span>':'';
     const tail=s
-      ?'<div style="font-size:.6rem;color:var(--ca-muted);margin-top:3px">'+s.sA+'/'+s.sT+' Fridays</div><div class="ca-lgbar"><i style="width:'+(s.sT?Math.round(s.sA/s.sT*100):0)+'%"></i></div>'
+      ?''
       :'<div style="font-size:.6rem;color:var(--ca-muted);margin-top:3px">From '+(p.dec?'Decision':'Connect')+' upload'+(p.connect||p.decision?' · '+fmtD(p.connect||p.decision):'')+'</div>';
     b+='<div class="li" style="cursor:pointer'+(p.caOnly?';border:1px dashed var(--ca-line)':'')+'" onclick="CA.showPerson(\''+p.id+'\')">'+av+'<div class="li-body"><div class="li-title">'+esc(p.name)+'</div><div class="li-sub" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">'+stChip+meta+declChip+'</div>'+tail+'</div><div class="ca-scr">'+p.score+'<small>score</small></div></div>';
   }
@@ -4865,7 +4864,6 @@ function rPeople(){
   b+='<div class="ca-fch">'
     +'<select class="fs ca-sel" onchange="CA.pstage(this.value)"><option value="">All stages</option>'+[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(PF.stage==n?' selected':'')+'>Stage '+n+' · '+STG[n]+'</option>').join('')+'</select>'
     +'<select class="fs ca-sel" onchange="CA.pquad(this.value)"><option value="">All quads</option>'+Object.entries(QLBL).map(([k,v])=>'<option value="'+k+'"'+(PF.quad===k?' selected':'')+'>'+v+'</option>').join('')+'</select>'
-    +'<span class="chip '+(PF.dec?'c-danger':'c-neutral')+'" style="cursor:pointer" onclick="CA.pdec()">Declining only</span>'
     +'</div>';
   b+='<div id="ca-plist">'+plist()+'</div>';
   caShell(b,'ca-people');
@@ -4874,7 +4872,6 @@ function pq(v){PF.q=v;PF.cap=60;const el=document.getElementById('ca-plist');if(
 function pmore(){PF.cap+=60;const el=document.getElementById('ca-plist');if(el)el.innerHTML=plist();}
 function pstage(v){PF.stage=v;PF.cap=60;rerender();}
 function pquad(v){PF.quad=v;PF.cap=60;rerender();}
-function pdec(){PF.dec=!PF.dec;PF.cap=60;rerender();}
 function showPerson(id){
   const p=model().people.find(x=>x.id===id);if(!p)return;
   const s=p.s;
@@ -5356,7 +5353,7 @@ async function render(p){
 return{render,reset,stale,seedOn,dismissWarn,setYear,setTerm,saveAudit,
   model:async()=>{await load();restore();return model();},
   fquad,gfilter,lgfilter,fopen,flowStats,_parseFlows:parseFlows,pick,upload,showPerson,showGroup,exportMenu,exportQuad,buildDeck,
-  pq,pstage,pquad,pdec,pmore};
+  pq,pstage,pquad,pmore};
 })();
 window.CA=CA;
 /* ── CA MODULE END ── */
