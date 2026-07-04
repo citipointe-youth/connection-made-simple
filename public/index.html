@@ -460,8 +460,8 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .ca-tile .ts{font-size:.62rem;color:var(--ca-muted);margin-top:2px}
 .ca-lgbar{height:7px;background:var(--ca-paper);border-radius:999px;overflow:hidden;margin-top:5px;max-width:90px}
 .ca-lgbar i{display:block;height:100%;border-radius:999px;background:var(--ca-blue)}
-.ca-tabs{display:flex;gap:6px;overflow-x:auto;margin:0 0 12px;-webkit-overflow-scrolling:touch}
-.ca-tab{flex:none;background:var(--ca-card);border:1px solid var(--ca-line);border-radius:999px;padding:6px 12px;font-size:.66rem;font-weight:700;color:var(--ca-muted);cursor:pointer}
+.ca-tabs{display:flex;gap:5px;overflow-x:auto;margin:0 0 12px;-webkit-overflow-scrolling:touch}
+.ca-tab{flex:none;background:var(--ca-card);border:1px solid var(--ca-line);border-radius:999px;padding:7px 10px;font-size:.62rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--ca-muted);cursor:pointer}
 .ca-tab.on{background:var(--ca-navy);border-color:var(--ca-navy);color:#fff}
 /* Scope bar (year + period) — a filled "data scope" control, deliberately
    styled apart from the navy page tabs so it doesn't read as navigation. */
@@ -1135,7 +1135,7 @@ function navItems() {
     { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:8px">Connections</span></span>' },
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
     { id:'admin',      ic:'settings', label:'Admin Settings',     mbl:'Settings' },
-    { id:'ca-hub',     ic:'link',     label:'Connection Audit',  mbl:'Connection Audit' }, /*CA-HOOK*/
+    { id:'ca-overview', ic:'link',     label:'Connection Audit',  mbl:'Connection Audit' }, /*CA-HOOK*/
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
     // { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' }, // PUSH-HIDDEN
   ];
@@ -1148,7 +1148,7 @@ function navItems() {
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
     { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:8px">Connections</span></span>' },
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
-    { id:'ca-hub',     ic:'link',     label:'Connection Audit',  mbl:'Connection Audit' }, /*CA-HOOK*/
+    { id:'ca-overview', ic:'link',     label:'Connection Audit',  mbl:'Connection Audit' }, /*CA-HOOK*/
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays', wide:true },
     // { id:'notifications', ic:'bell',  label:'Notifications',     mbl:'Alerts' }, // PUSH-HIDDEN
   ];
@@ -4665,25 +4665,12 @@ function scopeBar(){
     +'<div class="ca-scope-row"><span class="ca-scope-lb">Period</span><div class="ca-scope-ctl">'+termCtl+'</div></div>'
     +'</div>';
 }
-// Year-to-date strip: a per-term summary shown above the content when no single
-// term is selected, so the YTD view exposes the term breakdown.
-function ytdStrip(){
-  if(!AUDIT||TERM!=='ALL')return'';
-  const terms=AUDIT.terms||[];if(!terms.length)return'';
-  const cells=terms.map(t=>{
-    const pt=AUDIT.perTerm[t.key]||{svcTotal:0,byStudent:{}};
-    const uniq=Object.values(pt.byStudent).filter(a=>a.svcAttended>0).length;
-    return '<div style="flex:1;min-width:70px;text-align:center;padding:6px;border-right:1px solid var(--ca-line)"><div style="font-size:.58rem;color:var(--ca-muted);text-transform:uppercase;font-weight:700">T'+t.ordinal+(pt.inProgress?' ·':'')+'</div><div style="font-size:1rem;font-weight:800">'+uniq+'</div><div style="font-size:.54rem;color:var(--ca-muted)">seen · '+pt.svcTotal+' svc</div></div>';
-  }).join('');
-  return '<div class="card" style="display:flex;padding:4px 0;margin-bottom:8px">'+cells+'</div>';
-}
 function caShell(body,page){
-  const back='<button class="btn btn-secondary btn-sm" style="margin-bottom:10px" onclick="go(\''+(page==='ca-hub'?'home':'ca-hub')+'\')">‹ '+(page==='ca-hub'?'Home':'Audit hub')+'</button>';
-  let content=back;
+  let content=tabs(page);
   if(!AUDIT&&page!=='ca-data'){
     content+='<div class="ca-warnb"><span class="ca-wi">'+icS('alert')+'</span><div onclick="go(\'ca-data\')" style="cursor:pointer"><b>No audit loaded.</b> Upload year-to-date data in the <b>Data</b> tab to create one.</div></div>';
   }
-  if(AUDIT&&page!=='ca-data'){ content+=scopeBar(); if(page!=='ca-hub') content+=ytdStrip(); }
+  if(AUDIT&&page!=='ca-data'){ content+=scopeBar(); }
   content+=body;
   setApp(content);
 }
@@ -4691,33 +4678,11 @@ function dismissWarn(){warnOff=true;rerender();}
 function rerender(){dispatch(S.page);}
 
 // ---------- screens ----------
-function rHub(){
-  const m=model();
-  const partPct=m.kpis.act?Math.round(m.kpis.inLG/m.kpis.act*100):0;
-  const decl=m.groups.filter(g=>g.trend==='declining').length;
-  let b='<div class="card" style="background:linear-gradient(150deg,#1a1af2,#0a0a2e);color:#fff;padding:15px">'
-    +'<div style="font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;opacity:.7">'+esc(scopeLabel()||'This term')+'</div>'
-    +'<div style="display:flex;gap:18px;margin-top:7px">'
-    +'<div><div style="font-size:1.3rem;font-weight:800">'+m.kpis.act+'</div><div style="font-size:.56rem;opacity:.75;text-transform:uppercase">Active youth</div></div>'
-    +'<div><div style="font-size:1.3rem;font-weight:800">'+partPct+'%</div><div style="font-size:.56rem;opacity:.75;text-transform:uppercase">Attended a lifegroup (at least once this term)</div></div>'
-    +'<div><div style="font-size:1.3rem;font-weight:800">'+m.kpis.decisions+'</div><div style="font-size:.56rem;opacity:.75;text-transform:uppercase">Decisions</div></div>'
-    +'</div></div>';
-  const tiles=[
-    ['ca-overview',icS('pie'),'Overview','Term health at a glance'],
-    ['ca-funnel',icS('chart'),'Funnel & Conversion','Where people drop off'],
-    ['ca-groups',icS('group'),'Lifegroup Health',lifegroupRows().length+' lifegroups · per-group'],
-    ['ca-people',icS('users'),'People',m.people.filter(p=>p.stage>0).length+' tracked · search'],
-    ['ca-data',icS('upload'),'Data','2 synced · 4 uploads'+(seedOn()?' · seed':'')],
-    ['ca-deck',icS('deck'),'Build Presentation','Exec deck · new tab'],
-  ];
-  b+='<div class="ca-tiles">'+tiles.map(t=>'<div class="ca-tile" onclick="go(\''+t[0]+'\')"><span class="tic">'+t[1]+'</span><div class="tl">'+t[2]+'</div><div class="ts">'+t[3]+'</div></div>').join('')+'</div>';
-  caShell(b,'ca-hub');
-}
 function rOverview(){
   const m=model(),k=m.kpis;
   const dl=v=>v>0?'<div class="ca-dlt up">▲ +'+v+'% vs prev term</div>':v<0?'<div class="ca-dlt dn">▼ '+v+'% vs prev term</div>':'<div class="ca-dlt fl">− level vs prev term</div>';
   const at=k.actTrend==='rising'?'<div class="ca-dlt up">▲ rising across term</div>':k.actTrend==='declining'?'<div class="ca-dlt dn">▼ declining across term</div>':'<div class="ca-dlt fl">− steady across term</div>';
-  let b=tabs('ca-overview');
+  let b='';
   b+='<div class="stat-grid">'
     +'<div class="stat"><div class="stat-v">'+k.act+'</div><div class="stat-l">Active youth</div>'+at+'</div>'
     +'<div class="stat"><div class="stat-v">'+k.avgFri+'</div><div class="stat-l">Avg Friday</div>'+dl(k.svcD)+'</div>'
@@ -4781,7 +4746,7 @@ function rFunnel(){
   const stuck=m.people.filter(p=>!p.caOnly&&p.stage===R[leak].n);
   const qc={};for(const p of stuck){const q=p.s&&p.s.quad;if(q)qc[q]=(qc[q]||0)+1;}
   const worst=Object.entries(qc).sort((a,b)=>b[1]-a[1])[0];
-  let b=tabs('ca-funnel');
+  let b='';
   b+='<div class="card"><div class="ca-ct">This term&#39;s conversion '+helpTip('Stages run First contact, Friday, Regular, Lifegroup, then Student team. Each bar shows how many people reached that stage this term.')+'</div><div style="font-size:.62rem;color:var(--ca-muted);margin-bottom:10px">'+R[0].lb+' → '+R[4].lb+'</div>'+f+'</div>';
   b+='<div class="card" style="background:#fff5f5;border-left:3px solid var(--ca-rose)"><div style="font-size:.66rem;font-weight:800;color:#b91c1c;text-transform:uppercase;letter-spacing:.05em">Biggest leak</div><div style="font-size:.78rem;margin-top:3px">'+R[leak].lb+' → '+R[leak+1].lb+' loses <b>'+lost+' people</b>.'+(worst?' Largest cluster: '+(QLBL[worst[0]]||worst[0])+' ('+worst[1]+').':'')+'</div></div>';
   b+='<button class="btn btn-secondary btn-full" onclick="CA.fquad()">'+(FQ?'Hide quad funnels ▴':'View funnel per quad ▾')+'</button>';
@@ -4831,7 +4796,7 @@ function rGroups(){
   let rows=lifegroupRows();
   if(LGQ)rows=rows.filter(r=>r.quad===LGQ);
   rows.sort((a,b)=>b.unique-a.unique||a.name.localeCompare(b.name));
-  let b=tabs('ca-groups');
+  let b='';
   b+='<div class="ca-ct" style="margin-bottom:6px">Lifegroup Health '+helpTip('A named lifegroup average divides by the weeks that group actually ran. Grade, quad and overall averages divide by valid services in the term instead, so they are not directly comparable.')+'</div>';
   // Quad filter buttons.
   b+='<div class="ca-fch">'
@@ -4893,7 +4858,7 @@ function plist(){
 }
 function rPeople(){
   const m=model();
-  let b=tabs('ca-people');
+  let b='';
   b+='<input class="fi" style="margin-bottom:9px" placeholder="Search '+m.people.length+' people…" value="'+PF.q.replace(/"/g,'&quot;')+'" oninput="CA.pq(this.value)">';
   b+='<div class="ca-fch">'
     +'<select class="fs ca-sel" onchange="CA.pstage(this.value)"><option value="">All stages</option>'+[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(PF.stage==n?' selected':'')+'>Stage '+n+' · '+STG[n]+'</option>').join('')+'</select>'
@@ -4955,7 +4920,7 @@ function slotU(kind,t,up){
   return '<div class="ca-uslot"><div class="ca-uic '+(sd?'wn':'ok')+'">'+icS('upload')+'</div><div class="ca-usl"><div class="ca-ust">'+t+'</div><div class="ca-uss">'+(sd?'Demo seed':esc(up.fn))+' · '+up.rows.length+' rows · '+fmtD(up.at)+'</div></div><button class="btn btn-secondary btn-sm" onclick="CA.pick(\''+kind+'\')">Replace</button><input type="file" id="ca-f-'+kind+'" accept=".csv,.xlsx" style="display:none" onchange="CA.upload(\''+kind+'\',this)"></div>';
 }
 function rData(){
-  let b=tabs('ca-data');
+  let b='';
   // ── Year selector (existing server-stored audits) ──
   const yrs=AUDIT_SUMMARIES||[];
   const opts=yrs.map(y=>'<option value="'+y.year+'"'+(y.year===AUDIT_YEAR?' selected':'')+'>'+esc(y.label)+'</option>').join('');
@@ -5056,18 +5021,6 @@ async function saveAudit(){
     toast('Audit saved for '+a.year);
     await render('ca-overview');
   }catch(e){toast((e&&e.message)||'Save failed');}
-}
-function rDeck(){
-  let b='<button class="btn btn-secondary btn-sm" style="margin-bottom:10px" onclick="go(\'ca-overview\')">‹ Back to Overview</button>';
-  b+='<div class="card" style="text-align:center;padding:26px 16px">'
-    +'<div style="margin-bottom:8px">'+icLg('deck')+'</div>'
-    +'<div style="font-size:1rem;font-weight:800;color:var(--ca-navy);margin-top:8px">Executive presentation</div>'
-    +'<div style="font-size:.74rem;color:var(--ca-muted);margin:8px 0 16px;line-height:1.55">Generates a self-contained slide deck from the current audit — term health, funnel, lifegroup findings and recommended actions. Opens in a new tab.</div>'
-    +'<button class="btn btn-primary btn-full" onclick="CA.buildDeck()">Build presentation ↗</button>'
-    +(stale()?'<div style="font-size:.6rem;color:var(--ca-muted);margin-top:10px">Deck will carry a data-currency footnote ('+(seedOn()?'uploads are demo seed':'uploads are ageing')+')</div>':'')
-    +'</div>';
-  b+='<div class="card" style="padding:11px 13px"><div class="ca-ct">Deck contents — 9 slides</div><div style="font-size:.72rem;line-height:1.9">1 · Cover &amp; data currency<br>2 · The bottom line (Reach · Retain · Deepen)<br>3 · Integration ladder<br>4 · The biggest leak<br>5 · Students quietly drifting<br>6 · Lifegroup health<br>7 · What&#39;s working<br>8 · Three moves this term<br>9 · Methodology</div><div style="font-size:.62rem;color:var(--ca-muted);margin-top:6px">Arrow keys / swipe to present · S for speaker notes &amp; objection handling · Print/PDF built in</div></div>';
-  caShell(b,'ca-deck');
 }
 
 function buildDeck(){
@@ -5383,20 +5336,18 @@ function buildDeck(){
 
 // ---------- router ----------
 function dispatch(p){
-  if(p==='ca-overview')rOverview();
-  else if(p==='ca-funnel')rFunnel();
+  if(p==='ca-funnel')rFunnel();
   else if(p==='ca-groups')rGroups();
   else if(p==='ca-people')rPeople();
   else if(p==='ca-data')rData();
-  else if(p==='ca-deck')rDeck();
-  else{S.page='ca-hub';rHub();}
+  else{S.page='ca-overview';rOverview();}
 }
 async function render(p){
   if(!S.user||!['director','admin'].includes(S.user.role)){go('home');return;}
   // Ensure the audit list is known and a year is loaded (default: most recent).
   await auditList();
   if(!AUDIT&&AUDIT_SUMMARIES&&AUDIT_SUMMARIES.length){ await auditLoad(AUDIT_SUMMARIES[0].year); }
-  await load(p==='ca-hub'||!D);
+  await load(p==='ca-overview'||!D);
   restore();mdl=null;
   dispatch(p);
 }
