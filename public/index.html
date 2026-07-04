@@ -5049,7 +5049,7 @@ function buildDeck(){
   const rrPct=Math.round(((D.settings&&D.settings.regRateNumerator)||3)/((D.settings&&D.settings.regRateDenominator)||4)*100);
   const currency=seedy?'Student Team / Connect / Decision data is the demo seed (seeded '+upDate+') — replace it in the Data tab before presenting these figures.'
     :isStale?'Student Team / Connect / Decision data was last updated '+upDate+' — refresh it in the Data tab for full currency.'
-    :'Student Team / Connect / Decision uploads current as of '+upDate+'.';
+    :'This audit — attendance, Student Team, Connect and Decision — was last saved on '+upDate+'.';
   const funnelViz=()=>{const max=Math.max(1,atLeast(1));return '<div class="funnel">'+m.rungs.map((r,i)=>{const w=Math.max(7,Math.round(r.v/max*100)),leaky=i===leak;return '<div class="frow"><span class="flabel">'+esc(r.lb)+'</span><span class="ftrack"><span class="fbar'+(leaky?' leaky':'')+'" style="width:'+w+'%"></span></span><b class="fval'+(leaky?' leaky':'')+'">'+r.v+'</b></div>';}).join('')+'</div>';};
   const sparkViz=()=>{
     const vals=sessSeries().map(x=>x.v);
@@ -5058,7 +5058,7 @@ function buildDeck(){
     const X=i=>P+(W-2*P)*i/(n-1),Y=v=>H-P-(H-2*P)*(max===min?.5:(v-min)/(max-min));
     const pts=vals.map((v,i)=>X(i).toFixed(0)+','+Y(v).toFixed(0)).join(' ');
     const dots=vals.map((v,i)=>'<circle cx="'+X(i).toFixed(0)+'" cy="'+Y(v).toFixed(0)+'" r="3.5" fill="#1d4ed8"/>').join('');
-    return '<div class="vizwrap"><svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet"><polyline points="'+pts+'" fill="none" stroke="#1d4ed8" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+dots+'</svg><p class="vcap">Friday attendance · '+vals.length+' sessions · outliers excluded by the server</p></div>';
+    return '<div class="vizwrap"><svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet"><polyline points="'+pts+'" fill="none" stroke="#1d4ed8" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+dots+'</svg><p class="vcap">Youth attendance · '+vals.length+' sessions · outliers excluded by the server</p></div>';
   };
   const lgTableViz=()=>{
     const rows=lifegroupRows().sort((a,b)=>b.unique-a.unique||a.name.localeCompare(b.name));
@@ -5073,7 +5073,7 @@ function buildDeck(){
   const bigNumViz=(num,cap)=>'<div class="bignum"><b>'+num+'</b><span>'+esc(cap)+'</span></div>';
   const quadFunnelViz=()=>{
     const QUADS=[['g79','Girls Yr 7–9'],['b79','Boys Yr 7–9'],['g1012','Girls Yr 10–12'],['b1012','Boys Yr 10–12']];
-    const RLBL=['First contact','Came to Friday','Regular','Attended a lifegroup','Student Team'];
+    const RLBL=['First contact','Came to Youth','Regular','Attended a lifegroup','Student Team'];
     const cells=QUADS.map(([q,ql])=>{
       const qp=m.people.filter(p=>p.s&&p.s.quad===q);
       if(!qp.length)return '<div class="qfcell"><div class="qfl">'+esc(ql)+'</div><p class="muted" style="font-size:.82rem">No data</p></div>';
@@ -5085,21 +5085,21 @@ function buildDeck(){
   };
   const slides=[
     {cls:'cover',
-      kicker:dateStr+' · '+N+' people tracked · live platform data + 3 uploads',
+      kicker:dateStr+' · '+N+' people tracked · a point-in-time snapshot',
       title:'The Health of '+ministry,
       core:'An honest, data-driven read on how students move from first contact to committed discipleship — and the one move that matters most this term.',
       body:isStale?'<p class="covfoot">'+esc(currency)+'</p>':'',
-      notes:'Open with warmth, then candour. Fridays and lifegroup figures are live from the connection platform; Student Team, Connect and Decision figures come from the uploads on the Data tab. Set the frame: one governing message, three lenses, one ask.',
+      notes:'Open with warmth, then candour. Every figure here — Youth attendance, lifegroup attendance, Student Team, Connect and Decision — comes from the one year-to-date snapshot uploaded on the Data tab. Set the frame: one governing message, three lenses, one ask.',
       vizSuggest:['Full-bleed photo of a packed youth night behind a dark gradient','A single hero metric — students currently engaged — fading up on entry'],
       objections:[
         {q:'Ministry is not a spreadsheet — people are not numbers.',a:'Completely agree; numbers never saved anyone. They simply tell us which name to chase this week. Every figure here drills down to a real student in the People tab.'},
-        {q:'How current and trustworthy is this?',a:'Friday and lifegroup data is the platform’s live record as of '+dateStr+'. '+currency}
+        {q:'How current and trustworthy is this?',a:'Every figure comes from the one year-to-date audit snapshot. '+currency}
       ]},
     {kicker:'The bottom line',
       title:'We reach students well — but lose '+dropPct+'% at one step. Fix that step and everything downstream compounds.',
       core:'Read top-down. The ministry’s health rests on three sequential, non-overlapping questions. We are strong on the first, breaking on the second, and quietly promising on the third.',
       args:[
-        'REACH — do students arrive? '+atLeast(1)+' have made first contact, and '+convs[0]+'% of them went on to attend a Friday.',
+        'REACH — do students arrive? '+atLeast(1)+' have made first contact, and '+convs[0]+'% of them went on to attend Youth.',
         'RETAIN — do they keep coming? '+regulars+' are regulars, but '+decliningN+' show a declining connection and '+dropPct+'% never cross '+Lfrom+' → '+Lto+'.',
         'DEEPEN — do they put down roots? '+atLeast(4)+' are active in a lifegroup, '+k.decisions+' have recorded a decision, and '+teamN+' now serve on Student Team.'
       ],
@@ -5203,10 +5203,10 @@ function buildDeck(){
       title:'How these numbers are built',
       core:'So you can trust them — and challenge them.',
       args:[
-        'Ladder: 1 First contact (connect/decision record) · 2 Came to Friday · 3 Regular (≥'+rrPct+'% of Fridays) · 4 Attended a lifegroup (≥1 this term) · 5 Student Team. Each rung counts people at that stage or beyond.',
+        'Ladder: 1 First contact (connect/decision record) · 2 Came to Youth · 3 Regular (≥'+rrPct+'% of Youth nights) · 4 Attended a lifegroup (≥1 this term) · 5 Student Team. Each rung counts people at that stage or beyond.',
         'Personal trend compares each student’s current-term attendance rate with their previous-term rate (students tracked both terms); cohort trend does the same per grade × gender.',
-        'Fridays and lifegroups are read live from this platform’s API — they cannot go stale. '+currency,
-        'Names in uploads are matched to platform students; unmatched names are tracked as audit-only people. Uploads are stored only on this device.'
+        'Youth and lifegroup attendance are part of the same audit snapshot as the uploads below — a frozen, year-keyed record computed when the audit was last saved, not a live feed. '+currency,
+        'Names in uploads are matched to platform students; unmatched names are tracked as audit-only people. The whole audit — Youth and lifegroup attendance plus Student Team, Connect and Decision uploads — is stored server-side as one snapshot for the year.'
       ],
       notes:'Pre-empt the methodology sceptic by volunteering the method first. Confidence here makes every prior slide more credible. Invite challenge — every number drills to a person in the People tab.',
       vizSuggest:['A compact footnote / definitions card','A data-lineage diagram: platform + 3 uploads → one person record → scores'],
