@@ -119,17 +119,22 @@ export function makeFollowupService(
   return {
     async leaderFollowup(actor, leaderId) {
       assertCan(actor, 'leader:read');
-      const [leader, conns, allStudents] = await Promise.all([
+      // These six reads are mutually independent, so fetch them concurrently instead
+      // of chaining round-trips one after another — a sequential chain was holding a
+      // DB connection open for the sum of all six latencies instead of the max.
+      const [leader, conns, allStudents, validSessions, weeks, grpAttRecords] = await Promise.all([
         leaderRepo.findById(leaderId),
         connRepo.findByLeader(leaderId),
         studentRepo.findAll(),
+        sessionRepo.findValid(),
+        weekRepo.findAll(),
+        grpAttRepo.findAll(),
       ]);
       if (!leader) throw new NotFoundError('Leader not found');
       const connectedIds = new Set(conns.map((c) => c.studentId));
       const myStudents = allStudents.filter((s) => connectedIds.has(s.id));
 
       // Most recent VALID service session (ignores holiday/low-attendance Fridays).
-      const validSessions = await sessionRepo.findValid();
       const latestSession = validSessions.reduce<(typeof validSessions)[number] | null>(
         (max, s) => (!max || s.sessionDate > max.sessionDate ? s : max),
         null,
@@ -144,7 +149,6 @@ export function makeFollowupService(
       // weekStart), so one calendar week yields several rows. A student is "seen"
       // if they attended ANY of their groups that week — so union the attendees
       // across every week record sharing the latest weekStart, not just one row.
-      const weeks = await weekRepo.findAll();
       const latestGrpDate = weeks.reduce<string | null>(
         (max, w) => (!max || w.weekStart > max ? w.weekStart : max),
         null,
@@ -152,9 +156,8 @@ export function makeFollowupService(
       let latestGrpAttendees = new Set<string>();
       if (latestGrpDate) {
         const latestWeekIds = new Set(weeks.filter((w) => w.weekStart === latestGrpDate).map((w) => w.id));
-        const recs = await grpAttRepo.findAll();
         latestGrpAttendees = new Set(
-          recs.filter((r) => r.attended && latestWeekIds.has(r.weekId)).map((r) => r.studentId),
+          grpAttRecords.filter((r) => r.attended && latestWeekIds.has(r.weekId)).map((r) => r.studentId),
         );
       }
 
