@@ -4,7 +4,6 @@ import { buildRoutes } from './api/http/router';
 import { createApp } from './api/http/express-adapter';
 import { seedDemoData } from './seed';
 import { env } from './config/env';
-import { destroySqlClient } from './repositories/supabase/client';
 
 export async function createAppInstance(): Promise<Express> {
   const container = await buildContainer();
@@ -14,14 +13,16 @@ export async function createAppInstance(): Promise<Express> {
   }
 
   const routes = buildRoutes(container.services);
-  // Only Supabase has a pooled connection worth force-closing on a route timeout.
-  // Safe to call even though repositories captured getSqlClient()'s return value
-  // once at container-build time above — that value is a stable proxy that always
-  // re-resolves to whichever real connection is current, so destroying it here
-  // doesn't leave those already-built repos holding a dead reference (see
-  // destroySqlClient's own comment for why that's exactly what broke last time).
-  const onRouteTimeout = env.PERSISTENCE === 'supabase' ? () => { void destroySqlClient(); } : undefined;
-  const app = createApp(routes, container.services.auth, onRouteTimeout);
+  // No destroy-on-timeout hook. Force-destroying the shared client on a route
+  // timeout (the incident-era escalation, commits bf395e5/ade64a6) killed the
+  // in-flight queries of OTHER concurrent requests on the same warm instance —
+  // live traces (2026-07-05) showed CONNECTION_DESTROYED failures at 5-10s across
+  // unrelated endpoints, a new failure mode that didn't eliminate the 20s timeouts
+  // it was meant to fix. The sister Camp Platform runs with none of this and is
+  // stable. A genuinely stuck EXECUTING query is already bounded by the role-level
+  // statement_timeout=15s (ALTER ROLE postgres SET statement_timeout, applied on the
+  // prod DB), which frees the connection without destroying anyone else's work.
+  const app = createApp(routes, container.services.auth);
 
   return app;
 }

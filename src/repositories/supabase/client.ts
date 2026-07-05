@@ -23,18 +23,18 @@ let _realClient: SqlClient | undefined;
 function createRealClient(): SqlClient {
   if (!env.DATABASE_URL) throw new Error('DATABASE_URL is required when PERSISTENCE=supabase');
   return postgres(env.DATABASE_URL, {
-    // Pool size per serverless instance. max:1 caused head-of-line blocking —
-    // one slow query (an import, or /trends scanning attendance) would hold the
-    // ONLY connection and freeze every other request in the instance. But on the
-    // free-tier Supavisor pool, a burst of concurrent Lambda instances each opening
-    // up to `max` fresh backend connections at once (e.g. Home's ~9-request
-    // fan-out landing on several cold instances simultaneously) can exceed the
-    // pooler's real capacity and stall new connection ACQUISITION for 20s+ — this
-    // showed up as /connections/leader/:id/followup 503s that survived both
-    // parallelizing its queries and a client-side retry (2026-07-05). 2 is enough
-    // to avoid single-connection head-of-line blocking while roughly halving the
-    // peak simultaneous new-connection demand per request vs the old max:5.
-    max: 2,
+    // Pool size per serverless instance. Restored to 5 (from the incident-era max:2)
+    // to match the sister Youth Camp Platform, which runs max:5 on the same free-tier
+    // Supavisor pool at comparable scale with no timeout machinery and no contention
+    // problems. max:2 was too small for CMS's per-page fan-out: live [db-dispatch]
+    // traces (2026-07-05) showed a request's own queries dispatching 15-19s late
+    // because only 2 could be in-flight per instance while the rest queued —
+    // head-of-line blocking that then tripped the 20s route timeout. A warm instance
+    // multiplexes concurrent requests, so 2 connections choke a Home/Trends load that
+    // fans out 5-9 requests each issuing several queries; 5 gives them room. The
+    // transaction pooler multiplexes, and warm-instance reuse (not one cold Lambda per
+    // user) keeps real simultaneous backend connections well under the 60 ceiling.
+    max: 5,
     prepare: false,
     // idle_timeout/max_lifetime were tuned low (30s/60s) specifically to recycle
     // connections quickly, but that means even a warm, actively-used Lambda
