@@ -88,3 +88,24 @@ export function getSqlClient(): SqlClient {
   }
   return _client;
 }
+
+// query.cancel() only hard-aborts a query that's the one actively being processed
+// right now on its connection; one still queued behind another query on the same
+// connection (pipelined, `max: 2` means this is common) just gets soft-marked and
+// keeps waiting its turn regardless (confirmed live: a query re-dispatched ~79s
+// after we'd already cancelled it). Destroying the connection outright — and
+// dropping the shared client so the next getSqlClient() call builds a fresh one —
+// is the only way to actually stop a request from being able to sit behind
+// whatever stalled that connection in the first place. Called from withTimeout's
+// deadline via the onTimeout hook wired in app.ts (kept out of utils/timeout.ts to
+// avoid coupling that generic utility to the Supabase-specific client).
+export async function destroySqlClient(): Promise<void> {
+  const client = _client;
+  _client = undefined;
+  if (!client) return;
+  try {
+    await client.end({ timeout: 0 });
+  } catch {
+    // best-effort teardown of a connection we already know is unhealthy
+  }
+}

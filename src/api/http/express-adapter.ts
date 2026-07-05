@@ -7,7 +7,7 @@ import { sendError } from '../middleware/error.middleware';
 import { UnauthorizedError } from '../../core/errors/app-error';
 import { createLogger } from '../../utils/logger';
 import { RateLimiter } from '../../utils/rate-limiter';
-import { withTimeout } from '../../utils/timeout';
+import { withTimeout, type TimeoutHook } from '../../utils/timeout';
 import { requestContext, type CancellableQuery } from '../../utils/request-context';
 import { generateId } from '../../utils/id';
 
@@ -31,7 +31,7 @@ const UNTIMED_ROUTES = new Set([
   'POST /audits',
 ]);
 
-export function createApp(routes: Route[], authService: AuthService): Express {
+export function createApp(routes: Route[], authService: AuthService, onRouteTimeout?: TimeoutHook): Express {
   const app = express();
   app.disable('x-powered-by'); // don't advertise the framework (minor info-leak reduction)
 
@@ -120,7 +120,7 @@ export function createApp(routes: Route[], authService: AuthService): Express {
         const untimed = UNTIMED_ROUTES.has(routeLabel);
         const result = untimed
           ? await route.handler(httpReq)
-          : await withTimeout(route.handler(httpReq), ROUTE_TIMEOUT_MS);
+          : await withTimeout(route.handler(httpReq), ROUTE_TIMEOUT_MS, onRouteTimeout);
         logger.info(`[reqtiming] ${reqId} ${routeLabel} done in ${Date.now() - store.start}ms`);
         res.json(result);
       } catch (err) {
