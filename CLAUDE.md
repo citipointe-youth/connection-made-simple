@@ -19,7 +19,7 @@ npm install
 npm run dev          # backend + frontend on http://localhost:4300 (tsx watch)
 npm run start        # same, no watch
 npm run typecheck    # tsc --noEmit (strict)
-npm run test         # vitest (177 tests)
+npm run test         # vitest (186 tests)
 ```
 
 Default port: **4300**. Set `PORT=xxxx` to override.
@@ -551,6 +551,66 @@ service worker (`public/sw.js`) — those were left fully intact.
   would break out of the single-quoted JS string in the `onclick` attribute — `_smsHref()`
   manually replaces `'` → `%27` after encoding, the same reason `phoneLink()`'s raw digits
   are stripped of `'`/`\` before interpolation.
+
+### Home-load performance investigation + fixes (2026-07-05)
+
+Investigated persistent "home screen is slow" / login-hiccup reports. Seven days of Vercel
+logs showed this wasn't a chronic drip — every failure (7×503 + 1×504) clustered in one
+~7-minute window, all triggered by a single `POST /import/group-csv` call that hit Vercel's
+60s hard function timeout while it held connections other concurrent requests needed.
+
+- **`statement_timeout` wasn't actually being enforced.** `client.ts`'s `postgres()` config
+  sets `connection: { statement_timeout: 15000 }`, but the driver only sends this once, as a
+  Postgres wire-protocol startup parameter — it isn't re-applied per query. Through Supabase's
+  Supavisor **transaction-mode** pooler, the physical backend behind a client connection can
+  change between transactions, silently dropping that setting after the first one. Live
+  evidence: a trivial 24-row `select * from lifegroups where id = $1` was caught in
+  `pg_stat_activity` **actively running for 4+ minutes**. Fixed at the database role level
+  instead — the same pattern Supabase's own `authenticator`/`anon` roles already use (they carry
+  `statement_timeout` in `rolconfig`): `ALTER ROLE postgres SET statement_timeout = '15s'`,
+  enforced by Postgres itself regardless of pooling mode. **This is a production DB config
+  change, not in the codebase or migrations** — if the DB is ever recreated, re-apply it.
+- **Redundant DB fan-out on every Home/Trends load.** Home fires 5 parallel HTTP requests
+  (`/overview`, `/trends`, `/students`, `/lifegroups/stats`, `/connections`); Trends fires an
+  overlapping 4. Between them they independently re-fetch the same full tables —
+  `studentRepo.findAll()` alone ran 4 separate times for one Home load. Fixed two ways:
+  - **In-flight de-dupe** (`src/utils/inflight-dedupe.ts`, `dedupeReads()`): concurrent callers
+    of the same no-arg repo read (`findAll`/`getSettings`/`findActive`) now share one in-flight
+    promise instead of firing duplicate queries. Applied once, centrally, in `container.ts` at
+    repo-construction time — Supabase repos only, in-memory test repos are untouched. Safe
+    because none of these reads vary by caller; actor-scoping happens after the fetch, in the
+    service layer.
+  - **`overview.service.ts` now caches like the other two stats services.** It was the only one
+    of the three (`trends.service.ts`, `lifegroup-stats.service.ts`, `overview.service.ts`) with
+    no `ResponseCache`. Mirrors their exact pattern (60s TTL, actor-keyed via the now-shared
+    `src/services/actor-key.ts` — previously duplicated verbatim in both other files).
+    Invalidated on every write that changes students/leaders/connections: both
+    `import.service.ts` call sites, `connection.service.ts`'s `assign`/`unassign`/
+    `importAllocations`, and — a pre-existing gap found while auditing this — `admin.service.ts`'s
+    `reset()`/`clearServiceGroupData()`, which previously invalidated **none** of the three
+    stats caches (a full data wipe could leave Home showing pre-wipe numbers for up to 60s).
+    **Known accepted trade-off**: invalidation is still manually sprinkled per mutation, not
+    centrally enforced — a future write path that forgets to call `invalidate*Cache()` will
+    silently serve stale data for up to 60s. Each of the three has a comment flagging this.
+- **`importGroupCsv` had more round-trips than its data volume justified** (677 students / 24
+  lifegroups / 2894 attendance rows shouldn't take 60+ real seconds). `lifegroup_attendance`
+  cascades from BOTH `lifegroups` (`lifegroup_id` FK) and `lifegroup_weeks` (`week_id` FK) on
+  delete cascade, so the explicit `lifegroupAttendanceRepo.deleteAll()` run before the other two
+  truncates was provably redundant — dropped it, and the remaining two truncates now run
+  concurrently. Leader saves went through one `save()` call per leader — added
+  `ILeaderRepository.saveMany` (mirrors `SupabaseStudentRepository.saveMany`'s chunked bulk
+  upsert) and switched `importGroupCsv` to one bulk call. Merged two sequential read
+  `Promise.all` batches into one (nothing forced the split). **Explicitly not done**: wrapping
+  the import in a `sql.begin()` transaction for atomicity — a killed/crashed import can still
+  leave lifegroup tables truncated-but-not-repopulated. Flagged as a follow-up, not fixed here.
+- **Upload spinner**: `uploadServiceImport`/`uploadGroupImport` (Import tab) now show the
+  existing `.spin` element (same class already used for the parsing/reading phase) during the
+  "Uploading…" status, plus a module-level `_importBusy` guard against a second concurrent
+  import — the confirm modal closes immediately on click, before the upload starts, so
+  re-parsing and re-confirming a file mid-upload could otherwise fire a second request.
+
+New tests: `src/tests/overview.service.test.ts` (cache hit + invalidation), plus a case in
+`import.service.test.ts` asserting leader saves go through `saveMany` once, not `save()` N times.
 
 ## Security notes
 
