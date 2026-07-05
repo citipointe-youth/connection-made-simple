@@ -1,8 +1,29 @@
 import postgres from 'postgres';
 import { env } from '../../config/env';
-import { requestContext } from '../../utils/request-context';
+import { requestContext, type CancellableQuery } from '../../utils/request-context';
 
 export type SqlClient = ReturnType<typeof postgres>;
+
+// Registers every query this request issues with requestContext so a route that
+// times out (withTimeout, utils/timeout.ts) can call .cancel() on whatever's still
+// running instead of abandoning it on a pooled connection. postgres.js's tagged
+// Query is itself a thenable (extends Promise), so attaching .then() here doesn't
+// change its result or re-run it — it only lets us drop the entry once it settles.
+function withCancellationTracking(client: SqlClient): SqlClient {
+  return new Proxy(client, {
+    apply(target, thisArg, args) {
+      const query: unknown = Reflect.apply(target as unknown as (...a: unknown[]) => unknown, thisArg, args);
+      const store = requestContext.getStore();
+      if (store && query && typeof (query as { cancel?: unknown }).cancel === 'function' && typeof (query as { then?: unknown }).then === 'function') {
+        const cancellable = query as CancellableQuery;
+        store.pendingQueries.add(cancellable);
+        const untrack = () => store.pendingQueries.delete(cancellable);
+        (query as Promise<unknown>).then(untrack, untrack);
+      }
+      return query;
+    },
+  }) as SqlClient;
+}
 
 // Coerce a DB timestamp column to an ISO string without ever throwing. The porsager
 // driver normally returns a Date for timestamptz, but a null/string/number (or a
@@ -63,6 +84,7 @@ export function getSqlClient(): SqlClient {
         console.log(`[db-dispatch] conn=${connectionId} ${tag} :: ${query.slice(0, 80)}`);
       },
     });
+    _client = withCancellationTracking(_client);
   }
   return _client;
 }

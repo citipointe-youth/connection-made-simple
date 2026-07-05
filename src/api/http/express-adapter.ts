@@ -8,7 +8,7 @@ import { UnauthorizedError } from '../../core/errors/app-error';
 import { createLogger } from '../../utils/logger';
 import { RateLimiter } from '../../utils/rate-limiter';
 import { withTimeout } from '../../utils/timeout';
-import { requestContext } from '../../utils/request-context';
+import { requestContext, type CancellableQuery } from '../../utils/request-context';
 import { generateId } from '../../utils/id';
 
 const logger = createLogger('http');
@@ -89,7 +89,7 @@ export function createApp(routes: Route[], authService: AuthService): Express {
       res.setHeader('Cache-Control', 'no-store');
       const reqId = generateId().slice(0, 8);
       const routeLabel = `${route.method} ${route.path}`;
-      const store = { id: reqId, route: routeLabel, start: Date.now() };
+      const store = { id: reqId, route: routeLabel, start: Date.now(), pendingQueries: new Set<CancellableQuery>() };
       await requestContext.run(store, async () => {
       // TEMP DIAGNOSTIC (2026-07-05, active 503/timeout incident — see plannedupdate.md):
       // pairs with the debug hook in repositories/supabase/client.ts to show whether a
