@@ -628,6 +628,24 @@ consistent with the slowness reports.
   so the "who attended" capability still lives there, which is where it was ported from
   originally.
 
+### Home follow-up timeout fix (2026-07-05)
+
+Production logs (Vercel runtime logs, post the fan-out/caching fixes above) still showed
+occasional 20s timeouts on `GET /connections/leader/:id/followup` — the Home "Follow Up"
+leader-picker endpoint. Unlike the Home fan-out (5 endpoints fetched in one `Promise.all`),
+`FollowupService.leaderFollowup` (`followup.service.ts`) chained its reads **sequentially**:
+`findById`/`findByLeader`/students `findAll` (already parallel) → `sessionRepo.findValid()` →
+conditionally `svcAttRepo.findBySession()` → `weekRepo.findAll()` → conditionally
+`grpAttRepo.findAll()` — up to 6 round-trips end to end, holding a pooled DB connection open
+for the sum of their latencies instead of the max. Fixed by moving the 5 mutually-independent
+reads (leader, connections, students, valid sessions, weeks, lifegroup attendance) into one
+`Promise.all`; only `svcAttRepo.findBySession()` still runs after, since it needs the latest
+session's id from the batch first. Same root cause and same fix shape as the Home/Trends
+fan-out fix, just on a different (click-triggered, not initial-load) endpoint — the global
+`#nprog` bar is reference-counted across every API call, so a slow endpoint triggered by an
+on-page interaction (the follow-up picker, the now-removed lifegroup click-through) reads to
+the user as "Home is still loading" even though Home's own initial fetch already finished.
+
 ## Security notes
 
 - **XSS:** all user-supplied strings (names, emails, notification title/message,
