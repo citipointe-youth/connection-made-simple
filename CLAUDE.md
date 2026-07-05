@@ -646,6 +646,108 @@ fan-out fix, just on a different (click-triggered, not initial-load) endpoint �
 on-page interaction (the follow-up picker, the now-removed lifegroup click-through) reads to
 the user as "Home is still loading" even though Home's own initial fetch already finished.
 
+### Production performance incident — full history + handoff for independent review (2026-07-05)
+
+**For a fresh Claude instance picking this up.** The user has asked for an independent
+review/continuation of an ongoing production performance incident. Read this whole
+section before touching code — it's the complete history so far, not just the latest
+state.
+
+**Symptom timeline:**
+1. A "click a lifegroup → see who attended" feature was added to the live app (commit
+   `bb3a932`, 2026-07-04), then removed the next day (`a3f10b8`) because its `getMembers`
+   endpoint re-fetched full tables per click and was a load spike. **Confirmed by grep +
+   diff against pre-feature code: no residual code from this feature remains in any
+   live-request path** (`lifegroup-stats.service.ts`, `import.service.ts`,
+   `attendance-build.ts` all checked). The only surviving change is a `roster` field used
+   solely by the Connection Audit snapshot builder (on-demand, pure in-memory JS, not
+   called during Home/Trends/lifegroup-stats requests) — **rule this theory out**, don't
+   re-investigate it.
+2. Real issue: `GET /overview`, `/students`, `/trends`, `/lifegroups/stats`, and
+   `/connections/leader/:id/followup` started intermittently hitting the 20s route
+   timeout → 503, all together, unrelated endpoints at once.
+3. **2026-07-05, later same day**: after several fix attempts (below), the user reports
+   the app "at least loading" but **very slow, and not showing all the data when it does
+   load**. This last symptom (partial/incomplete data on a page that does render) is
+   **new and not yet root-caused** — see "Open questions" below.
+
+**Target end state**: page loads **under 5 seconds** per screen, with **30-40 leaders
+using the app simultaneously** (this is a small church youth ministry team, not a
+high-traffic consumer app — the DB is tiny: ~677 students, ~22k service_attendance rows,
+~2.9k lifegroup_attendance rows. The infra ceiling, not data volume, is the constraint).
+**Constraint: Supabase free tier** — user has explicitly said no upgrade for now, so
+`max_connections=60` and whatever Supavisor's free-tier pool size is are hard limits to
+design within, not levers to pull.
+
+**Root cause (confirmed via live diagnostics, not guessed):** `withTimeout()`
+(`src/utils/timeout.ts`) rejected on its 20s deadline but didn't stop the underlying DB
+query. Each serverless instance only has `max: 2` Postgres connections
+(`src/repositories/supabase/client.ts`). An abandoned query kept a connection tied up
+indefinitely; any later request that got scheduled onto that same connection queued up
+behind it — that's why unrelated endpoints failed together. Confirmed live: a query
+dispatched fast but not actually returning for ~19-99s while sitting behind another
+query on the same connection, and a driver-level `Postgres.js : Unknown Message` protocol
+desync consistent with a connection being reused while still processing abandoned work.
+
+**Diagnostics added (kept, still deployed, safe to leave in place)**:
+- `src/utils/request-context.ts` — an `AsyncLocalStorage`-based per-request context
+  (id, route, start time, and a `pendingQueries` set).
+- `src/api/http/express-adapter.ts` — logs `[reqtiming] <id> <route> start/done/failed`
+  around every route.
+- `src/repositories/supabase/client.ts` — postgres.js's `debug` hook logs
+  `[db-dispatch] conn=<n> <id> <route> +<ms> :: <query>` whenever a query is actually
+  handed to a connection (never logs bound parameters — PII).
+- Read these via `vercel logs <deployment-url> --json` (or the production alias
+  `https://connection-made-simple.vercel.app`) filtered on `reqtiming`/`db-dispatch`.
+  This is by far the fastest way to get real evidence instead of guessing — use it
+  before proposing any fix.
+
+**Fix attempts, in order, with results:**
+
+| # | Commit(s) | What it did | Result |
+|---|-----------|-------------|--------|
+| 1 | `b8703a9`, `68075a2`, `887c230` (earlier session, same day) | Parallelized `leaderFollowup`'s reads; added a client-side retry-once-on-503; lowered pool `max` 5→2, raised `idle_timeout`/`max_lifetime`, staggered Home's prefetch | **Did not stop the incident** — confirmed still failing minutes after deploy (see `plannedupdate.md`, written at the time as a same-day handoff) |
+| 2 | `704f84c` | Added the diagnostics above (no behavior change) | N/A — instrumentation only, this is what made the rest possible |
+| 3 | `ad848fc` | `withTimeout` now cancels a request's in-flight queries (postgres.js's real `query.cancel()`) via the `pendingQueries` set, instead of abandoning them | **Partial fix.** Confirmed live: `.cancel()` only hard-aborts a query that's the one *actively* being processed on its connection right now; one already sent but queued behind another query on the same connection just gets soft-marked and keeps waiting its turn — one request's queries were re-dispatched ~79s after being "cancelled" |
+| 4 | `bf395e5` (**reverted** by `6c4bc04`) | Escalated to force-destroying the whole DB client on timeout | **Regression, caught within ~5 min and reverted.** `api/index.ts` caches the built app/container once per warm serverless instance; `container.ts` passes the `sql` client into every repository once at that same time. Destroying the module-level singleton never reached those already-built repos, which kept a dead reference — every subsequent query on that instance failed instantly with `CONNECTION_ENDED` |
+| 5 | `ade64a6` (current) | Same goal as #4, different mechanism: `getSqlClient()` now returns a **permanent stable proxy** that repos capture once as always, but every call through it re-resolves the *real* underlying client at the moment of use (`getRealClient()`). `destroySqlClient()` only swaps what's underneath — no repo/container/api change needed. Verified against a standalone Node simulation of the exact "capture once, then destroy, then reuse the same reference" scenario that broke #4, *before* wiring it into the real client | **Confirmed working better, not fully clean.** Live traffic post-deploy: 0 full 20s timeouts (down from ~30 in an equal-length window right before), 0 `CONNECTION_ENDED` cascades (regression from #4 confirmed gone), but 6 `CONNECTION_DESTROYED` fast-fails (< 400ms) — expected collateral: destroying a stuck connection also fails any other request using that exact connection at that instant. Surfaces as a 503, which the existing retry-once-on-503 (`68075a2`) should mask client-side. Connection IDs climb steadily post-destroy (2→3→6→7→10→11), confirming recovery is clean |
+
+**Open questions for the reviewer:**
+1. **"Not showing all the data when it does load"** (reported after fix #5 was live) —
+   not yet investigated. Hypotheses to check first: (a) the SPA's `Cache`/stale-while-
+   revalidate pattern (`public/index.html`, 30s TTL) rendering a page from a partial set
+   of the parallel fetches if one sub-request 503'd and the retry-once logic didn't cover
+   it, while others succeeded; (b) `dedupeReads()` (`src/utils/inflight-dedupe.ts`)
+   sharing an in-flight promise across concurrent callers — if that shared query's
+   connection gets destroyed mid-flight, does *every* caller sharing it get a clean
+   error, or does one silently get a partial/wrong result? (c) whether the CSV import's
+   own long-running connection (`UNTIMED_ROUTES` in `express-adapter.ts`) could itself be
+   the thing occupying a connection that then gets force-destroyed by an unrelated
+   request's timeout, corrupting the import. Start from the `[reqtiming]`/`[db-dispatch]`
+   logs on a real repro, don't guess.
+2. **Residual delayed dispatches**: a handful of `[db-dispatch]` lines still show a query
+   for an *already-completed* request dispatching many seconds late (observed up to
+   +9674ms). Not currently blocking new requests (they get a fresh connection instead of
+   queuing), but not fully explained — likely an abandoned query left running in the
+   background until its connection is eventually destroyed by someone else's timeout.
+3. **Whether `max: 2` connections is still the right number** given the actual target is
+   30-40 *simultaneous* leaders — this was tuned down from 5 during fix attempt #1 to
+   reduce connection-acquisition burst, but with the stable-proxy destroy mechanism now
+   in place, it may be worth re-measuring rather than assuming 2 is still optimal.
+4. Whether `<5s per screen` is achievable at all on the free-tier connection ceiling
+   without also reducing the number of round trips per page — Home/Trends already fan
+   out 5-9 parallel requests per load (see the "Home-load performance investigation"
+   section above); each of those still does several sequential-ish queries internally
+   (see the `[db-dispatch]` traces in this section's history for `/lifegroups/stats`,
+   `/trends`, etc.). Consider whether the real fix is architectural (fewer, cheaper
+   queries per screen, e.g. the precompute plan in `plannedupdate.md`) rather than
+   further connection-pool tuning.
+
+**Also read**: `plannedupdate.md` (untracked, in the repo root) has the same history in
+more granular, chronological form, including a separate precompute proposal
+("attended latest service/lifegroup at import time") that would reduce
+`leaderFollowup`'s query count independent of the connection issue above.
+
 ## Security notes
 
 - **XSS:** all user-supplied strings (names, emails, notification title/message,
