@@ -748,6 +748,87 @@ more granular, chronological form, including a separate precompute proposal
 ("attended latest service/lifegroup at import time") that would reduce
 `leaderFollowup`'s query count independent of the connection issue above.
 
+### Incident continuation — DEFINITIVE root cause found + batch fix shipped (2026-07-05, independent review)
+
+A later session independently reviewed the above against **live evidence** (Vercel runtime
+logs + a controlled load test against production using a real grade login) instead of trusting
+the prior conclusions. Findings, in order:
+
+1. **The prior "verified fixed" (`ade64a6`) was a false positive.** Live logs showed a fresh
+   503 cluster still firing under real traffic; the `CONNECTION_DESTROYED` fast-fails were NOT
+   all sub-400ms (several were 5–10s). The destroy-on-timeout hook was **amplifying** the
+   cascade: one request's timeout called `destroySqlClient()`, force-ending the shared client
+   and killing OTHER concurrent requests' in-flight queries.
+
+2. **Reverted the incident-era escalations toward the sister Camp Platform's proven-simple
+   config, then load-tested each step:**
+   - Removed the destroy-on-timeout hook (`app.ts` no longer wires `onRouteTimeout`). Relies on
+     the role-level `statement_timeout=15s` (confirmed applied on the prod DB) like the Camp app.
+   - Tried `max:2→5` (to match Camp) — **load testing proved this WRONG for CMS** and it was
+     reverted back to `max:2`. See next point.
+
+3. **TRUE root cause #1 — Supavisor free-tier CLIENT-connection cap (`EMAXCONN`, limit 200),
+   not `max_connections=60`.** Under a concurrent burst Vercel spins up many instances; total
+   pooler connections = `instances × max`, so `max:5` hit the 200 ceiling ~2.5× sooner than
+   `max:2`. Pool tuning **cannot** solve the target concurrency — the lever is fewer requests
+   per page (each Home load fanned out 5–9 requests → 5–9 invocations → instances → connections).
+
+4. **Shipped `GET /batch` (`ff9b2ac`) — the structural fix for the fan-out.** Composes the
+   existing services (`overview/trends/students/lifegroupStats/connections/atRisk/settings/
+   leaders`) into ONE request via `Promise.allSettled` (graceful partial render; `dedupeReads`
+   now coalesces shared table reads across sections). SPA: `API.batch(paths)` fetches the
+   batchable paths in one `/batch` call and **seeds the client cache under each path's own key**,
+   so every screen renderer is unchanged; `_prefetch`, all 9 `_revalidate<Page>` helpers, and
+   `renderHome`'s cold branch now batch. `sw.js` `API_RE` gains `batch`; cache `cms-v21→v22`.
+   **Verified in-browser** (login + Home + Trends render, console clean, each screen = 1 batch
+   request, zero individual fan-out) and **190+7 tests pass**. This **eliminated the `EMAXCONN`
+   500s**. Endpoint is additive — every standalone endpoint still works; easy revert.
+
+5. **TRUE root cause #2 (the deepest one) — abandoned transactions LEAK Supavisor backend
+   slots.** After batch, the pooler still saturated under a simultaneous cold burst. Traces
+   showed only 2 queries dispatch per batch (`max:2`) then **20s of silence**. `pg_stat_activity`
+   revealed why: queries stuck **`state='active'`, `wait_event='ClientRead'` for 4–9 MINUTES** —
+   the Postgres/pooler backend waiting on a client (the Vercel function) that already died on its
+   20s timeout. `statement_timeout` can't reap these (they're not executing SQL). They accumulate
+   until the pooler's backend pool is exhausted → every endpoint 503s together → each 503 orphans
+   another query → **death spiral**, slow to recover (minutes). This is the real mechanism behind
+   the whole incident — "unrelated endpoints fail together" = shared exhausted pooler.
+   - **Operational remedy** if the pooler is ever saturated by orphans (symptom: even a single
+     `/auth/login` takes 20s→503 while `/health` is fine): terminate them in the Supabase SQL
+     editor —
+     ```sql
+     select pid, pg_terminate_backend(pid), now()-query_start
+     from pg_stat_activity
+     where state='active' and wait_event='ClientRead'
+       and pid<>pg_backend_pid() and now()-query_start > interval '60 seconds';
+     ```
+     (Claude cannot run `pg_terminate_backend` — it's blocked as a destructive prod-infra action;
+     the human must run it.)
+
+**Remaining work (the real fix for root cause #2 — NOT yet done):**
+- **Stop the leak at the source (server-side reaping).** `statement_timeout` doesn't cover an
+  abandoned `active`/`ClientRead` backend. Investigate + apply the right reaper: Supavisor pooler
+  `client_idle_timeout` (Dashboard → Database → Connection Pooling) and/or aggressive TCP
+  keepalives; `idle_in_transaction_session_timeout` at the role level covers the
+  idle-in-transaction variant. Goal: orphaned backends reaped in seconds, not minutes.
+- **Remove the write-on-every-read.** `SupabaseSettingsRepository.getSettings()`
+  (`supabase.settings.ts:62`) runs an `insert into app_settings … on conflict do update` on
+  EVERY call (it was one of the stuck queries). Make it `SELECT` first, insert the default only
+  if missing — removes a write (and a heavier transaction to orphan) from every stats request.
+- **Precompute the heavy aggregates** (`plannedupdate.md` + extend to trends/overview/
+  lifegroup-stats): each stats load scans full tables (`service_attendance` ~22k rows) in JS;
+  precomputing into a small table at import time makes reads one cheap indexed query, cutting
+  both query cost and the window for a timeout→orphan.
+- **Re-verify with a STAGGERED-arrival load test** (users over ~15s, not one instant). The
+  single-client herd test overstates instance concentration; real spread-out usage may already
+  be acceptable with batch alone. (Note: heavy load testing orphans transactions and degrades
+  prod — always clear orphans afterward with the SQL above, and prefer gentle staggered tests.)
+
+Load-test scripts live in the session scratchpad (`loadtest.mjs` = per-endpoint fan-out,
+`loadtest-batch.mjs` = post-fix batch pattern, `loadtest-realistic.mjs` = staggered arrivals).
+Test login used: `grade11b`. Current live state: `max:2`, no destroy hook, `GET /batch` shipped,
+diagnostics still in place.
+
 ## Security notes
 
 - **XSS:** all user-supplied strings (names, emails, notification title/message,
