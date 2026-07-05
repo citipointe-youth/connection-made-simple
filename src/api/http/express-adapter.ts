@@ -7,7 +7,7 @@ import { sendError } from '../middleware/error.middleware';
 import { UnauthorizedError } from '../../core/errors/app-error';
 import { createLogger } from '../../utils/logger';
 import { RateLimiter } from '../../utils/rate-limiter';
-import { withTimeout, type TimeoutHook } from '../../utils/timeout';
+import { withTimeout } from '../../utils/timeout';
 import { requestContext, type CancellableQuery } from '../../utils/request-context';
 import { generateId } from '../../utils/id';
 
@@ -38,7 +38,7 @@ const UNTIMED_ROUTES = new Set([
   'POST /audits',
 ]);
 
-export function createApp(routes: Route[], authService: AuthService, onRouteTimeout?: TimeoutHook): Express {
+export function createApp(routes: Route[], authService: AuthService): Express {
   const app = express();
   app.disable('x-powered-by'); // don't advertise the framework (minor info-leak reduction)
 
@@ -98,11 +98,6 @@ export function createApp(routes: Route[], authService: AuthService, onRouteTime
       const routeLabel = `${route.method} ${route.path}`;
       const store = { id: reqId, route: routeLabel, start: Date.now(), pendingQueries: new Set<CancellableQuery>() };
       await requestContext.run(store, async () => {
-      // TEMP DIAGNOSTIC (2026-07-05, active 503/timeout incident — see plannedupdate.md):
-      // pairs with the debug hook in repositories/supabase/client.ts to show whether a
-      // slow request is stuck waiting for a DB connection or actually executing a query.
-      // Remove once the incident's root cause is confirmed and fixed.
-      logger.info(`[reqtiming] ${reqId} ${routeLabel} start`);
       try {
         // Throttle login attempts per account, keyed by IP+email (not raw IP) so a
         // whole youth team behind one shared NAT/public IP isn't collectively capped.
@@ -133,11 +128,9 @@ export function createApp(routes: Route[], authService: AuthService, onRouteTime
         const untimed = UNTIMED_ROUTES.has(routeLabel);
         const result = untimed
           ? await route.handler(httpReq)
-          : await withTimeout(route.handler(httpReq), ROUTE_TIMEOUT_MS, onRouteTimeout);
-        logger.info(`[reqtiming] ${reqId} ${routeLabel} done in ${Date.now() - store.start}ms`);
+          : await withTimeout(route.handler(httpReq), ROUTE_TIMEOUT_MS);
         res.json(result);
       } catch (err) {
-        logger.info(`[reqtiming] ${reqId} ${routeLabel} failed in ${Date.now() - store.start}ms: ${err instanceof Error ? err.message : String(err)}`);
         sendError(res, err);
       }
       });

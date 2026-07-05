@@ -13,15 +13,11 @@ export async function createAppInstance(): Promise<Express> {
   }
 
   const routes = buildRoutes(container.services);
-  // No destroy-on-timeout hook. Force-destroying the shared client on a route
-  // timeout (the incident-era escalation, commits bf395e5/ade64a6) killed the
-  // in-flight queries of OTHER concurrent requests on the same warm instance —
-  // live traces (2026-07-05) showed CONNECTION_DESTROYED failures at 5-10s across
-  // unrelated endpoints, a new failure mode that didn't eliminate the 20s timeouts
-  // it was meant to fix. The sister Camp Platform runs with none of this and is
-  // stable. A genuinely stuck EXECUTING query is already bounded by the role-level
-  // statement_timeout=15s (ALTER ROLE postgres SET statement_timeout, applied on the
-  // prod DB), which frees the connection without destroying anyone else's work.
+  // A stuck EXECUTING query is bounded by the role-level statement_timeout=15s
+  // (ALTER ROLE postgres SET statement_timeout, applied on the prod DB); the route
+  // timeout in express-adapter is the outer safety net. No destroy-on-timeout hook —
+  // an incident-era escalation that caused cross-request CONNECTION_DESTROYED
+  // failures; see the incident resolution notes in CLAUDE.md.
   const app = createApp(routes, container.services.auth);
 
   return app;

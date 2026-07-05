@@ -215,9 +215,14 @@ CORS_ORIGINS=*
 **GOTCHA — production `DATABASE_URL` must use the connection POOLER, not the direct
 connection.** On Vercel serverless, the direct connection (`db.<ref>.supabase.co:5432`)
 fails because Supabase now serves it over IPv6 only and Vercel functions are IPv4. Use the
-Supavisor pooler (transaction mode), note the `postgres.<ref>` username and port `6543`:
-`postgresql://postgres.<ref>:<password>@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres`.
-Transaction mode means no session-level prepared statements — fine for this app.
+Supavisor pooler with the `postgres.<ref>` username:
+`postgresql://postgres.<ref>:<password>@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres`.
+
+**Use SESSION mode (port `5432`), NOT transaction mode (`6543`).** The transaction-mode
+pooler intermittently handed back dead connections (queries dispatched, no response, 20 s
+timeout → 503) under this app's serverless + burst pattern — the root cause of the 2026-07
+outage. Session mode fixed it; see the "✅ RESOLVED" note in the incident history below for
+the full evidence and the connection-ceiling mitigation levers.
 
 ## Frontend
 
@@ -828,6 +833,78 @@ Load-test scripts live in the session scratchpad (`loadtest.mjs` = per-endpoint 
 `loadtest-batch.mjs` = post-fix batch pattern, `loadtest-realistic.mjs` = staggered arrivals).
 Test login used: `grade11b`. Current live state: `max:2`, no destroy hook, `GET /batch` shipped,
 diagnostics still in place.
+
+### ✅ RESOLVED — the actual root cause was the pooler CONNECTION MODE (2026-07-06)
+
+A further independent review (again driven by live evidence — Vercel runtime logs,
+`pg_stat_activity`, direct `EXPLAIN ANALYZE`, and in-browser reproduction) found that the
+whole multi-day incident had **two distinct causes, neither of which was the app code,
+the data, or the earlier "orphaned transaction / pool exhaustion" theory** (that was a
+downstream *symptom*, not the disease). Both are now fixed and deployed.
+
+**How it was isolated (the decisive evidence):**
+- Rolling the app all the way back to the pre-incident commit (`6ecbc76`) did **not** fix
+  it, and a full Supabase project restart did **not** fix it → it was neither the app code
+  nor a transient pooler state.
+- The database itself was proven healthy: `select * from service_attendance` (all ~22k
+  rows) runs in **4.5 ms**; `pg_stat_activity` showed ~10/60 connections, no locks, no
+  stuck queries; backends execute every query in <1 s and go idle.
+- Yet the app hung: `[db-dispatch]` traces showed queries dispatched to the wire in ~1 ms,
+  then **20 s of silence → route timeout → 503**. The hang was **intermittent and tied to
+  establishing a NEW connection** (it died on fresh `conn=3`, mid `pg_type` init). Warm,
+  already-established connections were always fast (12/12 logins at ~0.5 s).
+
+**Root cause #1 — the outage: transaction-mode Supavisor pooler intermittently hands back
+DEAD connections.** On the free-tier **transaction-mode** pooler (port `6543`), a
+newly-established connection was occasionally TCP-connected + authenticated but **never
+returned a response to any query on it** — so the request hung to the 20 s timeout. This
+spikes exactly when 30–40 leaders arrive at once (a burst of cold starts / new
+connections). The earlier "abandoned transactions leak backend slots" was the death-spiral
+this *triggered*, not the origin.
+- **Fix (shipped): switch the pooler from transaction mode to SESSION mode.** In the Vercel
+  `DATABASE_URL`, change the pooler port `6543` → **`5432`** (same host/user/password).
+  Session mode gives each connection a dedicated backend for its lifetime and does not
+  exhibit the dead-connection behaviour. Verified live: `/overview`, `/trends`,
+  `/lifegroups/stats`, `/auth/login` all went from 503@20 s to **200 in <1 s**. This is the
+  single change that ended the outage.
+
+**Root cause #2 — a separate, long-standing login lockout: the login rate limiter was keyed
+by RAW IP.** `express-adapter.ts` limited logins to 10 per IP per 15 min (in-memory). The
+real audience is 30–40 leaders behind **one shared church/school NAT IP**, so the whole team
+collectively got 10 logins / 15 min → everyone past that got a 15-min `429`. Present in every
+version (so rollback couldn't remove it) and in-memory (so a DB restart couldn't clear it),
+which is why it masked/compounded the outage.
+- **Fix (shipped, `664e9f7`): re-key the limiter by IP + account** (falls back to IP-only if
+  email absent) and raise the per-account cap to 30/15 min. Per-account brute-force protection
+  is retained; it's best-effort throttling, not a hard boundary.
+
+**Also done in the same pass:**
+- **RLS enabled** on the four tables that migration 006 missed (`connection_audits`,
+  `notifications`, `notification_recipients`, `push_subscriptions`) — see migration
+  `016_enable_rls_remaining.sql`. Safe because the app connects as the `postgres` owner and
+  bypasses RLS (the other 12 tables already ran this way).
+- **Incident diagnostics removed** now that the cause is known: the `[reqtiming]` logs
+  (`express-adapter.ts`), the `[db-dispatch]` postgres.js `debug` hook (`client.ts`), and the
+  unused `destroySqlClient()` / `TimeoutHook` machinery. The 20 s route timeout and the
+  per-request query-cancellation were **kept** (they're safety nets, not diagnostics).
+
+**Session-mode trade-off + mitigation levers (if the connection ceiling is ever hit).**
+Session mode holds a dedicated backend per app connection (transaction mode multiplexed
+them), so the ceiling is `max_connections = 60`. At current usage this is comfortable (~5–20
+of 60), and it should still serve 30–40 leaders because connections are per *Vercel instance*
+(not per user — Fluid Compute packs many users onto few instances at `max: 2` each) and the
+`GET /batch` endpoint already cut requests-per-screen. **If a real Friday-night session ever
+approaches the limit** (symptom: new connections failing / queueing under peak load), the
+levers, in order of preference:
+1. **Lower the app's `idle_timeout`** in `client.ts` (currently 120 s) so idle backends free
+   their slot faster — more headroom without touching infra. (Reconnects are cheap + reliable
+   in session mode, unlike the transaction-mode dead-connection issue we escaped.)
+2. **Raise the Supavisor Pool Size** (Supabase Dashboard → Database → Connection Pooling),
+   staying under `max_connections = 60`.
+3. **Keep the app's `max` low** (currently 2) so total held backends = instances × max stays
+   bounded.
+Do **not** stress-test production to find the limit — heavy load testing is what degraded the
+pooler during the incident. Watch the connection count during a real session instead.
 
 ## Security notes
 

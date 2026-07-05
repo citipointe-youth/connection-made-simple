@@ -50,19 +50,6 @@ function createRealClient(): SqlClient {
     connection: {
       statement_timeout: 15000,  // kill any query running > 15s (prevents indefinite hangs)
     },
-    // DIAGNOSTIC (2026-07-05, active 503/timeout incident — see plannedupdate.md):
-    // `debug` fires only once a query has been handed to a physical connection and is
-    // about to go out on the wire — i.e. AFTER any wait for a free pool slot / new
-    // connection. Comparing this timestamp against the request-start log in
-    // express-adapter.ts tells us whether a slow request stalled acquiring a
-    // connection (big gap here) or executing/transferring the query (small gap here,
-    // long gap before the route's own "done" log). Never logs `parameters` — those
-    // are bound query values (names, phone numbers) and must not hit logs.
-    debug: (connectionId, query) => {
-      const store = requestContext.getStore();
-      const tag = store ? `${store.id} ${store.route} +${Date.now() - store.start}ms` : 'no-request-ctx';
-      console.log(`[db-dispatch] conn=${connectionId} ${tag} :: ${query.slice(0, 80)}`);
-    },
   });
 }
 
@@ -86,14 +73,11 @@ function trackForCancellation(query: unknown): void {
   }
 }
 
-// getSqlClient() returns this SAME object forever — container.ts (and every
-// repository it constructs) captures it exactly once and holds onto it for the
-// life of the warm serverless instance (api/index.ts caches the whole app/container
-// per instance). That reference can never be swapped out from outside, so a naive
-// "replace the client" fix (tried and reverted 2026-07-05, see plannedupdate.md)
-// never reaches the repos that already captured the old one. Instead, every call
-// through this stable proxy re-resolves getRealClient() at the moment it's used, so
-// destroySqlClient() can swap what's underneath without any repo needing to know.
+// getSqlClient() returns a stable proxy that container.ts (and every repository it
+// builds) captures exactly once for the life of the warm serverless instance. The
+// proxy registers every query it dispatches with the request context
+// (trackForCancellation) so a route that hits its timeout can cancel its own
+// still-running queries, without threading the request id through every repository.
 let _stableClient: SqlClient | undefined;
 
 export function getSqlClient(): SqlClient {
@@ -113,25 +97,4 @@ export function getSqlClient(): SqlClient {
     }) as SqlClient;
   }
   return _stableClient;
-}
-
-// query.cancel() only hard-aborts a query that's the one actively being processed
-// right now on its connection; one still queued behind another query on the same
-// connection (pipelined, `max: 2` means this is common) just gets soft-marked and
-// keeps waiting its turn regardless (confirmed live: a query re-dispatched ~79s
-// after we'd already cancelled it). Destroying the real connection and swapping in
-// a fresh one (transparently, via getRealClient() above) is the only way to stop a
-// request from being able to sit behind whatever stalled that connection in the
-// first place — without this, an earlier attempt that replaced the module-level
-// client outright caused every subsequent query on the same warm instance to fail
-// instantly, because repos never call getSqlClient() again after construction.
-export async function destroySqlClient(): Promise<void> {
-  const real = _realClient;
-  _realClient = undefined;
-  if (!real) return;
-  try {
-    await real.end({ timeout: 0 });
-  } catch {
-    // best-effort teardown of a connection we already know is unhealthy
-  }
 }
