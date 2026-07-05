@@ -60,10 +60,18 @@ export class SupabaseSettingsRepository implements ISettingsRepository {
   }
 
   async getSettings(): Promise<AppSettings> {
+    // Hot path is a pure READ. The settings row effectively always exists after the
+    // first-ever call, so we must NOT run a write (upsert) on every request: getSettings
+    // is called by every stats/batch load, and an INSERT opens a heavier transaction that,
+    // if the serverless function is killed mid-flight (route timeout), orphans a Supavisor
+    // backend for minutes in ClientRead and leaks pooler slots — the real mechanism behind
+    // the 2026-07-05 503 incident (see CLAUDE.md). Only fall through to an insert of the
+    // defaults if the row is genuinely missing (first-ever call), staying race-safe via
+    // on-conflict for concurrent cold starts.
+    const existing = await this.sql`select * from app_settings where id = ${SETTINGS_ID}`;
+    if (existing[0]) return toAppSettings(existing[0]);
+
     const now = new Date().toISOString();
-    // Atomic upsert: insert defaults if no row exists; if a row already exists
-    // the trivial SET id=id no-op still returns it, so we always get the row
-    // in one query (prevents race on concurrent cold starts).
     const rows = await this.sql`
       insert into app_settings (
         id,
