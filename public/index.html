@@ -3121,7 +3121,7 @@ function _studentResultsHtml(vis) {
           <span class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</span>
           ${qualChips(s)}
         </div>
-        <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender}${fmtBday(s.dateOfBirth) ? ' · ' + fmtBday(s.dateOfBirth) : ''} ${quadChip(s.quad)}</div>
+        <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender}${fmtBday(s.dateOfBirth) ? ' · ' + fmtBday(s.dateOfBirth) : ''}</div>
         ${termRow('Youth', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
         ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
       </div>
@@ -4900,7 +4900,13 @@ function model(){
     // Team has no per-row dates: for a specific term, only count as team if they attended
     // in that term (sA or gA > 0). For YTD (TERM==='ALL') count all team members.
     const teamActive=x.team&&(TERM==='ALL'||(s.sA>0||s.gA>0));
-    const stage=teamActive?5:s.gA>0?4:(s.sT>0&&s.sA/s.sT>=rr)?3:s.sA>0?2:(x.hasConnect||x.hasDecision)?1:0;
+    // Stage 5 requires the stage-4 criterion too (gA>0) — the ladder's own methodology
+    // text says "each rung counts people at that stage OR BEYOND", so a team member not
+    // currently in a lifegroup isn't "beyond" stage 4 and shouldn't inflate its count.
+    // Without this, "Attended a lifegroup this period" (rung 4, and the Overview's
+    // "In a lifegroup" tile which is gA>0-only) diverge by exactly the number of team
+    // members who aren't currently in a lifegroup.
+    const stage=(teamActive&&s.gA>0)?5:s.gA>0?4:(s.sT>0&&s.sA/s.sT>=rr)?3:s.sA>0?2:(x.hasConnect||x.hasDecision)?1:0;
     const trend=trendOf(s);
     people.push({id:s.id,name:s.fn+' '+s.ln,s,caOnly:false,stage,trend,score:scoreOf(stage,s,trend),connect:x.connect||null,decision:x.decision||null,conn:!!x.hasConnect,dec:!!x.hasDecision,team:!!x.team});
   }
@@ -4909,7 +4915,7 @@ function model(){
     const stage=x.team?5:1;
     people.push({id:'cax-'+h32(k),name:x.name,s:null,caOnly:true,stage,trend:'stable',score:scoreOf(stage,null,'stable'),connect:x.connect||null,decision:x.decision||null,conn:!!x.hasConnect,dec:!!x.hasDecision,team:!!x.team});
   }
-  const rungs=[[1,'Interacted'],[2,'Came to Youth'],[3,'Regular'],[4,'Attended a lifegroup this term'],[5,'Student team']]
+  const rungs=[[1,'Interacted'],[2,'Came to Youth'],[3,'Regular'],[4,'Attended a lifegroup this period'],[5,'Student team']]
     .map(([n,lb])=>({n,lb,v:people.filter(p=>p.stage>=n).length}));
   // KPIs
   const act=students.filter(s=>s.sA>0).length;
@@ -5402,7 +5408,10 @@ function _buildDeckBody(){
   const convPct=convs[leak],dropPct=100-convPct,lost=m.rungs[leak].v-m.rungs[leak+1].v;
   const decliningN=m.people.filter(p=>!p.caOnly&&p.trend==='declining').length;
   const risingN=m.people.filter(p=>p.trend==='rising').length;
-  const teamN=atLeast(5),regulars=atLeast(3);
+  // Literal team-roster size (not atLeast(5)): stage 5 now additionally requires current
+  // lifegroup attendance (see model()'s stage calc), so a team member sitting out lifegroup
+  // this period would otherwise silently disappear from this "how many serve on team" figure.
+  const teamN=m.people.filter(p=>p.team).length,regulars=atLeast(3);
   const decisionNoGroup=m.people.filter(p=>p.dec&&p.s&&p.s.gT===0).length;
   const regularNoGroup=m.people.filter(p=>p.stage===3).length;
   const partPct=k.act?Math.round(k.inLG/k.act*100):0;

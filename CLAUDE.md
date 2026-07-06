@@ -911,8 +911,8 @@ pooler during the incident. Watch the connection count during a real session ins
 - **Student Search table**: desktop `.dt` table headers are now clickable to sort (Name, Gr,
   Gender, DOB, Youth, Lifegroup, Status); Youth/Lifegroup sort by this-term % only (last-term
   stays a comparison, not a sort key), Status sorts worst-first (stopped/declining ahead of
-  stable/rising). The **Quad** column is removed from the desktop table (grade + gender already
-  identify it); the mobile card view is untouched and still shows the quad chip inline.
+  stable/rising). The **Quad** chip is removed from both the desktop table (its own column) and
+  the mobile card (was inline in the `li-sub` line) — grade + gender already identify it.
 - **Connection Audit "Stage 1" renamed to "Interacted"** everywhere it appears — the `STG` label
   map, the Integration ladder / funnel rung labels, the People-tab stage filter dropdown, and the
   executive brief's per-quad funnel viz + methodology slide. A new `helpTip` next to the
@@ -933,6 +933,31 @@ pooler during the incident. Watch the connection count during a real session ins
   call sites updated — the 2 that fall back between `mobile`/`parentPhone` pass
   `!s.mobile && !!s.parentPhone`). Tapping a parent's number now defaults the Message text to
   "Hey, `<First Name>`'s leader here, " instead of "Hey `<First Name>` ".
+- **Funnel wording**: rung 4's label changed from "Attended a lifegroup this term" to "Attended
+  a lifegroup this period" (shared `rungs` array, so this also updates the Overview's
+  Integration ladder — the same wording covers both a single-term view and Year-to-date).
+- **Fixed: Overview's "In a lifegroup" tile vs. the Integration ladder's "Attended a lifegroup"
+  rung showed different numbers.** Root cause: `model()`'s `stage` calc promoted any active
+  Student Team member straight to stage 5, *regardless of whether they currently attend a
+  lifegroup* — so the ladder's cumulative "stage ≥ 4" count (rung 4) included team members with
+  `gA===0`, while the Overview tile (`students.filter(s=>s.gA>0)`) correctly didn't. This wasn't
+  a double-counting-multiple-lifegroups bug (each student's `gA` is already a single summed
+  attendance count, term-scoped, independent of how many named groups they attended) — it was
+  team status silently overriding the lifegroup check. **Fix**: stage 5 now additionally
+  requires `gA>0` (`(teamActive&&s.gA>0)?5:...`), matching the ladder's own documented "counts
+  people at that stage or beyond" semantics, so `stage>=4` and the "In a lifegroup" tile now
+  agree for every matched student. Side effect (intentional): a team member NOT currently in a
+  lifegroup now shows their true highest reached rung (e.g. "3 - Regular") instead of "5 -
+  S-Team" on their People-tab badge — this surfaces exactly the "on team but disengaged from
+  their lifegroup" case the audit is meant to catch, rather than masking it. `p.team` (used by
+  the person-detail "Journey" popup and the executive brief's `teamN`, now computed directly as
+  `m.people.filter(p=>p.team).length` instead of the old `atLeast(5)`) still reflects true team
+  roster membership regardless of this reclassification, so "how many serve on Student Team"
+  in the executive brief is unaffected. **Known residual edge case, not fixed**: an audit-only
+  team-roster entry with no matching platform student (`caOnly` people, `s===null`) has no `gA`
+  to check at all, so it's still promoted to stage 5 unconditionally — a rare case (an unmatched
+  name in the Team CSV) and one the "In a lifegroup" tile never counted anyway (it only sums
+  over matched `students`), so it doesn't reproduce the reported discrepancy.
 
 ## Security notes
 
