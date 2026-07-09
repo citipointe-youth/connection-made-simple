@@ -580,6 +580,11 @@ const SECTION_OF = {
   '/at-risk': 'atRisk',
   '/settings': 'settings',
   '/leaders': 'leaders',
+  // Connect Setup's own widened fetch (see student.service.ts's `crossGrade`) — a
+  // distinct cache key/batch section so Health/People/Data/etc. keep using the
+  // grade-scoped '/students' and '/connections' above, untouched.
+  '/students?crossGrade=1': 'studentsConnect',
+  '/connections?crossGrade=1': 'connectionsConnect',
 };
 const API = (() => {
   // The session token is kept in localStorage (sent as a Bearer header). This is
@@ -672,7 +677,9 @@ const Cache = (() => {
     // lapsed cache paints instantly instead of blocking on a (possibly cold) re-fetch.
     getStale(key) { const e = store.get(key); return e ? e.data : null; },
     set(key, data) { store.set(key, { data, ts: Date.now() }); },
-    del(...keys) { for (const k of keys) { for (const sk of store.keys()) { if (sk === k || sk.startsWith(k + '/')) store.delete(sk); } } },
+    // A '?'-suffixed match too, so del('/students') also drops '/students?crossGrade=1'
+    // (Connect Setup's widened variant) without every call site needing to know it exists.
+    del(...keys) { for (const k of keys) { for (const sk of store.keys()) { if (sk === k || sk.startsWith(k + '/') || sk.startsWith(k + '?')) store.delete(sk); } } },
     clear() { store.clear(); },
   };
 })();
@@ -2218,7 +2225,10 @@ let _aS = { students:[], leaders:[], allocs:{}, gf:new Set(), df:new Set() };
 // _pickerCtx = { leaderId, leaderGender, leaderName }
 let _pickerCtx = null;
 
-const CONNECT_PATHS = ['/students', '/leaders', '/connections'];
+// crossGrade=1 variants — see student.service.ts's list() comment: this screen needs
+// to see students/connections outside the actor's own grade/bracket so a leader whose
+// grades were self-service broadened can actually be connected to that other grade.
+const CONNECT_PATHS = ['/students?crossGrade=1', '/leaders', '/connections?crossGrade=1'];
 let _connectRevalidating = false;
 function _revalidateConnect() {
   if (_connectRevalidating) return;
@@ -2245,9 +2255,9 @@ async function renderConnect() {
 
 async function loadConnectData(G) {
   const [students, leaders, connectsRaw] = await Promise.all([
-    G('/students').catch(() => []),
+    G('/students?crossGrade=1').catch(() => []),
     G('/leaders').catch(() => []),
-    G('/connections').catch(() => []),
+    G('/connections?crossGrade=1').catch(() => []),
   ]);
   const allocs = {};
   for (const a of connectsRaw) { if (!allocs[a.studentId]) allocs[a.studentId]=[]; allocs[a.studentId].push(a.leaderId); }
@@ -2428,6 +2438,15 @@ function openStudentPicker(leaderId, leaderGender) {
   window._pickerGender = leaderGender || '';
   window._pickerAssigned = assignedForLeader;
   window._pickerAllocs = _aS.allocs || {};
+  // The logged-in login's own grade(s) — used only to sort each bucket below so a
+  // broadened leader (see updateGrades) still sees their home grade first, with the
+  // other grade(s) they were broadened into further down the same list.
+  const mu = S.user || {};
+  window._pickerOwnGrades = new Set(
+    mu.role === 'grade' && mu.grade != null ? [mu.grade]
+    : mu.role === 'quad' ? quadGrades(mu.quad)
+    : []
+  );
   window._pickerLeaders = _aS.leaders || [];
   filterPicker();
 
@@ -2470,6 +2489,19 @@ function _pickByFirst(a, b) {
   return (a.firstName || '').localeCompare(b.firstName || '') || (a.lastName || '').localeCompare(b.lastName || '');
 }
 
+// Same order as _pickByFirst, but students in the logged-in login's own grade(s)
+// sort before everyone else within the bucket — so a leader broadened into a second
+// grade still sees their home grade first, with the extra grade further down.
+function _pickByOwnGradeFirst(a, b) {
+  const own = window._pickerOwnGrades;
+  if (own && own.size) {
+    const ao = own.has(a.grade) ? 0 : 1;
+    const bo = own.has(b.grade) ? 0 : 1;
+    if (ao !== bo) return ao - bo;
+  }
+  return _pickByFirst(a, b);
+}
+
 function filterPicker() {
   const q = (document.getElementById('picker-q')?.value || '').toLowerCase().trim();
   const pool = window._pickerPool || [];
@@ -2510,12 +2542,13 @@ function filterPicker() {
 
   // Three buckets (top → bottom): not assigned, assigned to a DIFFERENT leader,
   // assigned to THIS leader. Someone already with another leader can still be
-  // added here, so they stay addable. Each bucket is sorted by first name.
+  // added here, so they stay addable. Each bucket is sorted by first name, with
+  // the logged-in login's own grade(s) surfaced first (see _pickByOwnGradeFirst).
   const isThis = s => assigned.has(s.id);
   const otherLeaders = s => (allocs[s.id] || []).filter(id => id !== thisLeader);
-  const notAssigned = list.filter(s => !isThis(s) && otherLeaders(s).length === 0).sort(_pickByFirst);
-  const assignedElse = list.filter(s => !isThis(s) && otherLeaders(s).length > 0).sort(_pickByFirst);
-  const assignedThis = list.filter(isThis).sort(_pickByFirst);
+  const notAssigned = list.filter(s => !isThis(s) && otherLeaders(s).length === 0).sort(_pickByOwnGradeFirst);
+  const assignedElse = list.filter(s => !isThis(s) && otherLeaders(s).length > 0).sort(_pickByOwnGradeFirst);
+  const assignedThis = list.filter(isThis).sort(_pickByOwnGradeFirst);
 
   let html = '';
   if (!list.length) {

@@ -22,7 +22,7 @@ const CreateStudentSchema = z.object({
 const AT_RISK_VALUES = ['regular', 'declining', 'atrisk', 'stopped', 'watch', 'new'] as const;
 
 export interface StudentService {
-  list(actor: Actor, filter?: { grade?: number; gender?: string; query?: string; unconnected?: boolean }): Promise<Student[]>;
+  list(actor: Actor, filter?: { grade?: number; gender?: string; query?: string; unconnected?: boolean; crossGrade?: boolean }): Promise<Student[]>;
   get(actor: Actor, id: string): Promise<Student>;
   create(actor: Actor, input: unknown): Promise<Student>;
   update(actor: Actor, id: string, input: unknown): Promise<Student>;
@@ -41,9 +41,14 @@ export function makeStudentService(repo: IStudentRepository): StudentService {
       assertCan(actor, 'student:read');
       let students = await repo.findAll();
 
-      // Role-based scoping (grade -> own grade + own gender; quad -> bracket + gender)
+      // Role-based scoping (grade -> own grade + own gender; quad -> bracket + gender).
+      // `crossGrade` widens this to "own gender only" — used by Connect Setup's Add
+      // Students picker so a leader whose grades have been broadened (self-service,
+      // see updateGrades) can actually be offered students from that other grade.
       if (actor.role === 'grade' || actor.role === 'quad') {
-        students = students.filter((s) => canAccessStudent(actor, s.grade, s.gender));
+        students = filter?.crossGrade
+          ? students.filter((s) => canAccessGender(actor, s.gender))
+          : students.filter((s) => canAccessStudent(actor, s.grade, s.gender));
       }
 
       // Optional filters

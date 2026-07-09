@@ -53,9 +53,9 @@ Seed data only runs when `PERSISTENCE=memory`. Production uses `PERSISTENCE=supa
 | Resource | Routes |
 |---|---|
 | Auth | `POST /auth/login`, `GET /auth/me`, `POST /auth/logout` |
-| Students | `GET/POST /students`, `GET /students/search`, `GET/PATCH/DELETE /students/:id` |
+| Students | `GET/POST /students`, `GET /students/search`, `GET/PATCH/DELETE /students/:id`. `GET /students` takes `?crossGrade=1` — widens a grade/quad login's scoping from "own grade/bracket + own gender" to "own gender only" (Connect Setup's Add Students picker; see "Add Students picker now actually offers a broadened leader's other grade(s)" below) |
 | Leaders | `GET/POST /leaders`, `GET/PATCH/DELETE /leaders/:id`, `PATCH /leaders/:id/sms-template` (self-service, no ownership check — see the SMS templates note below), `PATCH /leaders/:id/grades` (self-service grade broadening, same no-ownership-check pattern — see "Leader self-service grade broadening" below) |
-| Connections | `GET/POST /connections`, `GET /connections/export`, `GET /connections/student/:id`, `GET /connections/leader/:id`, `DELETE /connections/:studentId/:leaderId`, `GET /connections/allocations/export`, `POST /connections/allocations/import` (admin-only allocation CSV round-trip) |
+| Connections | `GET/POST /connections` (also takes `?crossGrade=1`, same widening as `/students` above), `GET /connections/export` (own-gender-only for grade/quad, unconditionally), `GET /connections/student/:id`, `GET /connections/leader/:id`, `DELETE /connections/:studentId/:leaderId`, `GET /connections/allocations/export`, `POST /connections/allocations/import` (admin-only allocation CSV round-trip) |
 | Overview | `GET /overview` |
 | At-risk | `GET /at-risk`, `POST /at-risk/recompute` |
 | Trends | `GET /trends` |
@@ -1025,6 +1025,28 @@ pooler during the incident. Watch the connection count during a real session ins
   "Connect →" button and the "search a leader to assign" results list (not the already-
   connected list) got the same capped-scroll treatment as Connect Setup's student
   preview, with gender/grade dropped from each row.
+- **Add Students picker now actually offers a broadened leader's other grade(s).**
+  `updateGrades` (above) only ever touched the *Leader* record's `grades` — but the
+  picker's underlying student pool came from `GET /students` (and the leader-card counts
+  from `GET /connections`), both server-scoped by the *actor's own* single
+  grade/bracket (`student.service.ts`'s `list()`, `connection.service.ts`'s `listAll()`).
+  So broadening a leader to a second grade didn't change what the picker could even see —
+  the other grade's students never reached the client. Fixed with a `crossGrade` filter
+  flag: when true, `list()`/`listAll()` swap the "own grade/bracket + own gender" check
+  for "own gender only" (the same relaxation `assign()`, `student.service.ts`'s
+  `get()`/`search()`, and the CSV export already applied — see the "cross-grade connect
+  exception" comments). Wired as two extra `/batch` sections (`studentsConnect`,
+  `connectionsConnect`) and two dedicated cache keys (`/students?crossGrade=1`,
+  `/connections?crossGrade=1` — `Cache.del()` now also matches `?`-suffixed variants of a
+  base path) so Health/People/Data/Trends/Birthdays/My Students keep the narrower,
+  grade-scoped `/students` and `/connections` untouched — **only** Connect Setup's own
+  `CONNECT_PATHS` requests the widened variant. `exportCsv` (Connect Setup's "Export CSV"
+  button, the only caller) got the same own-gender-only swap, unconditionally, so a
+  leader's cross-grade connections don't silently vanish from their own export either.
+  Within each of the picker's three buckets (not assigned / assigned elsewhere / assigned
+  here), students now sort with the logged-in login's own grade(s) first
+  (`_pickByOwnGradeFirst`, derived from `S.user.grade` or `quadGrades(S.user.quad)`), so a
+  broadened leader's home grade still reads at the top with the extra grade below it.
 
 ## Security notes
 

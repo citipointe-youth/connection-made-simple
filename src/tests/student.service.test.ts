@@ -4,8 +4,8 @@ import { InMemoryStudentRepository } from '../repositories/in-memory';
 import type { Actor } from '../core/entities/user';
 import { ForbiddenError, NotFoundError } from '../core/errors/app-error';
 
-function actor(role: string, opts: { grade?: number; quad?: string } = {}): Actor {
-  return { id: 'a-test', role: role as any, displayName: 'T', grade: (opts.grade ?? null) as any, quad: (opts.quad ?? null) as any };
+function actor(role: string, opts: { grade?: number; quad?: string; gender?: 'male' | 'female' } = {}): Actor {
+  return { id: 'a-test', role: role as any, displayName: 'T', grade: (opts.grade ?? null) as any, quad: (opts.quad ?? null) as any, gender: opts.gender ?? null };
 }
 
 const ADMIN = actor('admin');
@@ -81,5 +81,29 @@ describe('Student Service', () => {
     expect(updated.grade).toBe(10);
     // Quad should be recomputed
     expect(updated.quad).toBe('g1012');
+  });
+});
+
+describe('Student Service — crossGrade (Connect Setup Add Students picker)', () => {
+  it('a grade login normally sees only its own grade', async () => {
+    const { svc } = await makeService();
+    const results = await svc.list(actor('grade', { grade: 9, gender: 'female' }));
+    expect(results.map((s) => s.firstName)).toEqual(['Alice']);
+  });
+
+  it('crossGrade widens a grade login to other grades of the same gender', async () => {
+    const { svc } = await makeService();
+    const results = await svc.list(actor('grade', { grade: 9, gender: 'female' }), { crossGrade: true });
+    // Alice (Yr 9 girl) + Carol (Yr 10 girl) — Bob (male) still excluded.
+    expect(results.map((s) => s.firstName).sort()).toEqual(['Alice', 'Carol']);
+  });
+
+  it('crossGrade widens a quad login to the other bracket, same gender only', async () => {
+    const { svc } = await makeService();
+    const withoutCrossGrade = await svc.list(actor('quad', { quad: 'g79' }));
+    expect(withoutCrossGrade.map((s) => s.firstName)).toEqual(['Alice']); // Yr 7-9 girls only
+    const withCrossGrade = await svc.list(actor('quad', { quad: 'g79' }), { crossGrade: true });
+    // Carol (Yr 10 girl) now included; Bob (male) still excluded regardless of grade.
+    expect(withCrossGrade.map((s) => s.firstName).sort()).toEqual(['Alice', 'Carol']);
   });
 });

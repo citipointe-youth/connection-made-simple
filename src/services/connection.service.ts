@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
-import { assertCan, canAccessStudent } from './access-control';
+import { assertCan, canAccessStudent, canAccessGender } from './access-control';
 import {
   parseAllocationRows,
   planAllocationSync,
@@ -48,7 +48,7 @@ export interface ExportRow {
 export interface ConnectionService {
   listByStudent(actor: Actor, studentId: string): Promise<ConnectionWithNames[]>;
   listByLeader(actor: Actor, leaderId: string): Promise<ConnectionWithNames[]>;
-  listAll(actor: Actor): Promise<ConnectionWithNames[]>;
+  listAll(actor: Actor, opts?: { crossGrade?: boolean }): Promise<ConnectionWithNames[]>;
   assign(actor: Actor, input: unknown): Promise<Connection>;
   unassign(actor: Actor, studentId: string, leaderId: string): Promise<void>;
   leaderSummary(actor: Actor, leaderId: string): Promise<{ students: ReturnType<typeof summariseStudent>[]; leader: { id: string; fullName: string } }>;
@@ -142,16 +142,24 @@ export function makeConnectionService(
       return enrichWith(conns, studentsById, leadersById);
     },
 
-    async listAll(actor) {
+    async listAll(actor, opts) {
       assertCan(actor, 'student:read');
       const [all, { studentsById, leadersById }] = await Promise.all([
         connRepo.findAll(),
         buildLookups(),
       ]);
+      // `crossGrade` mirrors the same widening as student.service.ts's list() —
+      // Connect Setup requests it so a leader's cross-grade connections (see the
+      // assign() cross-grade exception below) don't silently disappear from their
+      // own allocation counts on next fetch.
       const filtered = all.filter((a) => {
         const student = studentsById.get(a.studentId);
         if (!student) return false;
-        if ((actor.role === 'grade' || actor.role === 'quad') && !canAccessStudent(actor, student.grade, student.gender)) return false;
+        if (actor.role === 'grade' || actor.role === 'quad') {
+          return opts?.crossGrade
+            ? canAccessGender(actor, student.gender)
+            : canAccessStudent(actor, student.grade, student.gender);
+        }
         return true;
       });
       return enrichWith(filtered, studentsById, leadersById);
@@ -224,7 +232,10 @@ export function makeConnectionService(
         const student = studentsById.get(a.studentId);
         const leader = leadersById.get(a.leaderId);
         if (!student || !leader) continue;
-        if ((actor.role === 'grade' || actor.role === 'quad') && !canAccessStudent(actor, student.grade, student.gender)) continue;
+        // Own-gender-only (not own-grade-only) — this export is Connect Setup's own
+        // "Export CSV" button, so it should include cross-grade connections the actor
+        // made there, same as the picker and listAll() above.
+        if ((actor.role === 'grade' || actor.role === 'quad') && !canAccessGender(actor, student.gender)) continue;
         const pct = student.svcTotal > 0
           ? Math.round((student.svcAttended / student.svcTotal) * 100) + '%'
           : '—';

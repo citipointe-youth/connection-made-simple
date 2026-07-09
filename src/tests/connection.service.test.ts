@@ -11,8 +11,8 @@ import {
 import type { Actor } from '../core/entities/user';
 import { BadRequestError, ForbiddenError, ConflictError } from '../core/errors/app-error';
 
-function actor(role: string, opts: { grade?: number; quad?: string } = {}): Actor {
-  return { id: 'a-test', role: role as any, displayName: 'Test', grade: (opts.grade ?? null) as any, quad: (opts.quad ?? null) as any };
+function actor(role: string, opts: { grade?: number; quad?: string; gender?: 'male' | 'female' } = {}): Actor {
+  return { id: 'a-test', role: role as any, displayName: 'Test', grade: (opts.grade ?? null) as any, quad: (opts.quad ?? null) as any, gender: opts.gender ?? null };
 }
 
 const ADMIN = actor('admin');
@@ -137,5 +137,27 @@ describe('Connection Service', () => {
     const summary = await connSvc.leaderSummary(ADMIN, leaderF.id);
     expect(summary.students).toHaveLength(1);
     expect(summary.students[0]?.fullName).toBe('Alice Smith');
+  });
+});
+
+describe('Connection Service — listAll crossGrade (Connect Setup Add Students picker)', () => {
+  it('normally hides a cross-grade connection from listAll', async () => {
+    const { connSvc, student2, leaderF } = await buildServices();
+    // student2 is Yr 8 female; leaderF is female — allowed by assign()'s cross-grade
+    // exception, but a plain Yr-9-scoped listAll() shouldn't surface it.
+    await connSvc.assign(ADMIN, { studentId: student2.id, leaderId: leaderF.id });
+    const GRADE9F = actor('grade', { grade: 9, gender: 'female' });
+    const seen = await connSvc.listAll(GRADE9F);
+    expect(seen).toHaveLength(0);
+  });
+
+  it('crossGrade surfaces it, but still enforces the actor\'s own gender scope', async () => {
+    const { connSvc, student2, student3, leaderF, leaderM } = await buildServices();
+    await connSvc.assign(ADMIN, { studentId: student2.id, leaderId: leaderF.id }); // Yr 8 female
+    await connSvc.assign(ADMIN, { studentId: student3.id, leaderId: leaderM.id }); // Yr 9 male
+    const GRADE9F = actor('grade', { grade: 9, gender: 'female' });
+    const seen = await connSvc.listAll(GRADE9F, { crossGrade: true });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.studentId).toBe(student2.id);
   });
 });

@@ -37,6 +37,11 @@ export function makeBatchController(deps: {
     atRisk: (ctx) => deps.atRisk.list(ctx),
     settings: () => deps.settings.get(),
     leaders: (ctx) => deps.leader.list(ctx),
+    // Connect Setup's own widened fetch — see student.service.ts's list() `crossGrade`
+    // comment for why this needs to be a separate section, not a swap-in-place for
+    // `students`/`connections` (those two feed screens that must stay grade-scoped).
+    studentsConnect: (ctx) => deps.student.list(ctx, { crossGrade: true }),
+    connectionsConnect: (ctx) => deps.connection.listAll(ctx, { crossGrade: true }),
   };
 
   return {

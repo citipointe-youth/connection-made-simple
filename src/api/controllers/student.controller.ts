@@ -9,7 +9,8 @@ export function makeStudentController(deps: { student: StudentService }) {
       const grade = req.query['grade'] ? parseInt(req.query['grade']!, 10) : undefined;
       const gender = req.query['gender'];
       const query = req.query['q'];
-      return deps.student.list(req.ctx, { grade, gender, query });
+      const crossGrade = req.query['crossGrade'] === '1' || req.query['crossGrade'] === 'true';
+      return deps.student.list(req.ctx, { grade, gender, query, crossGrade });
     },
 
     async get(req: HttpRequest) {

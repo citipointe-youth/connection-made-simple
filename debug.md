@@ -107,6 +107,22 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
 - **Bottom of every screen has a large dead white gap**: `.pg`'s `padding` bottom value (CSS
   near the top of `public/index.html`) — halved 2026-07-09 (was `76px`, more than the mobile
   bottom-nav it exists to clear, and pure dead space on desktop where that nav is hidden).
+- **A leader broadened to a second grade still can't be shown that grade's students in "Add
+  Students"**: the picker's pool (`_aS.students`) and the leader-card connected counts
+  (`_aS.allocs`) come from `GET /students`/`GET /connections`, which — separately from the
+  Leader record's own `grades` — are scoped server-side to the *actor's* own grade/bracket
+  (`student.service.ts` `list()`, `connection.service.ts` `listAll()`). Grep `crossGrade`:
+  Connect Setup requests `?crossGrade=1` on both (see `CONNECT_PATHS`), which relaxes that
+  scoping to "own gender only" so the broadened grade's students actually reach the client;
+  the picker's own default-view filter (`window._pickerGrades`, from the *leader's* `grades`)
+  then narrows it back down to just that leader's assigned grade(s). If this regresses, check
+  `SECTION_OF`/`CONNECT_PATHS` still point at the `?crossGrade=1` paths, not plain
+  `/students`/`/connections` — the plain ones must stay grade-scoped for every other screen.
+- **Add Students picker shows the wrong grade at the top of a bucket**: `_pickByOwnGradeFirst`
+  sorts each of the three buckets so the logged-in login's own grade(s) — not the leader's —
+  come first; it reads `window._pickerOwnGrades`, set in `openStudentPicker()` from
+  `S.user.grade` (grade role) or `quadGrades(S.user.quad)` (quad role). Admin/director have no
+  "home grade" so this is a no-op for them (falls back to plain first-name order).
 
 ### Student profile modal (`showStudentDetail`)
 

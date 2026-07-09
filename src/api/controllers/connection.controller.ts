@@ -6,7 +6,8 @@ export function makeConnectionController(deps: { connection: ConnectionService }
   return {
     async listAll(req: HttpRequest) {
       if (!req.ctx) throw new UnauthorizedError();
-      return deps.connection.listAll(req.ctx);
+      const crossGrade = req.query['crossGrade'] === '1' || req.query['crossGrade'] === 'true';
+      return deps.connection.listAll(req.ctx, { crossGrade });
     },
 
     async listByStudent(req: HttpRequest) {
