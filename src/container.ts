@@ -226,7 +226,7 @@ export async function buildContainer(): Promise<Container> {
     students, leaders, connections,
     serviceSessions, serviceAttendance,
     lifegroups, lifegroupWeeks, lifegroupAttendance,
-    imports, audit,
+    imports, audit, connectionAudits,
   );
   const push = makePushService({
     vapidPublicKey: env.VAPID_PUBLIC_KEY,

@@ -36,6 +36,19 @@ const UploadSchema = z.object({
 
 export interface AuditSummary { year: number; label: string; uploadedAt: string; termKeys: string[]; }
 
+// Exact round-trip backup/restore format for the New Year Refresh wizard: the
+// raw ConnectionAudit rows as exported by exportAll(), trusted as our own
+// previously-exported shape — snapshot is opaque here (already validated when
+// it was originally built by upload()/finalizeFromLive()).
+const ImportAllSchema = z.array(z.object({
+  id: z.string(),
+  year: z.number(),
+  label: z.string(),
+  uploadedBy: z.string(),
+  uploadedAt: z.string(),
+  snapshot: z.unknown(),
+}));
+
 // Per-named-lifegroup stats built straight from LIVE tables (real grade/gender/
 // quad from the Lifegroup row, not text-parsed from its name like the CSV-audit
 // path has to) — powers the "New Year Data Refresh" wizard's live baseline.
@@ -127,6 +140,11 @@ export interface ConnectionAuditService {
   // manual CA upload for the same year overwrites this snapshot (same
   // latest-per-year behavior as upload()).
   finalizeFromLive(actor: Actor): Promise<ConnectionAudit>;
+  // Full-fidelity backup/restore of every saved year, used by the New Year
+  // Refresh wizard to survive a Full Reset (which wipes connection_audits).
+  // Exact round-trip: exports the raw ConnectionAudit rows as-is.
+  exportAll(actor: Actor): Promise<ConnectionAudit[]>;
+  importAll(actor: Actor, input: unknown): Promise<{ imported: number }>;
 }
 
 export function makeConnectionAuditService(
@@ -299,6 +317,21 @@ export function makeConnectionAuditService(
         snapshot,
       };
       return repo.save(audit);
+    },
+
+    async exportAll(actor) {
+      assertCan(actor, 'admin:manage');
+      const all = await repo.findAll();
+      return all.sort((a, b) => a.year - b.year);
+    },
+
+    async importAll(actor, input) {
+      assertCan(actor, 'admin:manage');
+      const rows = ImportAllSchema.parse(input);
+      for (const row of rows) {
+        await repo.save(row as unknown as ConnectionAudit);
+      }
+      return { imported: rows.length };
     },
   };
 }

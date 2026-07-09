@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
-import { hashPassword } from '../utils/crypto';
+import { hashPassword, verifyPassword } from '../utils/crypto';
 import { assertCan } from './access-control';
 import type { IUserRepository } from '../repositories/interfaces/entity-repositories';
 import type { User, SafeUser } from '../core/entities/user';
 import type { Actor } from '../core/entities/user';
 import type { UserRole, Grade, Quad } from '../core/types/enums';
-import { NotFoundError, BadRequestError, ConflictError } from '../core/errors/app-error';
+import { NotFoundError, BadRequestError, ConflictError, UnauthorizedError } from '../core/errors/app-error';
 
 const CreateUserSchema = z.object({
   displayName: z.string().min(1),
@@ -27,6 +27,11 @@ export interface AccountService {
   create(actor: Actor, input: unknown): Promise<SafeUser>;
   update(actor: Actor, id: string, input: unknown): Promise<SafeUser>;
   setPassword(actor: Actor, id: string, newPassword: string): Promise<void>;
+  // Self-service password change: any authenticated actor may change their OWN
+  // password by proving they know the current one — no admin:manage permission
+  // needed. Distinct from setPassword() above, which is the admin-managing-
+  // another-account flow and is untouched by this.
+  changeOwnPassword(actor: Actor, currentPassword: string, newPassword: string): Promise<void>;
   toggleStatus(actor: Actor, id: string): Promise<SafeUser>;
   remove(actor: Actor, id: string): Promise<void>;
 }
@@ -107,6 +112,17 @@ export function makeAccountService(users: IUserRepository): AccountService {
       assertCan(actor, 'admin:manage');
       const existing = await users.findById(id);
       if (!existing) throw new NotFoundError('User not found');
+      if (newPassword.length < 8) throw new BadRequestError('Password must be at least 8 characters');
+      const passwordHash = await hashPassword(newPassword);
+      await users.save({ ...existing, passwordHash, updatedAt: new Date().toISOString() });
+    },
+
+    async changeOwnPassword(actor, currentPassword, newPassword) {
+      const existing = await users.findById(actor.id);
+      if (!existing) throw new NotFoundError('User not found');
+      if (!existing.passwordHash || !(await verifyPassword(currentPassword, existing.passwordHash))) {
+        throw new UnauthorizedError('Current password is incorrect');
+      }
       if (newPassword.length < 8) throw new BadRequestError('Password must be at least 8 characters');
       const passwordHash = await hashPassword(newPassword);
       await users.save({ ...existing, passwordHash, updatedAt: new Date().toISOString() });

@@ -12,6 +12,7 @@ import {
   InMemoryLifegroupAttendanceRepository,
   InMemoryImportRepository,
   InMemoryAuditRepository,
+  InMemoryConnectionAuditRepository,
 } from '../repositories/in-memory';
 import type { Actor } from '../core/entities/user';
 import { BadRequestError, ForbiddenError } from '../core/errors/app-error';
@@ -36,12 +37,23 @@ async function buildService() {
   const lifegroupAttendance = new InMemoryLifegroupAttendanceRepository();
   const imports = new InMemoryImportRepository();
   const audit = new InMemoryAuditRepository();
+  const connectionAudits = new InMemoryConnectionAuditRepository();
   await Promise.all([
     users.init(), students.init(), leaders.init(), connections.init(),
     serviceSessions.init(), serviceAttendance.init(), lifegroups.init(),
     lifegroupWeeks.init(), lifegroupAttendance.init(), imports.init(),
-    audit.init(),
+    audit.init(), connectionAudits.init(),
   ]);
+
+  await connectionAudits.save({
+    id: '2026', year: 2026, label: '2026 (year-to-date)',
+    uploadedBy: 'Test', uploadedAt: new Date().toISOString(),
+    snapshot: {
+      generatedAt: new Date().toISOString(), dataStartDate: null, dataEndDate: null,
+      terms: [], students: [], perTerm: {}, lgStatsByTerm: {},
+      uploads: { team: [], connect: [], decision: [], flows: [] },
+    },
+  });
 
   await students.save({
     id: 's1', firstName: 'Alice', lastName: 'Smith', gender: 'female', grade: 9,
@@ -54,9 +66,9 @@ async function buildService() {
 
   const svc = makeAdminService(
     students, leaders, connections, serviceSessions, serviceAttendance,
-    lifegroups, lifegroupWeeks, lifegroupAttendance, imports, audit,
+    lifegroups, lifegroupWeeks, lifegroupAttendance, imports, audit, connectionAudits,
   );
-  return { svc, students };
+  return { svc, students, connectionAudits };
 }
 
 describe('Admin Service — wipe guard', () => {
@@ -76,6 +88,13 @@ describe('Admin Service — wipe guard', () => {
     const { svc, students } = await buildService();
     await svc.reset(ADMIN, { force: true, confirmWipe: CONFIRM });
     expect((await students.findAll()).length).toBe(0);
+  });
+
+  it('reset also wipes connection_audits so no student data remains anywhere', async () => {
+    const { svc, connectionAudits } = await buildService();
+    expect((await connectionAudits.findAll()).length).toBe(1);
+    await svc.reset(ADMIN, { force: true, confirmWipe: CONFIRM });
+    expect((await connectionAudits.findAll()).length).toBe(0);
   });
 
   it('clearServiceGroupData without force/confirmWipe throws BadRequestError and touches no data', async () => {

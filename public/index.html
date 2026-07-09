@@ -2282,6 +2282,7 @@ function renderConnectView() {
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
         <div class="ph-title">Connect Setup ${helpTip('Search and connect are scoped to your grade and gender. You can add students from other grades, but only ones matching your gender.')}</div>
         <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="showChangeOwnPassword()" title="Change your password" aria-label="Change your password">${icS('key')}</button>
           ${canEdit?`<button class="btn btn-primary btn-sm" onclick="showAddLeader()">+ Add Leader</button>`:''}
           <button class="btn btn-secondary btn-sm" onclick="exportConnectCSV()" aria-label="Export connections to CSV">Export CSV</button>
         </div>
@@ -4260,6 +4261,11 @@ async function renderAdminView(settings, users) {
 
   if (_adminTab === 'data') {
     body += `<div class="card">
+      <div class="sh" style="margin-top:0">Attendance Data</div>
+      <div class="help-text" style="margin-bottom:10px">Upload the latest Service and Group attendance exports.</div>
+      <button class="btn btn-secondary btn-full" onclick="go('import')">Go to Import</button>
+    </div>`;
+    body += `<div class="card">
       <div class="sh" style="margin-top:0">Connection Allocations</div>
       <div class="help-text" style="margin-bottom:10px">Export every student–leader allocation as a CSV (one leader per row, grouped by student), edit it, then re-import. Import matches students and leaders by name and reports anything it can't match. Students missing from the file are left untouched.</div>
       <button class="btn btn-secondary btn-full" style="margin-bottom:8px" onclick="exportAllocationsCSV()">Export Allocations</button>
@@ -4295,18 +4301,20 @@ async function renderAdminView(settings, users) {
 
 // ── New Year Data Refresh wizard ──
 // A gated, in-order checklist through the existing pieces needed to roll the
-// platform into a new year: export the current allocations + freeze this
-// year's Connection Audit snapshot, wipe last year's data, re-import fresh
-// attendance, then restore the allocations onto the new roster. Nothing here
-// is a new capability — it's the existing Export/Reset/Import endpoints
-// walked in the one order that actually works, since Full Reset (step 2)
-// deletes the leaders that step 4's allocation import needs to match against,
-// and re-importing the lifegroup CSV (step 3) is what recreates them.
+// platform into a new year: export the current allocations, back up every
+// saved Connection Audit year, wipe last year's data (including the Connection
+// Audit itself — Full Reset now leaves NO student data anywhere in the app),
+// re-import fresh attendance, restore allocations, then reload the Connection
+// Audit backup. Nothing here is a new capability except the audit backup/
+// restore pair — it's the existing Export/Reset/Import endpoints walked in the
+// one order that actually works, since Full Reset (step 3) deletes the leaders
+// that step 5's allocation import needs to match against, and re-importing the
+// lifegroup CSV (step 4) is what recreates them.
 // State is deliberately in-memory only (session-based) — re-opening this tab
 // always starts a fresh run; there's no reliable way to know from the server
 // whether a past export was actually saved somewhere by the admin.
-let _wiz = { step1Done: false, step2Done: false, step3Ack: false, step4Done: false };
-function _wizReset() { _wiz = { step1Done: false, step2Done: false, step3Ack: false, step4Done: false }; }
+let _wiz = { step1Done: false, step2Done: false, step3Done: false, step4Ack: false, step5Done: false, step6Done: false };
+function _wizReset() { _wiz = { step1Done: false, step2Done: false, step3Done: false, step4Ack: false, step5Done: false, step6Done: false }; }
 function renderWizard() { renderAdminView(_adminData.settings, _adminData.users); }
 
 function _wizStepCard(n, title, desc, bodyHtml, done, locked) {
@@ -4321,35 +4329,47 @@ function _wizStepCard(n, title, desc, bodyHtml, done, locked) {
 }
 
 function renderNewYearWizard() {
-  let b = `<div class="card" style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
-    <div style="flex:1;font-size:13px;color:var(--ink-mid)">Walks through the new-year data refresh in order — each step unlocks once the one before it is done.</div>
-    ${helpTip('Step 1 exports current allocations and freezes this year’s attendance into the Connection Audit (so it stays available for comparison after the reset). Step 2 (Full Reset) then wipes students, leaders, connections and attendance — accounts are kept. Step 3 is a reminder to re-import this year’s attendance CSVs, which also recreates leaders tagged "(leader)" in the group export. Step 4 restores the allocations you exported in step 1 onto the freshly imported roster.')}
+  let b = `<div class="card" style="margin-bottom:10px">
+    <div style="font-size:13px;color:var(--ink-mid)">Walks through the new-year data refresh in order — each step unlocks once the one before it is done.</div>
   </div>`;
 
-  b += _wizStepCard(1, "Export allocations & finalize this year's audit baseline",
-    "Downloads a CSV of every student–leader allocation (you'll re-import it in step 4), and saves this year's attendance into the Connection Audit so it's kept for year-over-year comparison.",
-    `<button class="btn btn-secondary btn-full" onclick="wizStep1()">Export &amp; Finalize Baseline</button>`,
+  b += _wizStepCard(1, 'Export Allocations',
+    "Downloads a CSV of every student–leader allocation (you'll re-import it in step 5).",
+    `<button class="btn btn-secondary btn-full" onclick="wizStep1()">Export Allocations</button>`,
     _wiz.step1Done, false);
 
-  b += _wizStepCard(2, 'Full Reset',
-    'Permanently deletes all students, leaders, connections and attendance. Accounts are kept. This cannot be undone.',
-    `<button class="btn btn-danger btn-full" onclick="confirmType({title:'Full Reset?',word:'RESET',danger:true,body:'This permanently deletes all students, leaders, connections and attendance. Accounts are kept. This cannot be undone.',onConfirm:wizStep2Confirmed})">Full Reset</button>`,
+  b += _wizStepCard(2, 'Export Configuration Audit Data',
+    "Downloads a full backup of every saved Connection Audit year, so it survives the Full Reset in step 3. You'll re-load it in step 6, once the roster is rebuilt.",
+    `<button class="btn btn-secondary btn-full" onclick="wizStep2()">Export Configuration Audit Data</button>`,
     _wiz.step2Done, !_wiz.step1Done);
 
-  b += _wizStepCard(3, "Re-import this year's attendance",
-    'Go to the Import screen and upload the new Service and Group attendance exports. This also recreates any leader tagged "(leader)" in the group export — needed before step 4 can match allocations back on.',
-    _wiz.step3Ack
-      ? `<div class="alert al-ok" style="display:flex;align-items:center;gap:6px">${icS('check')} Confirmed</div>`
-      : `<button class="btn btn-secondary btn-full" onclick="wizStep3Ack()">I've re-imported this year's attendance</button>`,
-    _wiz.step3Ack, !_wiz.step2Done);
+  b += _wizStepCard(3, 'Full Reset',
+    'Permanently deletes all students, leaders, connections, attendance and the Connection Audit. Accounts are kept. This cannot be undone.',
+    `<button class="btn btn-danger btn-full" onclick="confirmType({title:'Full Reset?',word:'RESET',danger:true,body:'This permanently deletes all students, leaders, connections, attendance and the Connection Audit. Accounts are kept. This cannot be undone.',onConfirm:wizStep3Confirmed})">Full Reset</button>`,
+    _wiz.step3Done, !_wiz.step2Done);
 
-  b += _wizStepCard(4, 'Import allocations',
+  b += _wizStepCard(4, "Re-import this year's attendance",
+    'Go to the Import screen and upload the new Service and Group attendance exports. This also recreates any leader tagged "(leader)" in the group export — needed before step 5 can match allocations back on.',
+    _wiz.step4Ack
+      ? `<div class="alert al-ok" style="display:flex;align-items:center;gap:6px">${icS('check')} Confirmed</div>`
+      : `<button class="btn btn-secondary btn-full" onclick="wizStep4Ack()">I've re-imported this year's attendance</button>`,
+    _wiz.step4Ack, !_wiz.step3Done);
+
+  b += _wizStepCard(5, 'Import Allocations',
     "Re-import the allocations CSV from step 1 to restore every student–leader pairing onto the freshly imported roster.",
     `<label class="btn btn-secondary btn-full" style="cursor:pointer">Import Allocations
       <input type="file" accept=".csv,.xlsx" style="display:none" onchange="wizHandleAllocationImportFile(this)">
     </label>
     <div id="alloc-import-status" style="margin-top:8px"></div>`,
-    _wiz.step4Done, !_wiz.step3Ack);
+    _wiz.step5Done, !_wiz.step4Ack);
+
+  b += _wizStepCard(6, 'Re-import Configuration Audit Data',
+    "Re-load the Connection Audit backup from step 2 so past years are available again for comparison.",
+    `<label class="btn btn-secondary btn-full" style="cursor:pointer">Re-import Configuration Audit Data
+      <input type="file" accept=".json" style="display:none" onchange="wizHandleAuditImportFile(this)">
+    </label>
+    <div id="audit-import-status" style="margin-top:8px"></div>`,
+    _wiz.step6Done, !_wiz.step5Done);
 
   return b;
 }
@@ -4357,28 +4377,64 @@ function renderNewYearWizard() {
 async function wizStep1() {
   const exportOk = await exportAllocationsCSV();
   if (!exportOk) return;
-  try {
-    await API.post('/audits/finalize-live', {});
-    toast('✓ Baseline finalized');
-    _wiz.step1Done = true;
-    renderWizard();
-  } catch (e) { toast('Finalize failed: ' + e.message); }
+  _wiz.step1Done = true;
+  renderWizard();
 }
 
-async function wizStep2Confirmed() {
+async function wizStep2() {
+  try {
+    const audits = await API.get('/audits/export-all');
+    const payload = { exportedAt: new Date().toISOString(), audits };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `connection-audit-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${audits.length} audit year${audits.length !== 1 ? 's' : ''}`);
+    _wiz.step2Done = true;
+    renderWizard();
+  } catch (e) { toast('Export failed: ' + e.message); }
+}
+
+async function wizStep3Confirmed() {
   try {
     await API.post('/admin/reset', { force: true, confirmWipe: CONFIRM_WIPE_STRING });
     Cache.clear();
     if (window.CA) CA.reset(); /*CA-HOOK*/
     toast('✓ Full reset complete');
-    _wiz.step2Done = true;
+    _wiz.step3Done = true;
     renderWizard();
   } catch (e) { toast(e.message); }
 }
 
-function wizStep3Ack() {
-  _wiz.step3Ack = true;
+function wizStep4Ack() {
+  _wiz.step4Ack = true;
   renderWizard();
+}
+
+function wizHandleAuditImportFile(input) {
+  const f = input.files[0];
+  if (!f) return;
+  const statusEl = document.getElementById('audit-import-status');
+  statusEl.innerHTML = `<div class="alert al-info"><div class="spin" style="margin-right:8px"></div>Reading backup…</div>`;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    let audits;
+    try {
+      const parsed = JSON.parse(e.target.result);
+      audits = Array.isArray(parsed) ? parsed : parsed.audits;
+      if (!Array.isArray(audits)) throw new Error('Not a Connection Audit backup file');
+    } catch (err) { statusEl.innerHTML = `<div class="alert al-err">${(err && err.message) || 'Could not read this file'}</div>`; return; }
+    statusEl.innerHTML = `<div class="alert al-info">Found ${audits.length} audit year${audits.length !== 1 ? 's' : ''}. Importing…</div>`;
+    try {
+      const { imported } = await API.post('/audits/import-all', audits, 90000);
+      Cache.del('/audits');
+      statusEl.innerHTML = `<div class="alert al-ok">✓ Restored ${imported} audit year${imported !== 1 ? 's' : ''}</div>`;
+      _wiz.step6Done = true;
+      renderWizard();
+    } catch (err) { statusEl.innerHTML = `<div class="alert al-err">${err.message}</div>`; }
+  };
+  reader.readAsText(f);
 }
 
 function wizHandleAllocationImportFile(input) {
@@ -4562,8 +4618,54 @@ async function submitSetPassword(id) {
   if (!password || password.length < 8) { document.getElementById('uerr').innerHTML='<div class="alert al-err">Password must be at least 8 characters</div>'; return; }
   try {
     await API.post('/accounts/users/password', { id, password });
-    closeModal(); toast('Password updated');
+    const u = (_adminData.users || []).find(x => x.id === id);
+    modal(`
+      <div class="mo-title">Password Updated</div>
+      <p style="color:var(--ink-mid);margin-bottom:14px">New password for <strong>${esc(u ? u.displayName : 'this account')}</strong> — shown once, share it now:</p>
+      <div class="fg"><input class="fi" id="u-newpw-reveal" type="text" readonly value="${esc(password)}" onclick="this.select()"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="copyText(document.getElementById('u-newpw-reveal').value)">Copy</button>
+        <button class="btn btn-secondary" onclick="closeModal()">Done</button>
+      </div>`);
   } catch (e) { document.getElementById('uerr').innerHTML=`<div class="alert al-err">${e.message}</div>`; }
+}
+
+function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => toast('Copied')).catch(() => toast('Could not copy'));
+  } else {
+    toast('Could not copy');
+  }
+}
+
+// Self-service password change (key icon on Connect Setup, all roles) — separate
+// from showSetPassword/submitSetPassword above, which is the admin-managing-
+// another-account flow and is untouched by this.
+function showChangeOwnPassword() {
+  modal(`
+    <div class="mo-title">Change Your Password</div>
+    <div id="cpwerr"></div>
+    <div class="fg"><label class="fl">Current Password</label><input class="fi" id="cpw-cur" type="password" placeholder="Current password"></div>
+    <div class="fg"><label class="fl">New Password (min 8 chars)</label><input class="fi" id="cpw-new" type="password" placeholder="New password"></div>
+    <div class="fg"><label class="fl">Confirm New Password</label><input class="fi" id="cpw-new2" type="password" placeholder="Confirm new password"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="submitChangeOwnPassword()">Change Password</button>
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>`);
+}
+
+async function submitChangeOwnPassword() {
+  const cur = document.getElementById('cpw-cur')?.value;
+  const pw1 = document.getElementById('cpw-new')?.value;
+  const pw2 = document.getElementById('cpw-new2')?.value;
+  const errEl = document.getElementById('cpwerr');
+  if (!cur) { errEl.innerHTML = '<div class="alert al-err">Enter your current password</div>'; return; }
+  if (!pw1 || pw1.length < 8) { errEl.innerHTML = '<div class="alert al-err">New password must be at least 8 characters</div>'; return; }
+  if (pw1 !== pw2) { errEl.innerHTML = '<div class="alert al-err">New passwords do not match</div>'; return; }
+  try {
+    await API.post('/accounts/me/password', { currentPassword: cur, newPassword: pw1 });
+    closeModal(); toast('Password updated');
+  } catch (e) { errEl.innerHTML = `<div class="alert al-err">${e.message}</div>`; }
 }
 
 async function toggleUserStatus(id, currentStatus) {
@@ -5034,7 +5136,7 @@ function rOverview(){
     +'</div>';
   const max=m.rungs[0].v||1;
   const cols=['#0a0a2e','#1414a0','#1a1af2','#5b5bf7','#9a9afb'];
-  b+='<div class="card"><div class="ca-ct">Integration ladder</div>'+m.rungs.map((r,i)=>'<div class="ca-lrow"><div class="ca-lname">'+r.lb+(i===0?' '+helpTip('Everyone who attended a service, attended a lifegroup, or submitted a New Connect/Decision form.'):'')+'</div><div class="ca-lbar"><div class="ca-lfill" style="width:'+Math.max(8,Math.round(r.v/max*100))+'%;background:'+cols[i]+'">'+r.v+'</div></div></div>').join('')+'</div>';
+  b+='<div class="card"><div class="ca-ct">Integration ladder</div>'+m.rungs.map((r,i)=>'<div class="ca-lrow"><div class="ca-lname">'+r.lb+(i===0?' '+helpTip('The Youth attendance numbers, plus anyone who attended a lifegroup but wasn\'t at a service, plus anyone who submitted a New Connect or Decision form but wasn\'t matched to an existing student record. That\'s why this can be higher than ‘Came to Youth’.'):'')+'</div><div class="ca-lbar"><div class="ca-lfill" style="width:'+Math.max(8,Math.round(r.v/max*100))+'%;background:'+cols[i]+'">'+r.v+'</div></div></div>').join('')+'</div>';
   const row=(g,chip)=>'<div class="ca-alr" onclick="CA.showGroup(\''+g.id+'\')"><div style="font-size:.78rem;font-weight:600">'+esc(g.name)+'</div>'+chip+'</div>';
   const hasTrend=m.groups.some(g=>g.trendPct!==0);
   const tops=m.groups.filter(g=>g.active>0).slice().sort((a,b)=>hasTrend?(b.trendPct-a.trendPct||b.active-a.active):(b.active-a.active||b.va-a.va)).slice(0,2);
@@ -5295,13 +5397,17 @@ function rData(){
     +'<input type="file" id="ca-f-'+kind+'" accept=".csv,.xlsx" style="display:none" onchange="CA.upload(\''+kind+'\',this)">'
     +'<button class="btn btn-secondary btn-sm" onclick="CA.pick(\''+kind+'\')">'+(staged?'Replace':'Choose')+'</button>'
     +'</div>';
+  // A slot left unstaged this session carries forward whatever's already saved
+  // for the currently-loaded year (see the carry() fallback in saveAudit()) —
+  // shown here so it's clear re-uploading Service alone won't blank these out.
+  const carried=(kind)=>(AUDIT&&AUDIT.uploads&&AUDIT.uploads[kind]&&AUDIT.uploads[kind].length)?(AUDIT.uploads[kind].length+' rows carried over from '+esc(AUDIT_YEAR)):null;
   b+='<div class="sh">Upload year-to-date data</div><div class="card" style="padding:4px 13px">'
     +slot('service','Youth attendance — required','Year-to-date Youth export',PENDING.service?(PENDING._serviceFn||(PENDING.service.rows.length+' rows')):null)
     +slot('group','Lifegroup attendance','Year-to-date Lifegroup export',PENDING.group?(PENDING._groupFn||(PENDING.group.groups.length+' groups')):null)
-    +slot('team','Student Team CSV','Current team roster',PENDING.team.length?(PENDING._teamFn||(PENDING.team.length+' rows')):null)
-    +slot('connect','New Connect CSV','Connect dates',PENDING.connect.length?(PENDING._connectFn||(PENDING.connect.length+' rows')):null)
-    +slot('decision','Decision CSV','Decision dates',PENDING.decision.length?(PENDING._decisionFn||(PENDING.decision.length+' rows')):null)
-    +slot('flows','People Flow CSV','Follow-up export',PENDING.flows.length?(PENDING._flowsFn||(PENDING.flows.length+' rows')):null)
+    +slot('team','Student Team CSV','Current team roster',PENDING.team.length?(PENDING._teamFn||(PENDING.team.length+' rows')):carried('team'))
+    +slot('connect','New Connect CSV','Connect dates',PENDING.connect.length?(PENDING._connectFn||(PENDING.connect.length+' rows')):carried('connect'))
+    +slot('decision','Decision CSV','Decision dates',PENDING.decision.length?(PENDING._decisionFn||(PENDING.decision.length+' rows')):carried('decision'))
+    +slot('flows','People Flow CSV','Follow-up export',PENDING.flows.length?(PENDING._flowsFn||(PENDING.flows.length+' rows')):carried('flows'))
     +'<div style="padding:10px 0"><button class="btn btn-secondary btn-full" style="white-space:normal;text-align:left;line-height:1.35;height:auto" onclick="openExportGuide(\'audit\')">'+icS('info')+' How do I export the Team, Decision, New people &amp; Flow files?</button></div>'
     +'</div>';
   b+='<div class="card" style="display:flex;gap:10px;align-items:center;justify-content:space-between">'
@@ -5374,11 +5480,20 @@ function upload(kind,input){
 // aggregates and stores one row for that year (re-save overwrites the year).
 async function saveAudit(){
   if(!PENDING.service){toast('Upload the year-to-date service CSV first');return;}
+  // Team/Connect/Decision/Flows are separate CRM exports that don't change every
+  // time attendance is refreshed. saveAudit() replaces the WHOLE year's audit
+  // row, so a slot the admin didn't re-stage this time must fall back to what's
+  // already stored for the currently-loaded year — otherwise a re-upload that
+  // only touches Service/Group silently wipes Team/Connect/Decision to empty,
+  // which collapses the "Interacted" funnel rung down to equal "Came to Youth"
+  // (stage-1-only people come solely from these overlays' hasConnect/hasDecision
+  // marks and unmatched caOnly names — see model() below).
+  const carry=(kind)=>PENDING[kind].length?PENDING[kind]:((AUDIT&&AUDIT.uploads&&AUDIT.uploads[kind])||[]);
   try{
     const a=await API.post('/audits',{
       service:PENDING.service,
       group:PENDING.group||{groups:[]},
-      team:PENDING.team||[],connect:PENDING.connect||[],decision:PENDING.decision||[],flows:PENDING.flows||[],
+      team:carry('team'),connect:carry('connect'),decision:carry('decision'),flows:carry('flows'),
     },90000);
     auditInvalidate();
     await auditList();
@@ -5582,7 +5697,7 @@ function _buildDeckBody(){
       title:'How these numbers are built',
       core:'So you can trust them — and challenge them.',
       args:[
-        'Ladder: 1 Interacted (attended a service, attended a lifegroup, or submitted a connect/decision record) · 2 Came to Youth · 3 Regular (≥'+rrPct+'% of Youth nights) · 4 Attended a lifegroup (≥1 this term) · 5 Student Team. Each rung counts people at that stage or beyond.',
+        'Ladder: 1 Interacted (Youth attendance, plus anyone who attended a lifegroup but wasn’t at a service, plus anyone who submitted a connect/decision record but wasn’t matched to an existing student) · 2 Came to Youth · 3 Regular (≥'+rrPct+'% of Youth nights) · 4 Attended a lifegroup (≥1 this term) · 5 Student Team. Each rung counts people at that stage or beyond.',
         'Personal trend compares each student’s current-term attendance rate with their previous-term rate (students tracked both terms); cohort trend does the same per grade × gender.',
         'Youth and lifegroup attendance are part of the same audit snapshot as the uploads below — a frozen, year-keyed record computed when the audit was last saved, not a live feed. '+currency,
         'Names in uploads are matched to platform students; unmatched names are tracked as audit-only people. The whole audit — Youth and lifegroup attendance plus Student Team, Connect and Decision uploads — is stored server-side as one snapshot for the year.'

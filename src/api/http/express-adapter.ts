@@ -36,6 +36,7 @@ const UNTIMED_ROUTES = new Set([
   'POST /import/group-csv',
   'POST /connections/allocations/import',
   'POST /audits',
+  'POST /audits/import-all',
 ]);
 
 export function createApp(routes: Route[], authService: AuthService): Express {

@@ -26,6 +26,13 @@ export function makeAccountController(deps: { account: AccountService }) {
       return { ok: true };
     },
 
+    async changeOwnPassword(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      const { currentPassword, newPassword } = req.body as { currentPassword: string; newPassword: string };
+      await deps.account.changeOwnPassword(req.ctx, currentPassword, newPassword);
+      return { ok: true };
+    },
+
     async toggleStatus(req: HttpRequest) {
       if (!req.ctx) throw new UnauthorizedError();
       return deps.account.toggleStatus(req.ctx, req.params['id']!);

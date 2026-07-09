@@ -29,5 +29,13 @@ export function makeConnectionAuditController(deps: { connectionAudit: Connectio
       if (!req.ctx) throw new UnauthorizedError();
       return deps.connectionAudit.finalizeFromLive(req.ctx);
     },
+    async exportAll(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      return deps.connectionAudit.exportAll(req.ctx);
+    },
+    async importAll(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      return deps.connectionAudit.importAll(req.ctx, req.body);
+    },
   };
 }

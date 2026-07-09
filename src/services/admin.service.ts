@@ -14,6 +14,7 @@ import type {
   ILifegroupAttendanceRepository,
   IImportRepository,
   IAuditRepository,
+  IConnectionAuditRepository,
 } from '../repositories/interfaces/entity-repositories';
 import type { Actor } from '../core/entities/user';
 import type { AdminAuditEntry } from '../core/entities/settings';
@@ -76,6 +77,7 @@ export function makeAdminService(
   lifegroupAttendance: ILifegroupAttendanceRepository,
   imports: IImportRepository,
   audit: IAuditRepository,
+  connectionAudits: IConnectionAuditRepository,
 ): AdminService {
   // Wipe all attendance/connection data in FK-safe order (children before
   // parents). Each call is a single bulk DELETE, so this stays well within the
@@ -98,7 +100,13 @@ export function makeAdminService(
       assertCan(actor, 'admin:manage');
       assertForceConfirmed(opts);
       await wipeData({ includeLeaders: true });
-      await writeAudit(audit, actor, 'reset', 'Full data reset — students, leaders, connections, services and lifegroup data cleared');
+      // Full Reset means NO student data left in the app at all — the Connection
+      // Audit's server-stored snapshots (connection_audits) hold per-student
+      // rows too, so they must go along with the live tables above. Back these
+      // up first via GET /audits/export-all if they're still needed.
+      const savedAudits = await connectionAudits.findAll();
+      await Promise.all(savedAudits.map((a) => connectionAudits.delete(a.id)));
+      await writeAudit(audit, actor, 'reset', 'Full data reset — students, leaders, connections, services, lifegroup and connection audit data cleared');
       invalidateOverviewCache();
       invalidateTrendsCache();
       invalidateLgStatsCache();
