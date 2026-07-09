@@ -66,3 +66,33 @@ describe('Leader Service — quad add/edit parity (scoped to gender + bracket)',
     expect(visible).toEqual(['Any', 'Girl Jr']);
   });
 });
+
+describe('Leader Service — updateGrades (self-service grade broadening)', () => {
+  it('a grade login can broaden grades on a leader it did NOT create (no ownership check)', async () => {
+    const s = await svc();
+    const GRADE9 = actor('grade', { grade: 9 });
+    const leader = await s.create(ADMIN, { fullName: 'Auto-imported Leader', gender: 'male', grades: [9] });
+    const updated = await s.updateGrades(GRADE9, leader.id, [9, 10, 11]);
+    expect([...updated.grades].sort((a, b) => a - b)).toEqual([9, 10, 11]);
+  });
+
+  it('a quad login can broaden grades outside its own bracket', async () => {
+    const s = await svc();
+    const leader = await s.create(G79, { fullName: 'Girls Leader', grades: [8] });
+    const updated = await s.updateGrades(G79, leader.id, [8, 11, 12]);
+    expect([...updated.grades].sort((a, b) => a - b)).toEqual([8, 11, 12]);
+  });
+
+  it('never changes gender, regardless of what broadened the grades', async () => {
+    const s = await svc();
+    const leader = await s.create(ADMIN, { fullName: 'Locked Gender', gender: 'female', grades: [7] });
+    const updated = await s.updateGrades(B1012, leader.id, [7, 12]);
+    expect(updated.gender).toBe('female');
+  });
+
+  it('rejects an out-of-range grade', async () => {
+    const s = await svc();
+    const leader = await s.create(ADMIN, { fullName: 'X', grades: [9] });
+    await expect(s.updateGrades(ADMIN, leader.id, [6])).rejects.toBeInstanceOf(Error);
+  });
+});

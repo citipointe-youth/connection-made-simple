@@ -21,6 +21,15 @@ export interface LeaderService {
   update(actor: Actor, id: string, input: unknown): Promise<Leader>;
   remove(actor: Actor, id: string): Promise<void>;
   updateSmsTemplate(actor: Actor, id: string, smsTemplate: unknown): Promise<Leader>;
+  // Self-service grade broadening: a leader (grade/quad login self-identifying
+  // as this record) can add OTHER grades to their own coverage so they can see
+  // and connect students from those grades too. Deliberately skips the
+  // creator/quad-scope ownership checks used by update() — same rationale as
+  // updateSmsTemplate() (no server-side binding between an Actor and "the
+  // leader they identify as"; most real leaders are auto-created by CSV
+  // import). Gender is NEVER touched here — that lock stays enforced by
+  // simply not accepting it as an input.
+  updateGrades(actor: Actor, id: string, grades: unknown): Promise<Leader>;
 }
 
 /** A quad may only manage leaders within its gender + year bracket. */
@@ -179,6 +188,15 @@ export function makeLeaderService(repo: ILeaderRepository): LeaderService {
       if (!existing) throw new NotFoundError('Leader not found');
       const parsed = z.string().max(500).nullable().parse(smsTemplate);
       const updated: Leader = { ...existing, smsTemplate: parsed, updatedAt: new Date().toISOString() };
+      return repo.save(updated);
+    },
+
+    async updateGrades(actor, id, grades) {
+      assertCan(actor, 'leader:write');
+      const existing = await repo.findById(id);
+      if (!existing) throw new NotFoundError('Leader not found');
+      const parsed = z.array(z.number().int().min(7).max(12)).parse(grades);
+      const updated: Leader = { ...existing, grades: parsed as Grade[], updatedAt: new Date().toISOString() };
       return repo.save(updated);
     },
   };

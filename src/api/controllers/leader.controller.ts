@@ -35,5 +35,11 @@ export function makeLeaderController(deps: { leader: LeaderService }) {
       const body = req.body as { smsTemplate?: unknown };
       return deps.leader.updateSmsTemplate(req.ctx, req.params['id']!, body?.smsTemplate ?? null);
     },
+
+    async updateGrades(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      const body = req.body as { grades?: unknown };
+      return deps.leader.updateGrades(req.ctx, req.params['id']!, body?.grades ?? []);
+    },
   };
 }

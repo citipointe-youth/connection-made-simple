@@ -80,6 +80,7 @@ export function buildRoutes(services: Services): Route[] {
     { method: 'PATCH',  path: '/leaders/:id', auth: true, handler: (r) => leader.update(r) },
     { method: 'DELETE', path: '/leaders/:id', auth: true, handler: (r) => leader.remove(r) },
     { method: 'PATCH',  path: '/leaders/:id/sms-template', auth: true, handler: (r) => leader.updateSmsTemplate(r) },
+    { method: 'PATCH',  path: '/leaders/:id/grades',       auth: true, handler: (r) => leader.updateGrades(r) },
 
     // ----- Connections -----
     { method: 'GET',    path: '/connections',                          auth: true, handler: (r) => connection.listAll(r) },

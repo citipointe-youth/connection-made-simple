@@ -2120,13 +2120,18 @@ async function submitAddLeader() {
 async function showEditLeader(id) {
   let l; try { l = await API.get(`/leaders/${id}`); } catch { toast('Not found'); return; }
   const u = S.user;
-  const allowedGrades = u.role === 'quad' ? quadGrades(u.quad) : [7,8,9,10,11,12];
+  // Grade/quad logins can broaden which OTHER grades a leader covers, so they
+  // can see and connect students from those grades too — not just their own
+  // default bracket. Gender stays locked for them regardless (see below).
+  const canBroadenGrades = u.role === 'grade' || u.role === 'quad';
+  const allowedGrades = [7,8,9,10,11,12];
   const gcbs = allowedGrades.map(g =>
     `<label style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><input type="checkbox" value="${g}" class="gcb" ${l.grades?.includes(g)?'checked':''}> Grade ${g}</label>`
   ).join('');
-  const qg = u.role === 'quad' ? quadGender(u.quad) : null;
-  const genderField = qg
-    ? `<div class="fg"><label class="fl">Gender</label><select class="fs" id="lg"><option value="${qg}" selected>${qg==='female'?'Female':'Male'}</option></select></div>`
+  const lockGender = canBroadenGrades;
+  const genderLabel = l.gender==='female'?'Female':l.gender==='male'?'Male':'Any';
+  const genderField = lockGender
+    ? `<div class="fg"><label class="fl">Gender</label><select class="fs" id="lg" disabled><option selected>${genderLabel}</option></select><p style="font-size:11px;color:var(--ink-mid);margin-top:3px">Gender can't be changed here</p></div>`
     : `<div class="fg"><label class="fl">Gender</label><select class="fs" id="lg">
       <option value="" ${!l.gender?'selected':''}>Any</option>
       <option value="female" ${l.gender==='female'?'selected':''}>Female</option>
@@ -2148,13 +2153,25 @@ async function showEditLeader(id) {
 
 async function submitEditLeader(id) {
   const fullName = document.getElementById('ln')?.value?.trim();
-  const gender = document.getElementById('lg')?.value || null;
+  const genderEl = document.getElementById('lg');
+  const genderLocked = !!genderEl?.disabled;
   const grades = [...(document.querySelectorAll('.gcb:checked')||[])].map(el => parseInt(el.value,10));
   const active = document.getElementById('la')?.checked ?? true;
   const errEl = document.getElementById('le');
   if (!fullName) { errEl.innerHTML='<div class="alert al-err">Name required</div>'; return; }
   try {
-    await API.patch(`/leaders/${id}`, { fullName, gender, grades, active });
+    if (genderLocked) {
+      // Grade/quad self-broadening: grades go through the dedicated endpoint,
+      // which works regardless of leader ownership. Name/active are best-effort
+      // through the general endpoint — silently skipped if this leader isn't
+      // one you own, since broadening grades is the point here, not renaming
+      // someone else's leader.
+      await API.patch(`/leaders/${id}/grades`, { grades });
+      try { await API.patch(`/leaders/${id}`, { fullName, active }); } catch {}
+    } else {
+      const gender = genderEl?.value || null;
+      await API.patch(`/leaders/${id}`, { fullName, gender, grades, active });
+    }
     Cache.del('/leaders', '/overview');
     closeModal(); toast('Leader updated'); await renderConnect();
   } catch (e) { errEl.innerHTML=`<div class="alert al-err">${e.message}</div>`; }
