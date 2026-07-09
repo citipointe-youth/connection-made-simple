@@ -356,10 +356,10 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .connect-students::-webkit-scrollbar{display:none}
 .connect-students-track{position:absolute;top:11px;right:0;bottom:1px;width:3px;background:var(--paper-dark);border-radius:2px;pointer-events:none}
 .connect-students-thumb{position:absolute;left:0;width:3px;background:rgba(100,116,139,.55);border-radius:2px}
-/* Student profile "Leader Assignments" preview — same track/thumb pattern as
-   .connect-students above, sized for this list's shorter single-line rows
-   (~29px each) so ~2.5 rows show before it scrolls. */
-.leader-assign-list{max-height:73px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+/* Student profile "Search a leader to assign" results — same track/thumb
+   pattern as .connect-students above, sized for this list's rows (~39px
+   each incl. margin) so ~2.5 rows show before it scrolls. */
+.leader-assign-list{max-height:98px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .leader-assign-list::-webkit-scrollbar{display:none}
 .connect-stud-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--paper-dark)}
 .connect-stud-row:last-child{border-bottom:none}
@@ -2974,7 +2974,7 @@ function _arSectionsHtml(scoped, u) {
     for (const s of items) {
       const _arPhone = s.mobile || s.parentPhone;
       cards += `
-        <div class="li" style="align-items:flex-start;padding:11px;margin-bottom:4px">
+        <div class="li" style="position:relative;align-items:flex-start;padding:11px 40px 11px 11px;margin-bottom:4px">
           <div class="li-body">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span class="li-title">${esc(s.firstName)} ${esc(s.lastName)}</span>
@@ -2988,6 +2988,7 @@ function _arSectionsHtml(scoped, u) {
             ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal, true):''}
             ${_arPhone ? `<div style="margin-top:4px;font-size:13px">${!s.mobile && s.parentPhone ? '<span style="font-weight:600">Parent: </span>' : ''}${phoneLink(_arPhone, s.firstName, !s.mobile && !!s.parentPhone)}</div>` : ''}
           </div>
+          <button class="btn btn-ghost btn-sm" style="position:absolute;bottom:8px;right:8px;padding:4px" onclick="showStudentDetail('${s.id}')" title="View profile" aria-label="View profile for ${esc(s.firstName)} ${esc(s.lastName)}">${icS('id')}</button>
         </div>`;
     }
     body += `<div class="card" style="margin-bottom:12px;border-left:4px solid ${col}">
@@ -3222,11 +3223,13 @@ function sdLeaderSearch(sid) {
   const el = document.getElementById('sd-llist'); if (!el) return;
   if (!list.length) {
     el.innerHTML = `<div style="text-align:center;padding:14px;color:var(--ink-faint);font-size:13px">${q ? 'No matching leaders' : 'No eligible leaders for this student'}</div>`;
+    _syncConnectThumb(el);
     return;
   }
   el.innerHTML = list.map(l => `<button onclick="assignSD('${sid}','${l.id}')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:var(--paper);border:1px solid var(--paper-dark);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer">
-    <div style="flex:1"><div style="font-size:14px;font-weight:600">${esc(l.fullName)}</div><div style="font-size:11px;color:var(--ink-mid)">${l.gender || 'any gender'} · Yr ${(l.grades || []).join(', ') || 'All'}</div></div>
+    <div style="flex:1;font-size:14px;font-weight:600">${esc(l.fullName)}</div>
     <span style="color:var(--accent);font-size:20px;font-weight:700">+</span></button>`).join('');
+  _syncConnectThumb(el);
 }
 async function assignSD(sid, lid) {
   try { await API.post('/connections', { studentId: sid, leaderId: lid }); }
@@ -3255,15 +3258,11 @@ async function showStudentDetail(id) {
   const pct = svcPct(s);
   const grpPct = s.grpTotal > 0 ? Math.round(s.grpAttended / s.grpTotal * 100) : null;
 
-  // Preview is capped to a ~2.5-row scroll window, same custom always-visible
-  // scrollbar treatment as the Connect Setup leader cards' student preview
-  // (.connect-students-track/-thumb, synced via _syncConnectThumb).
-  const assignedRows = myAllocs.map(a => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--paper-dark)">
+  const assignedHtml = myAllocs.length
+    ? myAllocs.map(a => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--paper-dark)">
         <span style="font-size:13px;font-weight:600">${a.leaderName}</span>
         ${canEdit ? `<button class="btn btn-secondary btn-sm" style="padding:3px 10px;color:var(--danger)" onclick="unassignSD('${s.id}','${a.leaderId}')">Remove</button>` : '<span class="chip c-accent">assigned</span>'}
-      </div>`).join('');
-  const assignedHtml = myAllocs.length
-    ? `<div class="connect-students-wrap"><div class="leader-assign-list" onscroll="_syncConnectThumb(this)">${assignedRows}</div><div class="connect-students-track"><div class="connect-students-thumb"></div></div></div>`
+      </div>`).join('')
     : '<p style="color:var(--ink-faint);font-size:13px;padding:8px 0">Not connected yet</p>';
 
   modal(`
@@ -3296,7 +3295,7 @@ async function showStudentDetail(id) {
     <div class="sh">Leader Assignments</div>
     <div style="margin-bottom:${canEdit?'8px':'14px'}">${assignedHtml}</div>
     ${canEdit ? `<input id="sd-lq" placeholder="Search a leader to assign…" oninput="sdLeaderSearch('${s.id}')" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--paper-dark);border-radius:8px;margin-bottom:6px;font-size:14px">
-    <div id="sd-llist" style="margin-bottom:14px"></div>` : ''}
+    <div class="connect-students-wrap" style="margin-bottom:14px"><div id="sd-llist" class="leader-assign-list" onscroll="_syncConnectThumb(this)"></div><div class="connect-students-track"><div class="connect-students-thumb"></div></div></div>` : ''}
 
     ${s.mobile||s.parentPhone?`
     <div style="margin-bottom:14px;display:flex;flex-direction:column;gap:6px">
@@ -3308,7 +3307,6 @@ async function showStudentDetail(id) {
       <button class="btn btn-secondary btn-sm" onclick="closeModal()">Close</button>
     </div>`);
   if (canEdit) sdLeaderSearch(id);
-  document.querySelectorAll('.leader-assign-list').forEach(_syncConnectThumb);
 }
 
 // ============================================================
@@ -3880,7 +3878,7 @@ async function exportAllocationsCSV() {
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'allocations.csv'; a.click();
+    a.href = url; a.download = `allocations-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
     URL.revokeObjectURL(url);
     toast(`Exported ${rowCount} rows`);
     return true;
@@ -4736,6 +4734,18 @@ const CA_NAMES=['Ava Okafor','Noah Castellanos','Isla Vandermeer','Eli Borowski'
 // ---------- utils ----------
 function h32(x){let h=0;for(const c of String(x))h=(h*31+c.charCodeAt(0))>>>0;return h;}
 function norm(n){return String(n||'').toLowerCase().replace(/\s+/g,' ').trim();}
+// Mirrors computeQuad() in src/core/types/enums.ts — used here to attribute an
+// unmatched (caOnly) Connect/Decision submitter to a quad from the grade/gender
+// their CRM export carries, since they have no platform student record to read
+// s.quad from.
+function computeQuad(grade,gender){
+  if(!grade)return null;
+  const g=String(gender||'').toLowerCase();
+  const isFemale=g==='female'||g==='f';
+  if(grade>=7&&grade<=9)return isFemale?'g79':'b79';
+  if(grade>=10&&grade<=12)return isFemale?'g1012':'b1012';
+  return null;
+}
 // Display-only shortening for named lifegroups: strips the "Brisbane - YS - "
 // prefix and trailing "Lifegroup" suffix when present, exact match only.
 // Underlying data/exports are untouched — this only affects what's rendered.
@@ -4870,13 +4880,21 @@ function parseRows(text){
   let iD=Math.max(gi('date'),gi('decision date'),gi('connect date'));
   // Fallback: any header containing 'date' as a whole word that isn't birth/DOB-related.
   if(iD<0)iD=hd.findIndex(h=>/\bdate\b/.test(h)&&!/birth|born|dob/.test(h));
+  // Grade/gender, when the export carries them — lets an unmatched (no platform
+  // record) Connect/Decision submitter still be attributed to a quad. Optional:
+  // absent on exports that don't include these columns.
+  const iG=Math.max(gi('grade'),gi('school grade'));
+  const iGen=gi('gender');
   if(iN<0&&iF<0)return null;
   const out=[];
   for(const line of lines.slice(1)){
     const v=splitCSVLine(line).map(x=>x.replace(/^"|"$/g,'').trim());
     const name=iN>=0?v[iN]:((v[iF]||'')+' '+(iL>=0?(v[iL]||''):'')).trim();
     if(!name)continue;
-    out.push({name,date:iD>=0?isoDate(v[iD]):null});
+    const row={name,date:iD>=0?isoDate(v[iD]):null};
+    if(iG>=0&&v[iG])row.grade=parseInt(v[iG],10)||null;
+    if(iGen>=0&&v[iGen])row.gender=v[iGen].toLowerCase();
+    out.push(row);
   }
   return out;
 }
@@ -4894,6 +4912,9 @@ function parseMatrixRows(text,kind){
   const iF=Math.max(gi('first name'),gi('first_name'),gi('firstname'));
   const iL=Math.max(gi('last name'),gi('last_name'),gi('lastname'));
   if(iN<0&&iF<0)return null;
+  // Grade/gender, when present — see the matching note in parseRows().
+  const iG=Math.max(gi('grade'),gi('school grade'));
+  const iGen=gi('gender');
   const dateCols=[];
   for(let i=0;i<raw.length;i++){const d=_extractHeaderDate(raw[i]);if(d)dateCols.push({i,d});}
   if(!dateCols.length)return null;
@@ -4906,7 +4927,10 @@ function parseMatrixRows(text,kind){
     if(!name)continue;
     const yDates=dateCols.filter(c=>YES.has((v[c.i]||'').toLowerCase())).map(c=>c.d);
     if(!yDates.length)continue;
-    out.push({name,date:pick(yDates)});
+    const row={name,date:pick(yDates)};
+    if(iG>=0&&v[iG])row.grade=parseInt(v[iG],10)||null;
+    if(iGen>=0&&v[iGen])row.gender=v[iGen].toLowerCase();
+    out.push(row);
   }
   return out.length?out:null;
 }
@@ -5005,8 +5029,10 @@ function model(){
   else if(AUDIT){for(const t of (AUDIT.terms||[])){if(t.startDate&&(pStart==null||t.startDate<pStart))pStart=t.startDate;if(t.endDate&&(pEnd==null||t.endDate>pEnd))pEnd=t.endDate;}}
   const inPeriod=d=>!d||pStart==null||(d>=pStart&&d<=pEnd);
   for(const r of st.uploads.team.rows){const k=norm(r.name);if(!k)continue;mk(k,r.name).team=true;}
-  for(const r of st.uploads.connect.rows){const k=norm(r.name);if(!k||!inPeriod(r.date))continue;const x=mk(k,r.name);x.hasConnect=true;if(r.date&&(!x.connect||r.date<x.connect))x.connect=r.date;}
-  for(const r of st.uploads.decision.rows){const k=norm(r.name);if(!k||!inPeriod(r.date))continue;const x=mk(k,r.name);x.hasDecision=true;if(r.date&&(!x.decision||r.date>x.decision))x.decision=r.date;}
+  // Grade/gender (when the CRM export carries them) let an unmatched submitter
+  // still be placed in a quad below — first value seen for a name wins.
+  for(const r of st.uploads.connect.rows){const k=norm(r.name);if(!k||!inPeriod(r.date))continue;const x=mk(k,r.name);x.hasConnect=true;if(r.date&&(!x.connect||r.date<x.connect))x.connect=r.date;if(r.grade!=null&&x.grade==null)x.grade=r.grade;if(r.gender&&!x.gender)x.gender=r.gender;}
+  for(const r of st.uploads.decision.rows){const k=norm(r.name);if(!k||!inPeriod(r.date))continue;const x=mk(k,r.name);x.hasDecision=true;if(r.date&&(!x.decision||r.date>x.decision))x.decision=r.date;if(r.grade!=null&&x.grade==null)x.grade=r.grade;if(r.gender&&!x.gender)x.gender=r.gender;}
   const byName=new Set(students.map(s=>norm(s.fn+' '+s.ln)));
   const people=[];
   for(const s of students){
@@ -5022,7 +5048,7 @@ function model(){
     // members who aren't currently in a lifegroup.
     const stage=(teamActive&&s.gA>0)?5:s.gA>0?4:(s.sT>0&&s.sA/s.sT>=rr)?3:s.sA>0?2:(x.hasConnect||x.hasDecision)?1:0;
     const trend=trendOf(s);
-    people.push({id:s.id,name:s.fn+' '+s.ln,s,caOnly:false,stage,trend,score:scoreOf(stage,s,trend),connect:x.connect||null,decision:x.decision||null,conn:!!x.hasConnect,dec:!!x.hasDecision,team:!!x.team});
+    people.push({id:s.id,name:s.fn+' '+s.ln,s,caOnly:false,stage,trend,score:scoreOf(stage,s,trend),connect:x.connect||null,decision:x.decision||null,conn:!!x.hasConnect,dec:!!x.hasDecision,team:!!x.team,quad:s.quad});
   }
   for(const[k,x]of marks){
     if(byName.has(k))continue;
@@ -5032,7 +5058,10 @@ function model(){
     // the "In a lifegroup" tile (which only ever sums matched students). `team` stays
     // true regardless, so the person-detail Journey popup still shows them as team.
     const stage=1;
-    people.push({id:'cax-'+h32(k),name:x.name,s:null,caOnly:true,stage,trend:'stable',score:scoreOf(stage,null,'stable'),connect:x.connect||null,decision:x.decision||null,conn:!!x.hasConnect,dec:!!x.hasDecision,team:!!x.team});
+    // Quad from the connect/decision export's own grade/gender columns, when
+    // present — this is the only way to place an unmatched person in a quad.
+    const quad=computeQuad(x.grade,x.gender);
+    people.push({id:'cax-'+h32(k),name:x.name,s:null,caOnly:true,stage,trend:'stable',score:scoreOf(stage,null,'stable'),connect:x.connect||null,decision:x.decision||null,conn:!!x.hasConnect,dec:!!x.hasDecision,team:!!x.team,quad});
   }
   const rungs=[[1,'Interacted'],[2,'Came to Youth'],[3,'Regular'],[4,'Attended a lifegroup this period'],[5,'Student team']]
     .map(([n,lb])=>({n,lb,v:people.filter(p=>p.stage>=n).length}));
@@ -5201,7 +5230,7 @@ function rFunnel(){
   f+='</div>';
   const lost=R[leak].v-R[leak+1].v;
   const stuck=m.people.filter(p=>!p.caOnly&&p.stage===R[leak].n);
-  const qc={};for(const p of stuck){const q=p.s&&p.s.quad;if(q)qc[q]=(qc[q]||0)+1;}
+  const qc={};for(const p of stuck){const q=p.quad;if(q)qc[q]=(qc[q]||0)+1;}
   const worst=Object.entries(qc).sort((a,b)=>b[1]-a[1])[0];
   let b='';
   b+='<div class="card"><div class="ca-ct">This term&#39;s conversion '+helpTip('Stages run Interacted, Youth, Regular, Lifegroup, then Student team. Each bar shows how many people reached that stage this term.')+'</div><div style="font-size:.62rem;color:var(--ca-muted);margin-bottom:10px">'+R[0].lb+' → '+R[4].lb+'</div>'+f+'</div>';
@@ -5209,7 +5238,7 @@ function rFunnel(){
   b+='<button class="btn btn-secondary btn-full" onclick="CA.fquad()">'+(FQ?'Hide quad funnels ▴':'View funnel per quad ▾')+'</button>';
   if(FQ){
     for(const q of Object.keys(QLBL)){
-      const qp=m.people.filter(p=>p.s&&p.s.quad===q);
+      const qp=m.people.filter(p=>p.quad===q);
       const qr=R.map(r=>({lb:r.lb,v:qp.filter(p=>p.stage>=r.n).length}));
       b+='<div class="card" style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px"><span class="chip quad-'+q+'">'+(QLBL[q]||q)+'</span><span style="font-size:.62rem;color:var(--ca-muted)">'+qr[0].v+' people</span></div>';
       // Integration ladder (same horizontal-bar style as the overview ladder).
@@ -5221,7 +5250,7 @@ function rFunnel(){
       }
       b+='</div>';
     }
-    b+='<div style="font-size:.6rem;color:var(--ca-muted);text-align:center;margin:4px 0 8px">Upload-only people with no platform match have no quad and are excluded from these breakdowns.</div>';
+    b+='<div style="font-size:.6rem;color:var(--ca-muted);text-align:center;margin:4px 0 8px">Upload-only people with no platform match are placed by the grade/gender on their Connect or Decision form; without those columns they have no quad and are excluded from these breakdowns.</div>';
   }
   caShell(b,'ca-funnel');
 }
@@ -5315,7 +5344,7 @@ function plist(){
   if(PF.q){const q=norm(PF.q);list=m.people.filter(p=>norm(p.name).includes(q));}
   else list=m.people.filter(p=>p.stage>0);
   if(PF.stage)list=list.filter(p=>p.stage===+PF.stage);
-  if(PF.quad)list=list.filter(p=>p.s&&p.s.quad===PF.quad);
+  if(PF.quad)list=list.filter(p=>p.quad===PF.quad);
   list=list.slice().sort((a,b)=>b.score-a.score||(a.name<b.name?-1:1));
   let b='';
   for(const p of list.slice(0,PF.cap)){
@@ -5581,7 +5610,7 @@ function _buildDeckBody(){
     const QUADS=[['g79','Girls Yr 7–9'],['b79','Boys Yr 7–9'],['g1012','Girls Yr 10–12'],['b1012','Boys Yr 10–12']];
     const RLBL=['Interacted','Came to Youth','Regular','Attended a lifegroup','Student Team'];
     const cells=QUADS.map(([q,ql])=>{
-      const qp=m.people.filter(p=>p.s&&p.s.quad===q);
+      const qp=m.people.filter(p=>p.quad===q);
       if(!qp.length)return '<div class="qfcell"><div class="qfl">'+esc(ql)+'</div><p class="muted" style="font-size:.82rem">No data</p></div>';
       const max=Math.max(1,qp.filter(p=>p.stage>=1).length);
       const rows=[1,2,3,4,5].map((n,i)=>{const v=qp.filter(p=>p.stage>=n).length;const w=Math.max(4,Math.round(v/max*100));return '<div class="qfrow"><span class="qflb">'+esc(RLBL[i])+'</span><span class="qftrack"><span class="qfbar" style="width:'+w+'%"></span></span><b class="qfval">'+v+'</b></div>';}).join('');
