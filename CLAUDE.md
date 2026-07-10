@@ -1224,6 +1224,91 @@ identically to before this work, verified after every phase.
   3 `finalizeFromLive` tests and gained 2 module-toggle tests (net −1);
   `import.service.test.ts` gained report + dialect coverage.
 
+### Generalisation phases 6–7 — structure config + the `leader` role (2026-07-11)
+
+The Opus session that owned design doc §8 phases 6 (structure config) and 7 (the
+new `leader` role). Built on the phase 1–5/8 `ministryConfig` foundation; the **YS
+Brisbane invariant held throughout** — all-defaults (`ministry_config = '{}'`) is
+byte-identical to before, and the full prior test suite (237) passes unmodified.
+237 → **281 tests** (all additive). Branch `generalisation-phase-1`; migrations
+`019`/`020` are additive (`add column if not exists`), so the `pre-generalisation`
+rollback recipe still holds.
+
+- **Multi-grade grade accounts (§5.1a, phase 6a).** A `grade` login can now span
+  **one or more** grades. `User`/`Actor` gained `grades: Grade[]` + an explicit
+  `gender` field **alongside** the legacy single `grade` (NOT replacing it — the
+  existing `access-control.test.ts` builds actors with `grade` and old signed
+  tokens carry only `grade`, so both must keep working). `access-control.actorGrades()`
+  returns `grades ?? [grade]`; every `actor.grade` scoping read (`canAccessGrade`
+  grade case, `leader.service`, `connection.service`, `lifegroup-stats`,
+  `actor-key` — which MUST key on the full set or two multi-grade accounts collide
+  their scoped caches) uses it. `deriveActorGender` prefers the explicit gender,
+  falling back to the `grade7g`/`grade7b` email convention for untouched
+  single-grade accounts. Account form: grade `<select>` → grade checkboxes
+  (`ugcb`) + a gender-scope select. `account.service` stores `grade = grades.length===1 ? grades[0] : null`.
+- **Structure config threading (§5.1/§5.2, phase 6b).** `access-control`'s
+  `canAccessGrade`/`genderScopeOf`/`canAccessGender`/`canAccessStudent` gained an
+  **optional** `StructureScope` param (`{cohortModel, genderPolicy}`) — undefined =
+  today's `grades-quads`+`strict`, so existing tests/callers are unchanged.
+  **cohortModel `'none'` short-circuits BOTH grade AND gender scoping to visible**
+  (the design's "known trap" — under `'none'` nothing may be hidden by grade *or*
+  gender; `genderScopeOf` returns null under `'none'` regardless of genderPolicy).
+  `genderPolicy` `soft`/`off` drops gender scoping. Services pass
+  `settings.ministryConfig.structure`; `overview` + `student` gained an **optional**
+  `settingsRepo` (defaults when absent, so their existing test constructors are
+  unmodified). Under `'none'`, `overview`/`trends`/`lifegroup-stats` return empty
+  `byQuad`/`byGrade` (whole-ministry totals still show — nothing excluded; the SPA
+  self-hides the empty sections + `_cohorted()` guards the student-derived
+  "Connection by Grade").
+- **Grade range** is `gradeRange(structure)` (`src/core/ministry-config.ts`),
+  replacing every literal `[7..12]` iteration in the aggregate builders and the
+  SPA (`_gradeList()`); the import `ServiceRowSchema` is now a factory bound to
+  `gradeMin`/`gradeMax`, so an out-of-range grade is *reported*, not silently
+  nulled.
+- **serviceDayOfWeek** generalises `terms.ts`'s `saturdayOf(iso, serviceDayOfWeek=5)`
+  to "week ends the day after the service day" (Friday default = the old Sat–Fri
+  buckets, byte-identical). Threaded through `aggregates.ts`, `import.service.ts`
+  (its own `weekStartOf` now delegates to `saturdayOf` so the anchor can't drift),
+  `trends`, `lifegroup-stats`. SPA: `_fridayLabel`, the follow-up "Not Seen Last
+  {day}" heading, the Trends tab, and the settings help text read `_serviceDayName()`.
+  `year-aggregates.ts` (Connection Audit only) is deliberately left Friday-anchored
+  — CA week math is out of the live-app scope. Tested in `service-day.test.ts`
+  (a Wednesday-service ministry's term boundaries).
+- **The `leader` role (§5.2, phase 7).** A junior leader: read-only
+  (`student:read`+sensitive, `atrisk:read`, `leader:read`; **no** `connection:write`,
+  `leader:write`, `overview:read`, import, admin), bound to one `Leader` record via
+  `Actor.leaderId`/`User.leaderId`, seeing **only that leader's connected students**.
+  Enforced server-side in every reachable read path: `student.service`
+  list/get/search, `atrisk.service` (both gained an optional `connRepo`),
+  `connection.service` (`listAll` own-only; `listByLeader`/`listByStudent` guarded
+  by `assertLeaderSelf`/a connection check), `followup.leaderFollowup` (forces the
+  actor's own `leaderId`). `overview` is simply not permitted (403). SPA: a slim
+  `navItems` (Home / My Connections / Health / Birthdays), a lite `renderLeaderHome`
+  (own follow-up, no overview fetch), `getMyLeaderId()` locks a leader login to its
+  bound record, `_roleLabel()` drives config-aware role badges + the account-form
+  role dropdown (flat model → Youth Pastor / Senior Leader / Junior Leader) + a
+  leader-record picker; `render()` bounces a leader off any other page. Youth
+  pastor / senior leader are pure label mappings onto admin / director.
+- **Youth Ministry Setup wizard**: the Structure + Roles fine-tuning step (was a
+  `SETUP-STEP-STUB`) is now real — cohortModel / grade word / grade range / gender
+  policy / service day / role model / role labels, with an **orphaned-accounts
+  warning** when switching cohortModel to `'none'` with grade/quad accounts present
+  (never deletes — just flags). Branding/terminology/module editors remain phase
+  2/3 stubs.
+- **Deliberate choices / deviations** (also in `../Generalisation of the app/12-handoff-final.md`):
+  the seed (`src/seed.ts`) stays graded — it IS the YS Brisbane reference; a flat
+  deployment uses the small-flat preset + manual account creation (design §7.1).
+  Push `getUsersForTarget` is left graded-only — correctly **inert** under flat (no
+  grade/quad accounts exist to target, and push defaults off). Manual student
+  create/update (`student.service`) keeps a 7–12 bound (import is the config-aware
+  path; manual add is admin-only and rare). `leader.service`'s grade/quad-scoped
+  leader *management* stays strict-gendered (only reachable by grade/quad logins,
+  which only exist under the graded model). Follow-up's leaderId override
+  silently self-scopes a `leader` (returns their own list, never 403) — secure by
+  construction.
+- **SW cache**: `cms-v28` → **`cms-v31`** across phases 6a/6b/7. No new top-level
+  API route was added, so `API_RE` is unchanged.
+
 ## Security notes
 
 - **XSS:** all user-supplied strings (names, emails, notification title/message,
