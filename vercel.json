@@ -11,6 +11,10 @@
       "src": "^/(auth|students|leaders|connections|overview|trends|lifegroups|at-risk|import|settings|admin|accounts|push|health|audits|batch)(/.*)?(\\?.*)?$",
       "dest": "/api/index.ts"
     },
+    {
+      "src": "^/manifest\\.json(\\?.*)?$",
+      "dest": "/api/index.ts"
+    },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
