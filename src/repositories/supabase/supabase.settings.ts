@@ -5,6 +5,7 @@ import type {
   IAuditRepository,
 } from '../interfaces/entity-repositories';
 import type { AppSettings, AdminAuditEntry } from '../../core/entities/settings';
+import { MinistryConfigSchema, MINISTRY_CONFIG_DEFAULTS } from '../../core/ministry-config';
 
 // ---------------------------------------------------------------------------
 // Mappers
@@ -18,6 +19,9 @@ function toAppSettings(row: Record<string, unknown>): AppSettings {
     termGapDays: row['term_gap_days'] as number,
     validThresholdPct: row['valid_threshold_pct'] as number,
     serviceMinAttendance: (row['service_min_attendance'] as number | null) ?? 100,
+    // Parsing on read is the "loud failure" guard — a hand-edited/corrupt JSON
+    // blob in the DB throws here instead of silently serving garbage config.
+    ministryConfig: MinistryConfigSchema.parse(row['ministry_config'] ?? {}),
     updatedAt: toIso(row['updated_at']),
   };
 }
@@ -36,6 +40,10 @@ const DEFAULT_SETTINGS: Omit<AppSettings, 'id' | 'updatedAt'> = {
   termGapDays: 14,
   validThresholdPct: 25,
   serviceMinAttendance: 100,
+  // Not written by the first-row INSERT below (that relies on the column's own
+  // SQL default `'{}'::jsonb`) — only present so this const satisfies the
+  // AppSettings type.
+  ministryConfig: MINISTRY_CONFIG_DEFAULTS,
 };
 
 // ---------------------------------------------------------------------------
@@ -100,12 +108,14 @@ export class SupabaseSettingsRepository implements ISettingsRepository {
   }
 
   async save(settings: AppSettings): Promise<AppSettings> {
+    const ministryConfigJson = JSON.stringify(settings.ministryConfig ?? MINISTRY_CONFIG_DEFAULTS);
     const rows = await this.sql`
       insert into app_settings (
         id,
         term_gap_days,
         valid_threshold_pct,
         service_min_attendance,
+        ministry_config,
         updated_at
       )
       values (
@@ -113,12 +123,14 @@ export class SupabaseSettingsRepository implements ISettingsRepository {
         ${settings.termGapDays},
         ${settings.validThresholdPct},
         ${settings.serviceMinAttendance},
+        ${ministryConfigJson}::jsonb,
         ${settings.updatedAt}
       )
       on conflict (id) do update set
         term_gap_days          = excluded.term_gap_days,
         valid_threshold_pct    = excluded.valid_threshold_pct,
         service_min_attendance = excluded.service_min_attendance,
+        ministry_config        = excluded.ministry_config,
         updated_at             = excluded.updated_at
       returning *
     `;

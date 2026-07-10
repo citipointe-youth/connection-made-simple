@@ -1,4 +1,4 @@
-const CACHE = 'cms-v22';
+const CACHE = 'cms-v23';
 const APP_SHELL = ['/'];
 
 // API paths that should never be served from cache. NOTE: every API resource must

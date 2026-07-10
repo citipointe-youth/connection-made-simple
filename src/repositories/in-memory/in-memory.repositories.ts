@@ -19,6 +19,7 @@ import type {
 import type { AppSettings, AdminAuditEntry } from '../../core/entities/settings';
 import type { ConnectionAudit } from '../../core/entities/connection-audit';
 import type { UserRole } from '../../core/types/enums';
+import { MINISTRY_CONFIG_DEFAULTS } from '../../core/ministry-config';
 
 import type {
   IUserRepository,
@@ -394,6 +395,7 @@ export class InMemorySettingsRepository
       termGapDays: 14,
       validThresholdPct: 25,
       serviceMinAttendance: 100,
+      ministryConfig: MINISTRY_CONFIG_DEFAULTS,
       updatedAt: new Date().toISOString(),
     };
   }

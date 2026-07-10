@@ -695,6 +695,44 @@ const Cache = (() => {
 // STATE & ROUTING
 // ============================================================
 const S = { user: null, page: 'home', settings: {} };
+
+// ── Ministry config: theme + label scaffolding ──
+// applyTheme() pushes branding.* onto the :root custom properties + the
+// theme-color meta tag, and caches the ministryConfig in localStorage so a
+// page reload can re-apply it SYNCHRONOUSLY (see the IIFE below) before
+// GET /settings has even round-tripped — avoids a flash of default blue.
+const THEME_CACHE_KEY = 'yc_theme_v1';
+function applyTheme(cfg) {
+  const b = (cfg && cfg.branding) || {};
+  const root = document.documentElement.style;
+  root.setProperty('--accent', b.accent || '#1a1af2');
+  root.setProperty('--accent-dark', b.accentDark || '#1111c9');
+  root.setProperty('--accent-light', b.accentLight || '#ececff');
+  root.setProperty('--navy', b.navy || '#0a0a2e');
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.setAttribute('content', b.accent || '#1a1af2');
+  try { localStorage.setItem(THEME_CACHE_KEY, JSON.stringify(cfg || {})); } catch (e) {}
+}
+(function applyCachedThemeSynchronously() {
+  try {
+    const cached = localStorage.getItem(THEME_CACHE_KEY);
+    if (cached) applyTheme(JSON.parse(cached));
+  } catch (e) {}
+})();
+
+// L(key) — terminology label lookup. Backed by S.settings.ministryConfig.labels
+// once /settings resolves; falls back to the current hardcoded YS Brisbane
+// copy so every call site is safe to use even before boot() finishes (or if
+// ministryConfig is entirely absent, e.g. an older cached settings blob).
+const DEFAULT_LABELS = {
+  smallGroup: 'Lifegroup', smallGroupPlural: 'Lifegroups', service: 'Youth',
+  serviceNight: 'Friday Nights', studentTeam: 'Student Team', connection: 'Connection',
+};
+function L(key) {
+  const labels = (S.settings && S.settings.ministryConfig && S.settings.ministryConfig.labels) || {};
+  return labels[key] || DEFAULT_LABELS[key] || key;
+}
+
 // HTML-escape any user-supplied string before interpolating it into innerHTML.
 // Names, notification titles/messages, emails etc. all come from CSV import or
 // user input and MUST go through this to prevent stored XSS.
@@ -4365,6 +4403,11 @@ async function renderAdminView(settings, users) {
       </div>
       <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Settings</button>
     </div>`;
+    body += `<div class="card">
+      <div class="sh" style="margin-top:0">Youth Ministry Setup</div>
+      <p class="help-text" style="margin-bottom:10px">One-time setup for branding, terminology, structure, roles and modules. Safe to revisit any time — nothing here deletes data.</p>
+      <button class="btn btn-secondary btn-full" onclick="openMinistrySetup()">Open Setup</button>
+    </div>`;
   }
 
   if (_adminTab === 'accounts') {
@@ -4589,6 +4632,143 @@ function wizHandleAuditImportFile(input) {
 function wizHandleAllocationImportFile(input) {
   const f = input.files[0];
   if (f) processAllocationImport(f, () => { _wiz.step4Done = true; renderWizard(); });
+}
+
+// ── Youth Ministry Setup wizard ──
+// One-time (but revisitable) configuration walk-through: pick an archetype
+// preset, then fine-tune. Phase 1 ships step 0 (the preset picker) + a save
+// step; steps 1-5 (branding/terminology/structure/roles/modules fine-tuning)
+// are filled in by later phases — see the /* SETUP-STEP-STUB */ markers below.
+const MINISTRY_PRESETS_INFO = [
+  { id: 'large-graded-au', title: 'Large graded ministry (AU)', desc: 'Grades 7-12 + gender-split quads, Connection Audit + Lifegroups on. This is the current app, unchanged — the default.' },
+  { id: 'two-bracket', title: 'Two-bracket ministry', desc: 'Junior/senior brackets instead of per-grade logins. Connection Audit on.' },
+  { id: 'small-flat', title: 'Small flat ministry', desc: 'Youth Pastor / Senior Leader / Junior Leader, no grade or quad cohorting. Connection Audit off, Lifegroups on.' },
+  { id: 'micro', title: 'Micro ministry', desc: 'Same as Small flat, plus Lifegroups off and export guides hidden — for spreadsheet-only ministries.' },
+];
+let _setupStep = 0;
+let _setupDraft = null;
+let _setupServiceMinAttendance = null;
+
+function _deepMergeClient(base, patch) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return patch === undefined ? base : patch;
+  const out = Array.isArray(base) ? [...base] : { ...(base || {}) };
+  for (const k of Object.keys(patch)) {
+    const v = patch[k];
+    out[k] = (v && typeof v === 'object' && !Array.isArray(v) && base && typeof base[k] === 'object')
+      ? _deepMergeClient(base[k], v) : v;
+  }
+  return out;
+}
+
+// Mirrors src/core/ministry-config.ts's PRESET_CONFIGS / PRESET_SERVICE_MIN_ATTENDANCE.
+// Keep these two in sync — same sync-comment pattern as the rising/declining
+// threshold shared between the backend and this file.
+const PRESET_CONFIGS_CLIENT = {
+  'large-graded-au': {},
+  'two-bracket': { preset: 'two-bracket', structure: { cohortModel: 'brackets-only' }, roles: { model: 'graded' } },
+  'small-flat': {
+    preset: 'small-flat',
+    structure: { cohortModel: 'none', genderPolicy: 'soft' },
+    roles: { model: 'flat', labels: { admin: 'Youth Pastor', director: 'Senior Leader', leader: 'Junior Leader' } },
+    modules: { connectionAudit: false, lifegroups: true },
+  },
+  micro: {
+    preset: 'micro',
+    structure: { cohortModel: 'none', genderPolicy: 'off' },
+    roles: { model: 'flat', labels: { admin: 'Youth Pastor', director: 'Senior Leader', leader: 'Junior Leader' } },
+    modules: { connectionAudit: false, lifegroups: false, exportGuides: 'hidden' },
+  },
+};
+const PRESET_SERVICE_MIN_ATTENDANCE_CLIENT = { 'large-graded-au': 100, 'two-bracket': 25, 'small-flat': 10, micro: 0 };
+
+// Mirrors src/core/ministry-config.ts's MINISTRY_CONFIG_DEFAULTS. Needed so
+// switching presets always computes "defaults + this preset's overrides" from
+// a clean baseline — merging a preset onto whatever the PREVIOUS preset left
+// behind would let old overrides (e.g. modules.connectionAudit:false from
+// small-flat) leak into a later large-graded-au pick instead of reverting.
+const MINISTRY_CONFIG_DEFAULTS_CLIENT = {
+  version: 1, preset: 'large-graded-au',
+  branding: { ministryName: 'Youth Society Brisbane', appName: 'Youth Connection', shortName: 'Connection', accent: '#1a1af2', accentDark: '#1111c9', accentLight: '#ececff', navy: '#0a0a2e', logoSvg: null },
+  labels: { smallGroup: 'Lifegroup', smallGroupPlural: 'Lifegroups', service: 'Youth', serviceNight: 'Friday Nights', studentTeam: 'Student Team', connection: 'Connection', groupNameStrip: ['Brisbane - YS - '] },
+  structure: { cohortModel: 'grades-quads', gradeMin: 7, gradeMax: 12, gradeLabel: 'Grade', brackets: [{ id: '79', label: 'Yr 7–9', gradeMin: 7, gradeMax: 9 }, { id: '1012', label: 'Yr 10–12', gradeMin: 10, gradeMax: 12 }], genderPolicy: 'strict', serviceDayOfWeek: 5 },
+  roles: { model: 'graded', labels: { admin: 'Admin', director: 'Director', leader: 'Leader', grade: 'Grade', quad: 'Quad' } },
+  modules: { connectionAudit: true, lifegroups: true, pushNotifications: false, exportGuides: 'elvanto' },
+  import: { dateOrder: 'DMY', leaderTag: 'leader' },
+};
+
+function openMinistrySetup() {
+  _setupStep = 0;
+  _setupDraft = JSON.parse(JSON.stringify((S.settings && S.settings.ministryConfig) || {}));
+  _setupServiceMinAttendance = (_adminData.settings && _adminData.settings.serviceMinAttendance) ?? 100;
+  renderMinistrySetup();
+}
+
+async function closeMinistrySetup() {
+  _setupStep = 0; _setupDraft = null;
+  // Re-fetch rather than reusing _adminData.settings — it was captured before
+  // this wizard's own PATCH, so it would otherwise show stale scalar fields
+  // (e.g. Min Attendance) that a preset just changed server-side.
+  const [settings, users] = await Promise.all([
+    API.get('/settings').catch(() => _adminData.settings),
+    API.get('/accounts/users').catch(() => _adminData.users),
+  ]);
+  _adminData = { settings, users };
+  await renderAdminView(settings, users);
+}
+
+function pickMinistryPreset(id) {
+  // Always layer the preset onto a clean defaults baseline (not onto whatever
+  // _setupDraft currently holds) so switching presets fully replaces the
+  // previous preset's overrides instead of accumulating them.
+  _setupDraft = _deepMergeClient(MINISTRY_CONFIG_DEFAULTS_CLIENT, PRESET_CONFIGS_CLIENT[id]);
+  _setupServiceMinAttendance = PRESET_SERVICE_MIN_ATTENDANCE_CLIENT[id];
+  _setupStep = 1;
+  renderMinistrySetup();
+}
+
+async function saveMinistrySetup() {
+  try {
+    const fresh = await API.patch('/settings', { ministryConfig: _setupDraft, serviceMinAttendance: _setupServiceMinAttendance });
+    Cache.del('/settings');
+    S.settings = fresh;
+    applyTheme(fresh.ministryConfig);
+    toast('Youth Ministry Setup saved');
+    await closeMinistrySetup(); // re-fetches _adminData so Settings shows the new values, not the pre-save snapshot
+  } catch (e) { toast(e.message); }
+}
+
+function renderMinistrySetup() {
+  const cfg = _setupDraft || {};
+  let b = `<div class="ph"><div class="ph-title" style="display:flex;align-items:center;gap:7px">${icN('settings')} Youth Ministry Setup</div></div>`;
+
+  if (_setupStep === 0) {
+    b += `<div class="card" style="margin-bottom:10px"><div class="help-text">Pick the shape that's closest to your ministry. You can fine-tune everything afterwards.</div></div>`;
+    for (const p of MINISTRY_PRESETS_INFO) {
+      b += `<div class="li" style="cursor:pointer;margin-bottom:8px" onclick="pickMinistryPreset('${p.id}')">
+        <div class="li-body">
+          <div class="li-title">${esc(p.title)}</div>
+          <div class="li-sub">${esc(p.desc)}</div>
+        </div>
+      </div>`;
+    }
+    b += `<button class="btn btn-ghost btn-full" onclick="closeMinistrySetup()">Cancel</button>`;
+  } else {
+    // SETUP-STEP-STUB: steps 1 (branding), 2 (terminology), 3 (structure),
+    // 4 (roles), 5 (modules) fine-tuning UI lands in later phases (2/3 for
+    // branding/terminology/modules; 6/7 — the Opus session — for structure/roles).
+    // For now this single screen shows the preset's resulting config and saves it.
+    b += `<div class="card">
+      <div class="sh" style="margin-top:0">Review &amp; Save</div>
+      <p class="help-text" style="margin-bottom:10px">Fine-tuning screens for branding, terminology, structure, roles and modules are coming soon. This preset has been applied below — save to keep it, or cancel to discard.</p>
+      <pre style="font-size:11px;background:var(--paper-dark);padding:10px;border-radius:8px;overflow-x:auto;max-height:300px">${esc(JSON.stringify(cfg, null, 2))}</pre>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-ghost" onclick="_setupStep=0;renderMinistrySetup()">Back</button>
+        <button class="btn btn-primary" style="flex:1" onclick="saveMinistrySetup()">Save &amp; Close</button>
+      </div>
+    </div>`;
+  }
+
+  setApp(b);
 }
 
 let _adminData = { settings: {}, users: [] };
@@ -6042,9 +6222,10 @@ async function boot() {
   }
   restoreConnectFilters();
   restoreArFilter();
-  if (S.user) {
-    try { S.settings = await API.get('/settings'); } catch { S.settings = {}; }
-  }
+  // GET /settings is public (auth:false) so the login screen can be themed
+  // pre-auth too — fetch it regardless of login state, not just once signed in.
+  try { S.settings = await API.get('/settings'); } catch { S.settings = {}; }
+  if (S.settings && S.settings.ministryConfig) applyTheme(S.settings.ministryConfig);
   render();
 }
 
