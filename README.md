@@ -1,17 +1,17 @@
-# Youth Connection
+# YS Connection
 
 A phone-first youth ministry platform: track service and lifegroup attendance,
 connect students to leaders, spot who's drifting away, and run the whole thing
 from a phone. TypeScript/Express backend + a single-file SPA, deployable to
 your own Supabase + Vercel accounts.
 
-Originally built for Youth Society Brisbane as "Connection Made Simple" — the
-app is now configurable per deployment (branding, terminology, cohort
-structure, roles, modules, import dialect) via the in-app **Youth Ministry
-Setup** wizard (Admin → Settings), so any youth ministry can run its own copy
-with its own look, language, and structure. The Youth Society Brisbane
-deployment itself needs zero configuration — every setting defaults to its
-current behaviour.
+Originally built for Youth Society Brisbane as "Connection Made Simple" (later
+briefly "Youth Connection") — the app is now configurable per deployment
+(branding, terminology, cohort structure, roles, modules, import dialect) via
+the in-app **Youth Ministry Setup** wizard (Admin → Settings), so any youth
+ministry can run its own copy with its own look, language, and structure. The
+Youth Society Brisbane deployment itself needs zero configuration — every
+setting defaults to its current behaviour, under the name "YS Connection".
 
 ## Quick start (local development)
 

@@ -18,7 +18,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
-<title>Youth Connection</title>
+<title>YS Connection</title>
 <style>
 /* Display face — self-hosted Space Grotesk (geometric, echoes the YS logo).
    Single latin woff2; CSP-safe (font-src 'self'). Falls back to the system stack. */
@@ -747,7 +747,7 @@ function _brandingField(key, fallback) {
   } catch (e) {}
   return fallback;
 }
-function appName() { return _brandingField('appName', 'Youth Connection'); }
+function appName() { return _brandingField('appName', 'YS Connection'); }
 function ministryName() { return _brandingField('ministryName', 'Youth Society Brisbane'); }
 
 // modules.exportGuides: 'elvanto' (default, current behaviour) shows the
@@ -4964,7 +4964,7 @@ const PRESET_SERVICE_MIN_ATTENDANCE_CLIENT = { 'large-graded-au': 100, 'small-fl
 // small-flat) leak into a later large-graded-au pick instead of reverting.
 const MINISTRY_CONFIG_DEFAULTS_CLIENT = {
   version: 1, preset: 'large-graded-au',
-  branding: { ministryName: 'Youth Society Brisbane', appName: 'Youth Connection', shortName: 'Connection', accent: '#1a1af2', accentDark: '#1111c9', accentLight: '#ececff', navy: '#0a0a2e', logoSvg: null },
+  branding: { ministryName: 'Youth Society Brisbane', appName: 'YS Connection', shortName: 'Connection', accent: '#1a1af2', accentDark: '#1111c9', accentLight: '#ececff', navy: '#0a0a2e', logoSvg: null },
   labels: { smallGroup: 'Lifegroup', smallGroupPlural: 'Lifegroups', service: 'Youth', serviceNight: 'Friday Nights', studentTeam: 'Student Team', connection: 'Connection', groupNameStrip: ['Brisbane - YS - '] },
   structure: { cohortModel: 'grades-quads', gradeMin: 7, gradeMax: 12, gradeLabel: 'Grade', brackets: [{ id: '79', label: 'Yr 7–9', gradeMin: 7, gradeMax: 9 }, { id: '1012', label: 'Yr 10–12', gradeMin: 10, gradeMax: 12 }], genderPolicy: 'strict', serviceDayOfWeek: 5 },
   roles: { model: 'graded', labels: { admin: 'Admin', director: 'Director', leader: 'Leader', grade: 'Grade', quad: 'Quad' } },
@@ -5195,7 +5195,7 @@ function _setupSetList(path, val) {
 function _deployGuideText(cfg, svcMin) {
   cfg = cfg || {};
   const b = cfg.branding || {};
-  const appName = b.appName || 'Youth Connection';
+  const appName = b.appName || 'YS Connection';
   const ministry = b.ministryName || 'your ministry';
   const preset = cfg.preset || 'large-graded-au';
   const json = JSON.stringify(cfg, null, 2);
@@ -5270,8 +5270,8 @@ function _deployGuideText(cfg, svcMin) {
 function copyDeployGuide() { copyText(_deployGuideText(_setupDraft || {}, _setupServiceMinAttendance)); }
 function downloadDeployGuide() {
   const cfg = _setupDraft || {};
-  const app = (((cfg.branding && cfg.branding.appName) || 'youth-connection')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')) || 'youth-connection';
+  const app = (((cfg.branding && cfg.branding.appName) || 'ys-connection')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')) || 'ys-connection';
   _downloadText('deploy-' + app + '.md', _deployGuideText(cfg, _setupServiceMinAttendance));
 }
 function _downloadText(filename, text) {

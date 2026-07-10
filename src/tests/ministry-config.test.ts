@@ -14,7 +14,7 @@ describe('MinistryConfigSchema', () => {
 
   it('defaults every branding field to the current hardcoded values', () => {
     expect(MINISTRY_CONFIG_DEFAULTS.branding.ministryName).toBe('Youth Society Brisbane');
-    expect(MINISTRY_CONFIG_DEFAULTS.branding.appName).toBe('Youth Connection');
+    expect(MINISTRY_CONFIG_DEFAULTS.branding.appName).toBe('YS Connection');
     expect(MINISTRY_CONFIG_DEFAULTS.branding.accent).toBe('#1a1af2');
     expect(MINISTRY_CONFIG_DEFAULTS.modules.pushNotifications).toBe(false);
     expect(MINISTRY_CONFIG_DEFAULTS.modules.connectionAudit).toBe(true);

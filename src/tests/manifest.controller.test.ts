@@ -42,7 +42,7 @@ describe('manifest controller', () => {
     const ctrl = makeManifestController({ settings });
     const manifest = await ctrl.get(req()) as any;
 
-    expect(manifest.name).toBe('Youth Connection');
+    expect(manifest.name).toBe('YS Connection');
     expect(manifest.short_name).toBe('Connection');
     expect(manifest.theme_color).toBe('#1a1af2');
   });

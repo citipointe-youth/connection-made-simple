@@ -1,4 +1,4 @@
-const CACHE = 'cms-v32';
+const CACHE = 'ysc-v33';
 const APP_SHELL = ['/'];
 
 // API paths that should never be served from cache. NOTE: every API resource must
@@ -62,7 +62,7 @@ self.addEventListener('push', (e) => {
   // payload itself (push.service.ts's send() always takes an explicit title
   // from the composer). The SW has no access to ministryConfig, so this
   // generic product name is just for a malformed/empty payload.
-  let data = { title: 'Youth Connection', body: '', icon: '/icons/icon.svg', badge: '/icons/icon.svg' };
+  let data = { title: 'YS Connection', body: '', icon: '/icons/icon.svg', badge: '/icons/icon.svg' };
   try { data = { ...data, ...e.data.json() }; } catch (_) {}
   e.waitUntil(
     self.registration.showNotification(data.title, {

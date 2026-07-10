@@ -10,7 +10,7 @@ const NODE_ENV = getEnv('NODE_ENV', 'development');
 // CORS_ORIGINS is unset we fall back to APP_ORIGIN (each deployment's own
 // domain), then to the original YS Brisbane URL so that existing deployment
 // needs zero env changes. Dev keeps '*' for convenience.
-const PROD_DEFAULT_ORIGIN = 'https://connection-made-simple.vercel.app';
+const PROD_DEFAULT_ORIGIN = 'https://ys-connection.vercel.app';
 const corsDefault = NODE_ENV === 'production' ? (process.env['APP_ORIGIN'] ?? PROD_DEFAULT_ORIGIN) : '*';
 
 export const env = {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Install Youth Connection</title>
+<title>Install YS Connection</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#1a1a1a;min-height:100vh;padding:24px 16px 40px}
@@ -27,7 +27,7 @@
   <div class="logo-icon">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2a10 10 0 0 1 10 10M2 12A10 10 0 0 1 12 2"/><path d="M12 22a10 10 0 0 1-10-10M22 12a10 10 0 0 1-10 10"/></svg>
   </div>
-  <div><h1 class="js-appname">Youth Connection</h1><p class="sub" style="margin:0">Add to your Home Screen</p></div>
+  <div><h1 class="js-appname">YS Connection</h1><p class="sub" style="margin:0">Add to your Home Screen</p></div>
 </div>
 
 <div class="card">
@@ -59,7 +59,7 @@
   // on, not just the original YS Brisbane Vercel URL.
   document.querySelectorAll('.js-host').forEach(function (el) { el.textContent = location.host; });
   // Best-effort app-name templating — GET /settings is public. Falls back to
-  // the static "Youth Connection" text already in the markup if it fails.
+  // the static "YS Connection" text already in the markup if it fails.
   fetch('/settings').then(function (r) { return r.json(); }).then(function (s) {
     var name = s && s.ministryConfig && s.ministryConfig.branding && s.ministryConfig.branding.appName;
     if (!name) return;

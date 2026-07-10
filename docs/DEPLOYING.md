@@ -1,4 +1,4 @@
-# Deploying Youth Connection for your own ministry
+# Deploying YS Connection for your own ministry
 
 This is the full path from an empty Supabase/Vercel account to a working,
 branded deployment. It assumes you've cloned/forked this repo.

@@ -24,7 +24,7 @@ export const MinistryConfigSchema = z.object({
   branding: z
     .object({
       ministryName: z.string().max(60).default('Youth Society Brisbane'),
-      appName: z.string().max(40).default('Youth Connection'),
+      appName: z.string().max(40).default('YS Connection'),
       shortName: z.string().max(15).default('Connection'),
       accent: hexColour.default('#1a1af2'),
       accentDark: hexColour.default('#1111c9'),

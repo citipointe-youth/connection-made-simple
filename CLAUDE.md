@@ -1,15 +1,15 @@
-# CLAUDE.md — Connection Made Simple
+# CLAUDE.md — YS Connection
 
-> **Scope:** the real **Connection Made Simple** app — TS/Express backend (`src/`) + `public/index.html` SPA. The offline demo and its full UI conventions live in `../youth app demo/CLAUDE.md`; this SPA is kept aligned to that demo. Project map: `../CLAUDE.md`.
+> **Scope:** the real **YS Connection** app (formerly "Connection Made Simple") — TS/Express backend (`src/`) + `public/index.html` SPA. The offline demo and its full UI conventions live in `../youth app demo/CLAUDE.md`; this SPA is kept aligned to that demo. Project map: `../CLAUDE.md`.
 
 Guidance for Claude Code when working in this package.
 
 ## What this is
 
-**Connection Made Simple** (`connection-made-simple`) — a youth ministry platform for YS Brisbane. Phone-first SPA backed by a TypeScript/Express API. Students are *connected* to leaders; "connection" is the core relationship entity. Backend-agnostic architecture identical in structure to the Youth Camp Platform.
+**YS Connection** (`ys-connection`, formerly `connection-made-simple`) — a youth ministry platform for YS Brisbane. Phone-first SPA backed by a TypeScript/Express API. Students are *connected* to leaders; "connection" is the core relationship entity. Backend-agnostic architecture identical in structure to the Youth Camp Platform.
 
-- **GitHub:** `citipointe-youth/connection-made-simple` (migrated from `987tom1` 2026-06-22; org now owns the GitHub repo, Supabase org, and Vercel team)
-- **Deployed:** https://connection-made-simple.vercel.app (Vercel team `citipointe-youth`; auto-deploys from `master`)
+- **GitHub:** `citipointe-youth/ys-connection` (migrated from `987tom1` 2026-06-22; renamed from `connection-made-simple` → `youth-connection` → `ys-connection` 2026-07-11; org owns the GitHub repo, Supabase org, and Vercel team)
+- **Deployed:** https://ys-connection.vercel.app (Vercel team `citipointe-youth`; auto-deploys from `master`)
 - **Supabase:** Sydney region (`ap-southeast-2`), project ref `ltcblcudlzlzfcyzlhpc` — `PERSISTENCE=supabase` + `DATABASE_URL` env var
 
 ## Commands
@@ -721,7 +721,7 @@ desync consistent with a connection being reused while still processing abandone
   `[db-dispatch] conn=<n> <id> <route> +<ms> :: <query>` whenever a query is actually
   handed to a connection (never logs bound parameters — PII).
 - Read these via `vercel logs <deployment-url> --json` (or the production alias
-  `https://connection-made-simple.vercel.app`) filtered on `reqtiming`/`db-dispatch`.
+  `https://ys-connection.vercel.app`) filtered on `reqtiming`/`db-dispatch`.
   This is by far the fastest way to get real evidence instead of guessing — use it
   before proposing any fix.
 
@@ -1352,6 +1352,44 @@ current config (`_deployGuideText`), copyable/downloadable (`copyDeployGuide` /
 `downloadDeployGuide`). Still stubbed: none of Setup — Branding/Terminology/Modules
 were the last stubs. SW `cms-v31` → **`cms-v32`**. (Handoff brief that scoped this:
 `SETUP-EDITORS-HANDOFF.md` at repo root.)
+
+### Rename completed: "Connection Made Simple" → "Youth Connection" → "YS Connection" (2026-07-11)
+
+Phase 8 (above) deliberately left the GitHub repo and Vercel project names untouched
+("manual owner steps, not attempted"). Those manual steps are now done, in two
+hops on the same day:
+
+1. `citipointe-youth/connection-made-simple` → `citipointe-youth/youth-connection`
+   (GitHub repo rename, `gh repo rename`; GitHub auto-redirects the old URL).
+2. `citipointe-youth/youth-connection` → `citipointe-youth/ys-connection` — the
+   owner decided the generic "Youth Connection" name should instead be
+   "YS Connection" (matches `ministryConfig.branding.ministryName` default,
+   "Youth Society Brisbane"). Same GitHub rename mechanism, plus the Vercel
+   project was renamed via the dashboard (`connection-made-simple` → `ys-connection`
+   directly, skipping the intermediate name) — production URL is now
+   `https://ys-connection.vercel.app`. `APP_ORIGIN` was updated in Vercel's
+   production env vars to match, and `vercel link` was re-run locally to refresh
+   `.vercel/project.json` (project ID unchanged: `prj_jL3k8C9zHYw3lEbCFPNnvEct2DUX`).
+
+Code/doc changes that went with it: `package.json` name → `ys-connection`;
+`MINISTRY_CONFIG_DEFAULTS.branding.appName` (and the SPA's mirrored
+`MINISTRY_CONFIG_DEFAULTS_CLIENT`) default → **"YS Connection"** (was "Youth
+Connection" — this changes the default seen by anyone who hasn't set their own
+branding in Setup, i.e. still-current YS Brisbane); `<title>`/install-page/push
+fallback strings in `public/index.html` / `install.html` / `sw.js` updated to
+match; SW cache bumped `cms-v32` → **`ysc-v33`** (also dropped the `cms` —
+"Connection Made Simple" — abbreviation from the cache-name prefix); `env.ts`'s
+`PROD_DEFAULT_ORIGIN` fallback and `.env.example`'s CORS comment updated to
+`ys-connection.vercel.app`. `ministry-config.test.ts` / `manifest.controller.test.ts`
+updated to assert the new default. Local git remote repointed to
+`github.com/citipointe-youth/ys-connection.git`.
+
+**Not renamed (deliberately)**: historical/dated CLAUDE.md sections above this
+one, `CHANGELOG.txt`, and old `docs/superpowers/plans|specs/*` — they're a
+point-in-time record of what the app was called when that work happened, not
+live documentation. If a ministry other than YS Brisbane deploys their own copy
+via Setup, "YS Connection" is just the seed default — it's fully overridable
+(`branding.appName`) the same as before.
 
 ## Security notes
 

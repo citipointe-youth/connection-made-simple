@@ -1,5 +1,5 @@
 {
-  "name": "youth-connection",
+  "name": "ys-connection",
   "version": "1.0.0",
   "description": "Youth ministry connection platform — phone-first SPA backed by Express + Supabase, configurable for any youth ministry",
   "scripts": {
