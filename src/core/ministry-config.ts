@@ -108,6 +108,15 @@ export const MinistryConfigSchema = z.object({
 
 export type MinistryConfig = z.infer<typeof MinistryConfigSchema>;
 
+// The inclusive list of grade numbers a deployment uses (structure.gradeMin..
+// gradeMax). Replaces the hardcoded [7..12] iterations in the aggregate
+// builders and the import range check. Defaults yield [7,8,9,10,11,12].
+export function gradeRange(structure: { gradeMin: number; gradeMax: number }): number[] {
+  const out: number[] = [];
+  for (let g = structure.gradeMin; g <= structure.gradeMax; g++) out.push(g);
+  return out;
+}
+
 // Applying the schema to {} yields every default in one nested object — this IS
 // the canonical "empty config" value. Exported as a plain object (not a getter)
 // so callers can deep-equal against it in tests without re-invoking Zod.

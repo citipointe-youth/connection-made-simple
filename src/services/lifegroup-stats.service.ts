@@ -10,6 +10,7 @@ import type {
 import type { Actor } from '../core/entities/user';
 import type { Quad } from '../core/types/enums';
 import { QUADS, QUAD_LABELS } from '../core/types/enums';
+import { gradeRange } from '../core/ministry-config';
 import { computeTerms, classifyDate, saturdayOf, type Terms } from './terms';
 import { ResponseCache } from '../utils/response-cache';
 import { actorKey as _actorKey } from './actor-key';
@@ -110,13 +111,17 @@ export function makeLifegroupStatsService(
         sessionRepo.findAll(),
       ]);
 
+      const structure = settings.ministryConfig.structure;
+      const svcDow = structure.serviceDayOfWeek;
+      const cohorted = structure.cohortModel !== 'none';
+
       const studentById = new Map(students.map((s) => [s.id, s]));
       const weekStartById = new Map(weeks.map((w) => [w.id, w.weekStart]));
       const lifegroupById = new Map(lifegroups.map((l) => [l.id, l]));
 
-      // Term boundaries: valid service dates (Saturday-bucketed) are authoritative;
+      // Term boundaries: valid service dates (week-bucketed) are authoritative;
       // fall back to lifegroup-week dates when there is no service data.
-      const validDates = sessions.filter((s) => s.isValid).map((s) => saturdayOf(s.sessionDate));
+      const validDates = sessions.filter((s) => s.isValid).map((s) => saturdayOf(s.sessionDate, svcDow));
       const boundarySource = validDates.length > 0 ? validDates : [...weekStartById.values()];
       const terms = computeTerms(boundarySource, settings.termGapDays);
 
@@ -126,7 +131,7 @@ export function makeLifegroupStatsService(
       let validSvcCurrent = 0, validSvcPrevious = 0;
       for (const s of sessions) {
         if (!s.isValid) continue;
-        const t = classifyDate(saturdayOf(s.sessionDate), terms);
+        const t = classifyDate(saturdayOf(s.sessionDate, svcDow), terms);
         if (t === 'current') validSvcCurrent++;
         else if (t === 'previous') validSvcPrevious++;
       }
@@ -135,16 +140,16 @@ export function makeLifegroupStatsService(
       const lifegroupVisible = (lgId: string): boolean => {
         const lg = lifegroupById.get(lgId);
         if (!lg) return false;
-        if (!canAccessGrade(actor, lg.grade)) return false;
+        if (!canAccessGrade(actor, lg.grade, structure)) return false;
         // Gender-scope for grade AND quad logins (admin/director see all).
-        if (lg.gender && !canAccessGender(actor, lg.gender)) return false;
+        if (lg.gender && !canAccessGender(actor, lg.gender, structure)) return false;
         return true;
       };
       const studentVisible = (sid: string): boolean => {
         const s = studentById.get(sid);
         if (!s) return false;
         return (actor.role === 'grade' || actor.role === 'quad')
-          ? canAccessStudent(actor, s.grade, s.gender)
+          ? canAccessStudent(actor, s.grade, s.gender, structure)
           : true;
       };
 
@@ -227,14 +232,16 @@ export function makeLifegroupStatsService(
         };
       };
 
-      // Visible grades/quads for this login.
-      const allGrades = [7, 8, 9, 10, 11, 12];
-      const visibleGrades = actor.role === 'grade'
+      // Visible grades/quads for this login. Grade range from config; under
+      // cohortModel 'none' there is no cohorting, so both breakdowns are empty
+      // (the SPA hides these sections) while the top-level `overall` still shows.
+      const allGrades = gradeRange(structure);
+      const visibleGrades = !cohorted ? [] : actor.role === 'grade'
         ? actorGrades(actor)
         : actor.role === 'quad'
           ? quadGradesOf(actor.quad)
           : allGrades;
-      const visibleQuads: Quad[] = actor.role === 'grade'
+      const visibleQuads: Quad[] = !cohorted ? [] : actor.role === 'grade'
         ? []
         : actor.role === 'quad'
           ? (actor.quad ? [actor.quad] : [])

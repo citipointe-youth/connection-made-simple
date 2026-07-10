@@ -3,10 +3,12 @@ import type {
   IStudentRepository,
   ILeaderRepository,
   IConnectionRepository,
+  ISettingsRepository,
 } from '../repositories/interfaces/entity-repositories';
 import type { Actor } from '../core/entities/user';
 import type { Quad } from '../core/types/enums';
 import { QUADS, QUAD_LABELS } from '../core/types/enums';
+import { gradeRange, MINISTRY_CONFIG_DEFAULTS } from '../core/ministry-config';
 import { ResponseCache } from '../utils/response-cache';
 import { actorKey } from './actor-key';
 
@@ -57,6 +59,9 @@ export function makeOverviewService(
   studentRepo: IStudentRepository,
   leaderRepo: ILeaderRepository,
   connRepo: IConnectionRepository,
+  // Optional so existing test harnesses that construct without it keep today's
+  // (all-defaults) behaviour; the container always supplies it in production.
+  settingsRepo?: ISettingsRepository,
 ): OverviewService {
   return {
     async getStats(actor) {
@@ -65,17 +70,20 @@ export function makeOverviewService(
       const cached = _cache.get(cacheKey);
       if (cached) return cached;
 
-      // Fetch in parallel — three serial round-trips to the Supabase pooler are
-      // a meaningful slice of this endpoint's latency on a cold serverless call.
-      const [allStudents, allLeaders, allConns] = await Promise.all([
+      // Fetch in parallel — serial round-trips to the Supabase pooler are a
+      // meaningful slice of this endpoint's latency on a cold serverless call.
+      const [settings, allStudents, allLeaders, allConns] = await Promise.all([
+        settingsRepo ? settingsRepo.getSettings() : Promise.resolve(null),
         studentRepo.findAll(),
         leaderRepo.findActive(),
         connRepo.findAll(),
       ]);
+      const structure = settings ? settings.ministryConfig.structure : MINISTRY_CONFIG_DEFAULTS.structure;
+      const cohorted = structure.cohortModel !== 'none';
 
       const scoped = allStudents.filter((s) =>
         (actor.role === 'grade' || actor.role === 'quad')
-          ? canAccessStudent(actor, s.grade, s.gender)
+          ? canAccessStudent(actor, s.grade, s.gender, structure)
           : true,
       );
 
@@ -111,7 +119,10 @@ export function makeOverviewService(
         }
       }
 
-      const byQuad: QuadStat[] = QUADS.map((quad) => {
+      // Under cohortModel 'none' there is no cohorting — both breakdowns are
+      // empty (the SPA hides these sections); nothing is dropped by computeQuad
+      // returning null, because nothing groups by quad/grade at all.
+      const byQuad: QuadStat[] = !cohorted ? [] : QUADS.map((quad) => {
         const qConn = connectable.filter((s) => s.quad === quad);
         return {
           quad,
@@ -124,7 +135,7 @@ export function makeOverviewService(
         };
       });
 
-      const byGrade: GradeStat[] = [7, 8, 9, 10, 11, 12].map((grade) => {
+      const byGrade: GradeStat[] = !cohorted ? [] : gradeRange(structure).map((grade) => {
         const gConn = connectable.filter((s) => s.grade === grade);
         return {
           grade,

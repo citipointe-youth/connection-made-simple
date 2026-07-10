@@ -8,6 +8,7 @@ import type {
 import type { Actor } from '../core/entities/user';
 import type { Quad } from '../core/types/enums';
 import { QUADS, QUAD_LABELS } from '../core/types/enums';
+import { gradeRange } from '../core/ministry-config';
 import { computeTerms, classifyDate, saturdayOf, type Terms } from './terms';
 import { ResponseCache } from '../utils/response-cache';
 import { actorKey as _actorKey } from './actor-key';
@@ -121,11 +122,16 @@ export function makeTrendsService(
         attendanceRepo.findAll(),
       ]);
       const minAttendance = settings.serviceMinAttendance;
+      const structure = settings.ministryConfig.structure;
+      const svcDow = structure.serviceDayOfWeek;
+      const cohorted = structure.cohortModel !== 'none';
 
-      // Scope students to actor (grade -> own grade + own gender; quad -> bracket + gender)
+      // Scope students to actor (grade -> own grade(s) + own gender; quad ->
+      // bracket + gender). Under cohortModel 'none' canAccessStudent short-circuits
+      // true for everyone, so nothing is excluded by grade/gender.
       const scopedStudents = allStudents.filter((s) =>
         (actor.role === 'grade' || actor.role === 'quad')
-          ? canAccessStudent(actor, s.grade, s.gender)
+          ? canAccessStudent(actor, s.grade, s.gender, structure)
           : true,
       );
 
@@ -161,10 +167,10 @@ export function makeTrendsService(
       // home page that reads them — scoped to "this term".
       const validDates = sortedSessions
         .filter((s) => isValidSession(s.id))
-        .map((s) => saturdayOf(s.sessionDate));
+        .map((s) => saturdayOf(s.sessionDate, svcDow));
       const terms = computeTerms(validDates, settings.termGapDays);
       const isCurrentSession = (sess: { id: string; sessionDate: string }): boolean =>
-        isValidSession(sess.id) && classifyDate(saturdayOf(sess.sessionDate), terms) === 'current';
+        isValidSession(sess.id) && classifyDate(saturdayOf(sess.sessionDate, svcDow), terms) === 'current';
 
       const buildPoints = (memberIds: Set<string> | null, totalPresent: number): SessionPoint[] =>
         sortedSessions.map((sess) => {
@@ -196,7 +202,7 @@ export function makeTrendsService(
       let prevAtt = 0, prevWeeks = 0;
       for (const sess of sortedSessions) {
         if (!isValidSession(sess.id)) continue;
-        const term = classifyDate(saturdayOf(sess.sessionDate), terms);
+        const term = classifyDate(saturdayOf(sess.sessionDate, svcDow), terms);
         const attended = attendedBySession.get(sess.id) ?? new Set<string>();
         if (term === 'current') { for (const id of attended) curUniq.add(id); }
         else if (term === 'previous') { prevAtt += attended.size; prevWeeks++; for (const id of attended) prevUniq.add(id); }
@@ -213,8 +219,10 @@ export function makeTrendsService(
         recentTrend: recentTrend(ministryWithOutliers),
       };
 
-      // ── Per-quad trend (same valid-session mask) ──
-      const byQuad: QuadTrend[] = QUADS.map((quad) => {
+      // ── Per-quad + per-grade trends (same valid-session mask). Under
+      // cohortModel 'none' there is no cohorting, so both breakdowns are empty
+      // (the SPA hides these sections). Grade range comes from config. ──
+      const byQuad: QuadTrend[] = !cohorted ? [] : QUADS.map((quad) => {
         const quadStudentIds = new Set(
           scopedStudents.filter((s) => s.quad === quad).map((s) => s.id),
         );
@@ -222,8 +230,7 @@ export function makeTrendsService(
         return { quad, label: QUAD_LABELS[quad], sessions: withOutliers, averageAttendance: averageOf(withOutliers) };
       });
 
-      // ── Per-grade trend (same valid-session mask) ──
-      const byGrade: GradeTrend[] = [7, 8, 9, 10, 11, 12].map((grade) => {
+      const byGrade: GradeTrend[] = !cohorted ? [] : gradeRange(structure).map((grade) => {
         const gradeStudentIds = new Set(
           scopedStudents.filter((s) => s.grade === grade).map((s) => s.id),
         );

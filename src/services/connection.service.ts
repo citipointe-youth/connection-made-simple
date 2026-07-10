@@ -143,10 +143,12 @@ export function makeConnectionService(
 
     async listAll(actor, opts) {
       assertCan(actor, 'student:read');
-      const [all, { studentsById, leadersById }] = await Promise.all([
+      const [all, { studentsById, leadersById }, settings] = await Promise.all([
         connRepo.findAll(),
         buildLookups(),
+        settingsRepo.getSettings(),
       ]);
+      const structure = settings.ministryConfig.structure;
       // `crossGrade` mirrors the same widening as student.service.ts's list() —
       // Connect Setup requests it so a leader's cross-grade connections (see the
       // assign() cross-grade exception below) don't silently disappear from their
@@ -156,8 +158,8 @@ export function makeConnectionService(
         if (!student) return false;
         if (actor.role === 'grade' || actor.role === 'quad') {
           return opts?.crossGrade
-            ? canAccessGender(actor, student.gender)
-            : canAccessStudent(actor, student.grade, student.gender);
+            ? canAccessGender(actor, student.gender, structure)
+            : canAccessStudent(actor, student.grade, student.gender, structure);
         }
         return true;
       });
@@ -222,10 +224,12 @@ export function makeConnectionService(
 
     async exportCsv(actor) {
       assertCan(actor, 'student:read');
-      const [all, { studentsById, leadersById }] = await Promise.all([
+      const [all, { studentsById, leadersById }, settings] = await Promise.all([
         connRepo.findAll(),
         buildLookups(),
+        settingsRepo.getSettings(),
       ]);
+      const structure = settings.ministryConfig.structure;
       const rows: ExportRow[] = [];
       for (const a of all) {
         const student = studentsById.get(a.studentId);
@@ -234,7 +238,7 @@ export function makeConnectionService(
         // Own-gender-only (not own-grade-only) — this export is Connect Setup's own
         // "Export CSV" button, so it should include cross-grade connections the actor
         // made there, same as the picker and listAll() above.
-        if ((actor.role === 'grade' || actor.role === 'quad') && !canAccessGender(actor, student.gender)) continue;
+        if ((actor.role === 'grade' || actor.role === 'quad') && !canAccessGender(actor, student.gender, structure)) continue;
         const svcPct = student.svcTotal > 0
           ? Math.round((student.svcAttended / student.svcTotal) * 100) + '%'
           : '—';

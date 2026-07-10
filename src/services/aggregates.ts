@@ -15,6 +15,10 @@ export interface StudentTermAggregate {
 
 export interface AggregateInput {
   termGapDays: number;
+  // Week-bucketing anchor (§5, generalisation). Default Friday (5) → Sat–Fri
+  // weeks, byte-identical to before. Must match the anchor lifegroup weekStarts
+  // were stored with, or service and group weeks won't share a term boundary.
+  serviceDayOfWeek?: number;
   serviceSessions: { id: string; date: string; valid: boolean }[];
   serviceAttendance: { studentId: string; sessionId: string; attended: boolean }[];
   weekStartById: Map<string, string>; // lifegroup weekId -> weekStart (ISO date)
@@ -38,12 +42,13 @@ export function emptyStudentAggregate(): StudentTermAggregate {
 
 export function computeStudentAggregates(input: AggregateInput): AggregateResult {
   const { termGapDays, serviceSessions, serviceAttendance, weekStartById, lifegroupAttendance } = input;
+  const svcDow = input.serviceDayOfWeek ?? 5;
 
   // Term boundaries: valid service dates are authoritative; fall back to
   // lifegroup-week dates when there is no service data yet. All dates are
   // bucketed to their Saturday so service (Friday) and lifegroup (Monday) weeks
   // share one week-aligned boundary.
-  const validWeeks = serviceSessions.filter((s) => s.valid).map((s) => saturdayOf(s.date));
+  const validWeeks = serviceSessions.filter((s) => s.valid).map((s) => saturdayOf(s.date, svcDow));
   const boundarySource = validWeeks.length > 0 ? validWeeks : [...weekStartById.values()];
   const terms = computeTerms(boundarySource, termGapDays);
 
@@ -54,7 +59,7 @@ export function computeStudentAggregates(input: AggregateInput): AggregateResult
   let prevSvcTotal = 0;
   for (const s of serviceSessions) {
     if (!s.valid) continue;
-    const t = classifyDate(saturdayOf(s.date), terms);
+    const t = classifyDate(saturdayOf(s.date, svcDow), terms);
     if (t === 'current') { sessionTerm.set(s.id, 'current'); svcTotal++; }
     else if (t === 'previous') { sessionTerm.set(s.id, 'previous'); prevSvcTotal++; }
   }

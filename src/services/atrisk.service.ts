@@ -133,11 +133,14 @@ export function makeAtRiskService(
   return {
     async list(actor, filter) {
       assertCan(actor, 'atrisk:read');
-      let students = await studentRepo.findAll();
+      const [allStudents, settings] = await Promise.all([studentRepo.findAll(), settingsRepo.getSettings()]);
+      const structure = settings.ministryConfig.structure;
+      let students = allStudents;
 
-      // Scope by role (grade -> own grade + own gender; quad -> bracket + gender)
+      // Scope by role (grade -> own grade(s) + own gender; quad -> bracket +
+      // gender). cohortModel/genderPolicy from config relax this appropriately.
       if (actor.role === 'grade' || actor.role === 'quad') {
-        students = students.filter((s) => canAccessStudent(actor, s.grade, s.gender));
+        students = students.filter((s) => canAccessStudent(actor, s.grade, s.gender, structure));
       }
 
       // Apply optional filters

@@ -207,7 +207,7 @@ export async function buildContainer(): Promise<Container> {
 
   // ----- Services -----
   const auth = makeAuthService(users);
-  const student = makeStudentService(students);
+  const student = makeStudentService(students, settings);
   const leader = makeLeaderService(leaders);
   const connection = makeConnectionService(connections, students, leaders, settings);
   const followup = makeFollowupService(
@@ -215,7 +215,7 @@ export async function buildContainer(): Promise<Container> {
     serviceSessions, serviceAttendance,
     lifegroupWeeks, lifegroupAttendance,
   );
-  const overview = makeOverviewService(students, leaders, connections);
+  const overview = makeOverviewService(students, leaders, connections, settings);
   const atRisk = makeAtRiskService(students, settings);
   const trends = makeTrendsService(students, serviceSessions, serviceAttendance, settings);
   const lifegroupStats = makeLifegroupStatsService(students, lifegroups, lifegroupWeeks, lifegroupAttendance, serviceSessions, settings);

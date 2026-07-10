@@ -25,14 +25,18 @@ export type TermKey = 'current' | 'previous' | null;
 
 const MS_PER_DAY = 86_400_000;
 
-// Map any date to the Saturday on/before it (the start of its Sat–Fri week). Term
-// boundaries are computed on week-bucketed dates so that service sessions (which
-// fall on Fridays) and lifegroup weeks (bucketed to their Saturday) classify into
-// the same term even at the term's edges.
-export function saturdayOf(isoDate: string): string {
+// Map any date to the start of its week (the day AFTER the service day). Term
+// boundaries are computed on week-bucketed dates so that a service session and
+// the lifegroup weeks around it classify into the same term even at a term's
+// edges. The default service day is Friday (5) → weeks start Saturday, i.e. the
+// original Sat–Fri buckets, byte-identical. A Wednesday (3) service → Thu–Wed
+// weeks, etc. (structure.serviceDayOfWeek, §5 of the generalisation design). The
+// name is kept for its many call sites; it no longer implies literal Saturday.
+export function saturdayOf(isoDate: string, serviceDayOfWeek: number = 5): string {
   const d = new Date(isoDate + 'T00:00:00Z');
   if (isNaN(d.getTime())) return isoDate;
-  const offset = (d.getUTCDay() + 1) % 7; // days since this week's Saturday
+  const weekStartDay = (serviceDayOfWeek + 1) % 7;      // day the week begins on
+  const offset = (d.getUTCDay() - weekStartDay + 7) % 7; // days since that week-start
   d.setUTCDate(d.getUTCDate() - offset);
   return d.toISOString().slice(0, 10);
 }

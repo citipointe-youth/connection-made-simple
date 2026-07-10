@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
-import { assertCan, can, canAccessGender, canAccessStudent } from './access-control';
-import type { IStudentRepository } from '../repositories/interfaces/entity-repositories';
+import { assertCan, can, canAccessGender, canAccessStudent, type StructureScope } from './access-control';
+import type { IStudentRepository, ISettingsRepository } from '../repositories/interfaces/entity-repositories';
 import type { Student } from '../core/entities/student';
 import type { Actor } from '../core/entities/user';
 import type { AtRiskStatus } from '../core/types/enums';
 import { computeQuad } from '../core/types/enums';
+import { MINISTRY_CONFIG_DEFAULTS } from '../core/ministry-config';
 import { NotFoundError, BadRequestError } from '../core/errors/app-error';
 
 const CreateStudentSchema = z.object({
@@ -35,20 +36,29 @@ function stripSensitive(s: Student): Student {
   return { ...s, mobile: null, parentPhone: null };
 }
 
-export function makeStudentService(repo: IStudentRepository): StudentService {
+export function makeStudentService(repo: IStudentRepository, settingsRepo?: ISettingsRepository): StudentService {
+  // Structure config for scoping (cohortModel/genderPolicy, §5). Optional repo so
+  // existing test harnesses constructing makeStudentService(repo) keep today's
+  // all-defaults behaviour; the container always supplies it in production.
+  async function structureScope(): Promise<StructureScope> {
+    if (!settingsRepo) return MINISTRY_CONFIG_DEFAULTS.structure;
+    return (await settingsRepo.getSettings()).ministryConfig.structure;
+  }
   return {
     async list(actor, filter) {
       assertCan(actor, 'student:read');
-      let students = await repo.findAll();
+      const [students0, structure] = await Promise.all([repo.findAll(), structureScope()]);
+      let students = students0;
 
-      // Role-based scoping (grade -> own grade + own gender; quad -> bracket + gender).
+      // Role-based scoping (grade -> own grade(s) + own gender; quad -> bracket +
+      // gender). cohortModel/genderPolicy from config relax this appropriately.
       // `crossGrade` widens this to "own gender only" — used by Connect Setup's Add
       // Students picker so a leader whose grades have been broadened (self-service,
       // see updateGrades) can actually be offered students from that other grade.
       if (actor.role === 'grade' || actor.role === 'quad') {
         students = filter?.crossGrade
-          ? students.filter((s) => canAccessGender(actor, s.gender))
-          : students.filter((s) => canAccessStudent(actor, s.grade, s.gender));
+          ? students.filter((s) => canAccessGender(actor, s.gender, structure))
+          : students.filter((s) => canAccessStudent(actor, s.grade, s.gender, structure));
       }
 
       // Optional filters
@@ -79,10 +89,11 @@ export function makeStudentService(repo: IStudentRepository): StudentService {
 
       // Grade logins may fetch a student of ANY grade (the cross-grade connect
       // exception) but only of their OWN gender.
-      if (actor.role === 'grade' && !canAccessGender(actor, s.gender)) {
+      const structure = await structureScope();
+      if (actor.role === 'grade' && !canAccessGender(actor, s.gender, structure)) {
         throw new NotFoundError('Student not found');
       }
-      if (actor.role === 'quad' && !canAccessStudent(actor, s.grade, s.gender)) {
+      if (actor.role === 'quad' && !canAccessStudent(actor, s.grade, s.gender, structure)) {
         throw new NotFoundError('Student not found');
       }
 
@@ -163,11 +174,12 @@ export function makeStudentService(repo: IStudentRepository): StudentService {
     async search(actor, query) {
       assertCan(actor, 'student:read');
       if (!query.trim()) throw new BadRequestError('Search query required');
-      let results = await repo.search(query);
+      const [results0, structure] = await Promise.all([repo.search(query), structureScope()]);
+      let results = results0;
 
       // Gender-scoped for grade + quad (cross-grade allowed — the connect exception).
       if (actor.role === 'quad' || actor.role === 'grade') {
-        results = results.filter((s) => canAccessGender(actor, s.gender));
+        results = results.filter((s) => canAccessGender(actor, s.gender, structure));
       }
 
       if (!can(actor, 'student:read:sensitive')) {

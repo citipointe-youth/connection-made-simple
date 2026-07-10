@@ -88,12 +88,26 @@ export function actorGrades(actor: Actor): number[] {
 }
 
 /**
+ * Structure config relevant to scoping (§5.1/§5.2 of the generalisation design).
+ * Passed by services from `settings.ministryConfig.structure`. Optional at every
+ * call site so the existing tests (which don't pass it) and any not-yet-migrated
+ * caller keep today's YS Brisbane behaviour: undefined ⇒ grades-quads + strict.
+ */
+export interface StructureScope {
+  cohortModel?: 'grades-quads' | 'none';
+  genderPolicy?: 'strict' | 'soft' | 'off';
+}
+
+/**
  * Returns true if the actor can access data for a given grade.
  * - grade: own grade only
  * - quad: all grades within their quad
  * - director/admin: all grades
+ * Under cohortModel 'none' there is no cohorting at all, so every login can
+ * access every grade (nothing is scoped/excluded by grade).
  */
-export function canAccessGrade(actor: Actor, grade: number | null): boolean {
+export function canAccessGrade(actor: Actor, grade: number | null, structure?: StructureScope): boolean {
+  if (structure?.cohortModel === 'none') return true;
   switch (actor.role) {
     case 'admin':
     case 'director':
@@ -149,20 +163,29 @@ function normGender(g: string | null | undefined): string | null {
   return s;
 }
 
-/** The gender an actor is scoped to (null = no restriction). */
-export function genderScopeOf(actor: Actor): 'male' | 'female' | null {
+/**
+ * The gender an actor is scoped to (null = no restriction). Under a non-strict
+ * genderPolicy ('soft' or 'off') gender never scopes reads for anyone — the
+ * existing ungendered-login seam promoted to a deployment-wide policy.
+ */
+export function genderScopeOf(actor: Actor, structure?: StructureScope): 'male' | 'female' | null {
+  // cohortModel 'none' means no cohorting at all — nothing may be excluded by
+  // grade OR gender (the design's "known trap": 'none' must never hide anyone),
+  // so gender scoping is off regardless of genderPolicy.
+  if (structure?.cohortModel === 'none') return null;
+  if (structure && structure.genderPolicy && structure.genderPolicy !== 'strict') return null;
   if (actor.role === 'quad') return quadGenderOf(actor.quad);
   if (actor.role === 'grade') return actor.gender ?? null; // ungendered grade login = both
   return null; // director/admin
 }
 
-export function canAccessGender(actor: Actor, gender: string): boolean {
-  const scope = genderScopeOf(actor);
+export function canAccessGender(actor: Actor, gender: string, structure?: StructureScope): boolean {
+  const scope = genderScopeOf(actor, structure);
   if (scope == null) return true;
   return normGender(gender) === scope;
 }
 
 /** Combined grade + gender access — the canonical student-visibility check. */
-export function canAccessStudent(actor: Actor, grade: number | null, gender: string): boolean {
-  return canAccessGrade(actor, grade) && canAccessGender(actor, gender);
+export function canAccessStudent(actor: Actor, grade: number | null, gender: string, structure?: StructureScope): boolean {
+  return canAccessGrade(actor, grade, structure) && canAccessGender(actor, gender, structure);
 }

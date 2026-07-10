@@ -1299,8 +1299,12 @@ function _loginGender(u) {
   }
   return null;
 }
-// " Girls" / " Boys" / "" — suffix for gendered grade/quad tile labels.
-function _gsfx(gender) { return gender === 'female' ? ' Girls' : gender === 'male' ? ' Boys' : ''; }
+// " Girls" / " Boys" / "" — suffix for gendered grade/quad tile labels. Suppressed
+// entirely under genderPolicy 'off' (no gendered UI anywhere — §5, phase 6b).
+function _gsfx(gender) {
+  if (_genderHidden()) return '';
+  return gender === 'female' ? ' Girls' : gender === 'male' ? ' Boys' : '';
+}
 
 // ── Multi-grade grade accounts (§5.1a) ──
 // A grade login may now be scoped to one OR more grades. `u.grades` (array) is
@@ -1323,7 +1327,27 @@ function gradesLabel(grades) {
 // this single helper.)
 function gradeBadgeLabel(u) {
   const g = userGrades(u);
-  return g.length > 1 ? ('Grades ' + gradesLabel(g)) : ('Grade ' + (g[0] != null ? g[0] : ''));
+  const w = _gradeWord();
+  return g.length > 1 ? (w + 's ' + gradesLabel(g)) : (w + ' ' + (g[0] != null ? g[0] : ''));
+}
+
+// ── Structure config accessors (§5/§6b). Mirror the backend defaults so an
+// absent/empty ministryConfig reads as YS Brisbane behaviour. Keep in sync with
+// src/core/ministry-config.ts. ──
+const _DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function _structure() { return (S.settings && S.settings.ministryConfig && S.settings.ministryConfig.structure) || {}; }
+function _cohortModel() { return _structure().cohortModel || 'grades-quads'; }
+function _cohorted() { return _cohortModel() !== 'none'; }        // false = no grade/quad cohorting at all
+function _genderPolicy() { return _structure().genderPolicy || 'strict'; }
+function _genderHidden() { return _genderPolicy() === 'off'; }    // hide gendered UI (suffixes, filters)
+function _gradeWord() { return _structure().gradeLabel || 'Grade'; } // "Grade" | "Year"
+function _serviceDow() { const d = _structure().serviceDayOfWeek; return typeof d === 'number' ? d : 5; }
+function _serviceDayName() { return _DAY_NAMES[_serviceDow()] || 'Friday'; }
+function _gradeList() {
+  const s = _structure();
+  const mn = typeof s.gradeMin === 'number' ? s.gradeMin : 7;
+  const mx = typeof s.gradeMax === 'number' ? s.gradeMax : 12;
+  const a = []; for (let g = mn; g <= mx; g++) a.push(g); return a;
 }
 
 // ============================================================
@@ -1865,9 +1889,10 @@ async function _renderHomeInner(stale) {
       // Connection Summary for grade logins now lives on Connect Setup (Rec 4a).
       // Connection by Grade bars — rendered FIRST (above Attendance/Lifegroups),
       // so leaders see the connection gap before the raw attendance numbers.
-      if (['admin', 'director'].includes(u.role)) {
+      // Hidden entirely under cohortModel 'none' (no grade cohorting — §6b).
+      if (_cohorted() && ['admin', 'director'].includes(u.role)) {
         // Director/admin: each grade row split into girls (left) and boys (right).
-        const grades = [7,8,9,10,11,12].filter(gr => sc.some(s => s.grade === gr));
+        const grades = _gradeList().filter(gr => sc.some(s => s.grade === gr));
         if (grades.length) {
           const half = (list) => {
             const tot = list.length, con = list.filter(s => _connSet.has(s.id)).length;
@@ -2006,12 +2031,9 @@ async function renderHomeFollowup() {
 
   const changeBtn = `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="setMyLeaderId(null);renderHomeFollowup()">Not you?</button>`;
   // Each "not seen" list reflects the most recent session/week — label it with the
-  // Friday that ends that Sat–Fri week so the leader knows which week they're chasing up.
-  // NOTE: "Friday" here is left as a literal — structure.serviceDayOfWeek
-  // (design doc 03 §3.3) is functional, not just a label (it also drives
-  // _fridayLabel()'s date math and week bucketing), and is explicitly phase 6
-  // scope (structure config) — out of bounds for this phase's label sweep.
-  const svcTitle = 'Not Seen Last Friday' + (data.latestSvcDate ? ` (${_fridayLabel(data.latestSvcDate)})` : '');
+  // service day that ends that week so the leader knows which week they're chasing up.
+  // serviceDayOfWeek (§5, phase 6b) drives both the word and _fridayLabel()'s date math.
+  const svcTitle = 'Not Seen Last ' + _serviceDayName() + (data.latestSvcDate ? ` (${_fridayLabel(data.latestSvcDate)})` : '');
   const grpTitle = 'Not At A ' + L('smallGroup') + ' Last Week' + (data.latestGrpDate ? ` (ending ${_fridayLabel(data.latestGrpDate)})` : '');
   let h = `<div class="sh" style="display:flex;align-items:center;justify-content:space-between;font-size:13px"><span>Follow Up · ${esc(data.leader.fullName)} ${helpTip("These are students who've attended a service or lifegroup recently, but weren't here last service.")}</span>${changeBtn}</div>`;
   h += _followupListHtml('Birthdays this week', data.birthdays, 'No birthdays this week');
@@ -2036,13 +2058,15 @@ async function _saveFollowupSmsTemplate(leaderId) {
   } catch (e) { toast(e.message); }
 }
 
-// Friday that ends the Sat–Fri week containing an ISO date, formatted "D/M" (Australian day/month).
+// The service day that ends the week containing an ISO date, formatted "D/M"
+// (Australian day/month). Generalised from Friday to structure.serviceDayOfWeek
+// (§5, phase 6b); default 5 → the old Friday-ending behaviour, byte-identical.
 function _fridayLabel(iso) {
   const p = String(iso).slice(0, 10).split('-');
   if (p.length !== 3) return '';
   const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
   if (isNaN(d.getTime())) return '';
-  const off = (12 - d.getDay()) % 7; // days until this week's Friday
+  const off = (_serviceDow() - d.getDay() + 7) % 7; // days until this week's service day
   d.setDate(d.getDate() + off);
   return `${d.getDate()}/${d.getMonth() + 1}`;
 }
@@ -2129,7 +2153,7 @@ function showSendNotification() {
   if (u.role === 'admin' || u.role === 'director') {
     opts += '<option value="all">Everyone</option>';
     ['g79','b79','g1012','b1012'].forEach(q => { opts += `<option value="quad:${q}">${QUAD_LABELS[q]||q}</option>`; });
-    [7,8,9,10,11,12].forEach(gr => {
+    _gradeList().forEach(gr => {
       opts += `<option value="grade:${gr}:female">Grade ${gr} Girls</option>`;
       opts += `<option value="grade:${gr}:male">Grade ${gr} Boys</option>`;
     });
@@ -2327,7 +2351,7 @@ async function showLeaderDetail(id) {
 
 function showAddLeader() {
   const u = S.user;
-  const allowedGrades = u.role === 'quad' ? quadGrades(u.quad) : [7,8,9,10,11,12];
+  const allowedGrades = u.role === 'quad' ? quadGrades(u.quad) : _gradeList();
   const gcbs = allowedGrades.map(g =>
     `<label style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><input type="checkbox" value="${g}" class="gcb" ${u.role==='grade'&&userGrades(u).includes(g)?'checked disabled':''}> Grade ${g}</label>`
   ).join('');
@@ -2367,7 +2391,7 @@ async function showEditLeader(id) {
   // can see and connect students from those grades too — not just their own
   // default bracket. Gender stays locked for them regardless (see below).
   const canBroadenGrades = u.role === 'grade' || u.role === 'quad';
-  const allowedGrades = [7,8,9,10,11,12];
+  const allowedGrades = _gradeList();
   const gcbs = allowedGrades.map(g =>
     `<label style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><input type="checkbox" value="${g}" class="gcb" ${l.grades?.includes(g)?'checked':''}> Grade ${g}</label>`
   ).join('');
@@ -2532,7 +2556,7 @@ function renderConnectView() {
   // grade's leaders); quad logins get a grade filter for their bracket but no
   // gender filter (leaders are already their gender); director/admin get both.
   const fGrades = u.role === 'quad' ? quadGrades(u.quad)
-    : ['director','admin'].includes(u.role) ? [7,8,9,10,11,12] : [];
+    : ['director','admin'].includes(u.role) ? _gradeList() : [];
   const showGender = ['director','admin'].includes(u.role);
   const gChips = fGrades.map(g =>
     `<button class="fc ${gf.has(g)?'on':''}" onclick="toggleAF('g',${g})" aria-pressed="${gf.has(g)}">${g}</button>`
@@ -3006,7 +3030,7 @@ async function renderUpcomingBirthdays() {
     body += `<div style="display:flex;gap:8px;margin-bottom:12px">
       <select class="fs" style="flex:1" onchange="setBdayFilter('grade', this.value ? Number(this.value) : null)">
         <option value="">All grades</option>
-        ${[7,8,9,10,11,12].map(g => `<option value="${g}" ${_bdayFilter.grade === g ? 'selected' : ''}>Grade ${g}</option>`).join('')}
+        ${_gradeList().map(g => `<option value="${g}" ${_bdayFilter.grade === g ? 'selected' : ''}>Grade ${g}</option>`).join('')}
       </select>
       <select class="fs" style="flex:1" onchange="setBdayFilter('gender', this.value || null)">
         <option value="">All genders</option>
@@ -3098,7 +3122,7 @@ async function renderMyStudents() {
   // all years + gender.
   const mu = S.user;
   const myYears = mu.role === 'quad' ? quadGrades(mu.quad)
-    : ['director','admin'].includes(mu.role) ? [7,8,9,10,11,12] : [];
+    : ['director','admin'].includes(mu.role) ? _gradeList() : [];
   const showG = ['director','admin'].includes(mu.role);
   const yearChips = myYears.map(g =>
     `<button class="chip ${_lvF.year.has(g) ? 'c-accent' : 'c-neutral'}" style="cursor:pointer;border:none" onclick="tLvF('year','${g}')">Yr ${g}</button>`).join('');
@@ -3242,7 +3266,7 @@ async function renderAtRisk() {
   _arScoped = scoped;
 
   const arGrades = u.role==='grade' ? [] : u.role==='quad'
-    ? (u.quad==='g79'||u.quad==='b79'?[7,8,9]:[10,11,12]) : [7,8,9,10,11,12];
+    ? (u.quad==='g79'||u.quad==='b79'?[7,8,9]:[10,11,12]) : _gradeList();
   const arGenders = ['director','admin'].includes(u.role) ? ['male','female'] : [];
   const gChips = arGrades.map(g => `<button class="fc ${_arFilter.grade==g?'on':''}" onclick="setArFilter('grade',${g})">${g}</button>`).join('');
   const dChips = arGenders.map(g => `<button class="fc ${_arFilter.gender===g?'on':''}" onclick="setArFilter('gender','${g}')">${g.charAt(0).toUpperCase()+g.slice(1)}</button>`).join('');
@@ -3497,7 +3521,7 @@ function renderStudentView() {
   const u = S.user;
   const ssGrades = u.role==='grade' ? [] : u.role==='quad'
     ? (u.quad==='g79'||u.quad==='b79'?[7,8,9]:[10,11,12])
-    : [7,8,9,10,11,12];
+    : _gradeList();
   const ssGenders = ['director','admin'].includes(u.role) ? ['male','female'] : [];
   const gChips = ssGrades.map(g => `<button class="fc ${gf.has(g)?'on':''}" onclick="toggleSF('g',${g})">${g}</button>`).join('');
   const dChips = ssGenders.map(g => `<button class="fc ${df.has(g)?'on':''}" onclick="toggleSF('d','${g}')">${g.charAt(0).toUpperCase()+g.slice(1)}</button>`).join('');
@@ -3799,7 +3823,7 @@ async function renderTrends() {
 
   // Compute per-grade stats from students
   function gradeStats(sc) {
-    return [7,8,9,10,11,12].map(gr => {
+    return _gradeList().map(gr => {
       const gs = sc.filter(s => s.grade === gr);
       const tot = gs.reduce((s,x)=>s+x.svcTotal,0);
       const att = gs.reduce((s,x)=>s+x.svcAttended,0);
@@ -3838,7 +3862,7 @@ async function renderTrends() {
   const lifegroupsOn = !(S.settings && S.settings.ministryConfig && S.settings.ministryConfig.modules && S.settings.ministryConfig.modules.lifegroups === false);
   if (!lifegroupsOn && _trTab === 'grp') _trTab = 'svc';
   body += `<div class="tbbar">
-    <button class="tbbtn ${_trTab==='svc'?'on':''}" onclick="_trTab='svc';renderTrends()">Fridays</button>
+    <button class="tbbtn ${_trTab==='svc'?'on':''}" onclick="_trTab='svc';renderTrends()">${esc(_serviceDayName() + 's')}</button>
     ${lifegroupsOn ? `<button class="tbbtn ${_trTab==='grp'?'on':''}" onclick="_trTab='grp';renderTrends()">${L('smallGroupPlural')}</button>` : ''}
   </div>`;
 
@@ -4034,7 +4058,7 @@ async function exportTrendsCSV() {
   try {
     const students = await API.get('/students');
     const rows = [['Grade','Students','Seen Svc','Avg Svc Sess','Grp Enrolled','Seen Grp','Avg Grp Sess']];
-    for (const gr of [7,8,9,10,11,12]) {
+    for (const gr of _gradeList()) {
       const gs = students.filter(s=>s.grade===gr);
       if (!gs.length) continue;
       const u=gs.filter(s=>s.svcAttended>0).length;
@@ -4586,7 +4610,7 @@ async function renderAdminView(settings, users) {
       <div class="form-row">
         <div class="fg"><label class="fl">Min attendance for a valid service</label>
           <input class="fi" id="s-minatt" type="number" min="0" max="2000" value="${settings.serviceMinAttendance ?? 100}">
-          <div class="help-text">Fridays below this total attendance are disregarded (holidays / breaks) — excluded from averages and attendance rates</div>
+          <div class="help-text">${esc(_serviceDayName())}s below this total attendance are disregarded (holidays / breaks) — excluded from averages and attendance rates</div>
         </div>
         <div class="fg"><label class="fl">Term Gap (days)</label>
           <input class="fi" id="s-tg" type="number" min="1" max="90" value="${settings.termGapDays||14}">
@@ -4954,15 +4978,82 @@ function renderMinistrySetup() {
     }
     b += `<button class="btn btn-ghost btn-full" onclick="closeMinistrySetup()">Cancel</button>`;
   } else {
-    // SETUP-STEP-STUB: steps 1 (branding), 2 (terminology), 3 (structure),
-    // 4 (roles), 5 (modules) fine-tuning UI lands in later phases (2/3 for
-    // branding/terminology/modules; 6/7 — the Opus session — for structure/roles).
-    // For now this single screen shows the preset's resulting config and saves it.
+    // Fine-tuning. Branding/terminology/modules editors remain phase 2/3 scope
+    // (still stubbed); the STRUCTURE and ROLES sections below are phase 6/7's own
+    // deliverable and are fully editable. Everything is applied to _setupDraft.
+    const st = cfg.structure || {};
+    const dst = MINISTRY_CONFIG_DEFAULTS_CLIENT.structure;
+    const rl = cfg.roles || {};
+    const drl = MINISTRY_CONFIG_DEFAULTS_CLIENT.roles;
+    const roleModel = rl.model || drl.model;
+    const cohort = st.cohortModel || dst.cohortModel;
+    const gLabel = st.gradeLabel != null ? st.gradeLabel : dst.gradeLabel;
+    const gMin = st.gradeMin != null ? st.gradeMin : dst.gradeMin;
+    const gMax = st.gradeMax != null ? st.gradeMax : dst.gradeMax;
+    const gPolicy = st.genderPolicy || dst.genderPolicy;
+    const svcDay = st.serviceDayOfWeek != null ? st.serviceDayOfWeek : dst.serviceDayOfWeek;
+
+    // Orphaned-accounts warning: switching to cohortModel 'none' leaves any
+    // existing grade/quad logins with no cohort to scope to. Never deletes
+    // anything — just flags them. (Also flags grade accounts whose grade(s) now
+    // fall outside the configured range.)
+    const users = _adminData.users || [];
+    let orphanNote = '';
+    if (cohort === 'none') {
+      const gq = users.filter(u => u.role === 'grade' || u.role === 'quad');
+      if (gq.length) orphanNote = `${gq.length} existing grade/quad account${gq.length===1?'':'s'} (${gq.map(u=>esc(u.displayName)).join(', ')}) will have no cohort to scope to under “no cohorting”. Nothing is deleted — reassign or remove them in Accounts.`;
+    } else {
+      const outOfRange = users.filter(u => u.role === 'grade' && userGrades(u).some(g => g < gMin || g > gMax));
+      if (outOfRange.length) orphanNote = `${outOfRange.length} grade account${outOfRange.length===1?'':'s'} cover grades outside ${gMin}–${gMax} and won't fully match students. Nothing is deleted — adjust them in Accounts.`;
+    }
+
+    const dayOpts = _DAY_NAMES.map((n, i) => `<option value="${i}" ${i===svcDay?'selected':''}>${n}</option>`).join('');
+    const roleLabelRows = (roleModel === 'flat'
+      ? [['admin','Youth Pastor (admin)'],['director','Senior Leader (director)'],['leader','Junior Leader (leader)']]
+      : [['grade','Grade'],['quad','Quad'],['director','Director'],['admin','Admin'],['leader','Leader']]
+    ).map(([k, hint]) => {
+      const v = (rl.labels && rl.labels[k] != null) ? rl.labels[k] : drl.labels[k];
+      return `<div class="fg"><label class="fl">${esc(hint)}</label><input class="fi" value="${esc(v)}" onchange="_setupSet('roles.labels.${k}', this.value)"></div>`;
+    }).join('');
+
     b += `<div class="card">
-      <div class="sh" style="margin-top:0">Review &amp; Save</div>
-      <p class="help-text" style="margin-bottom:10px">Fine-tuning screens for branding, terminology, structure, roles and modules are coming soon. This preset has been applied below — save to keep it, or cancel to discard.</p>
-      <pre style="font-size:11px;background:var(--paper-dark);padding:10px;border-radius:8px;overflow-x:auto;max-height:300px">${esc(JSON.stringify(cfg, null, 2))}</pre>
-      <div style="display:flex;gap:8px;margin-top:10px">
+      <div class="sh" style="margin-top:0">Structure</div>
+      <div class="fg"><label class="fl">Cohort model ${helpTip('“Grades + quads” = the graded model (grade/quad logins scope by grade & gender). “No cohorting” = a flat ministry: nobody is scoped by grade/gender and the grade/quad breakdowns are hidden.')}</label>
+        <select class="fs" onchange="_setupSet('structure.cohortModel', this.value)">
+          <option value="grades-quads" ${cohort==='grades-quads'?'selected':''}>Grades + quads (graded)</option>
+          <option value="none" ${cohort==='none'?'selected':''}>No cohorting (flat)</option>
+        </select></div>
+      ${orphanNote ? `<div class="alert al-warn" style="margin-bottom:10px">${orphanNote}</div>` : ''}
+      <div class="fg"><label class="fl">Grade word</label>
+        <select class="fs" onchange="_setupSet('structure.gradeLabel', this.value)">
+          ${['Grade','Year'].map(w=>`<option ${gLabel===w?'selected':''}>${w}</option>`).join('')}
+        </select></div>
+      <div style="display:flex;gap:8px">
+        <div class="fg" style="flex:1"><label class="fl">Lowest grade</label><input class="fi" type="number" value="${gMin}" onchange="_setupSetNum('structure.gradeMin', this.value)"></div>
+        <div class="fg" style="flex:1"><label class="fl">Highest grade</label><input class="fi" type="number" value="${gMax}" onchange="_setupSetNum('structure.gradeMax', this.value)"></div>
+      </div>
+      <div class="fg"><label class="fl">Gender policy ${helpTip('Strict = leaders connect within their own gender and reads are gender-scoped (current YS Brisbane). Soft = gender shown but never blocks. Off = no gendered UI at all.')}</label>
+        <select class="fs" onchange="_setupSet('structure.genderPolicy', this.value)">
+          ${[['strict','Strict'],['soft','Soft'],['off','Off']].map(([v,l])=>`<option value="${v}" ${gPolicy===v?'selected':''}>${l}</option>`).join('')}
+        </select></div>
+      <div class="fg"><label class="fl">Service day ${helpTip('The night your main service runs. Drives week bucketing for terms and the follow-up “not seen last …” labels, not just wording.')}</label>
+        <select class="fs" onchange="_setupSetNum('structure.serviceDayOfWeek', this.value)">${dayOpts}</select></div>
+    </div>
+    <div class="card">
+      <div class="sh" style="margin-top:0">Roles</div>
+      <div class="fg"><label class="fl">Role model ${helpTip('Graded = five roles (grade, quad, director, admin, + leader). Flat = a small ministry: Youth Pastor / Senior Leader / Junior Leader, mapped onto admin / director / leader.')}</label>
+        <select class="fs" onchange="_setupSet('roles.model', this.value)">
+          <option value="graded" ${roleModel==='graded'?'selected':''}>Graded</option>
+          <option value="flat" ${roleModel==='flat'?'selected':''}>Flat</option>
+        </select></div>
+      <div class="help-text" style="margin-bottom:8px">Labels shown in the account picker and role badges. The new <b>Junior Leader</b> (leader) role sees only their own connected students.</div>
+      ${roleLabelRows}
+    </div>
+    <div class="card">
+      <div class="sh" style="margin-top:0">Review</div>
+      <pre style="font-size:11px;background:var(--paper-dark);padding:10px;border-radius:8px;overflow-x:auto;max-height:220px">${esc(JSON.stringify(cfg, null, 2))}</pre>
+      <div class="help-text" style="margin:6px 0">Branding, terminology and module fine-tuning screens are still coming; the preset already set sensible values for those. Changes may take a minute to appear everywhere after saving.</div>
+      <div style="display:flex;gap:8px;margin-top:6px">
         <button class="btn btn-ghost" onclick="_setupStep=0;renderMinistrySetup()">Back</button>
         <button class="btn btn-primary" style="flex:1" onclick="saveMinistrySetup()">Save &amp; Close</button>
       </div>
@@ -4971,6 +5062,22 @@ function renderMinistrySetup() {
 
   setApp(b);
 }
+
+// Set a nested field in the setup draft (e.g. 'structure.cohortModel') and
+// re-render so dependent UI (the orphaned-accounts warning, role-label rows)
+// updates immediately.
+function _setupSet(path, val) {
+  if (!_setupDraft) _setupDraft = {};
+  const parts = path.split('.');
+  let o = _setupDraft;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (o[parts[i]] == null || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+    o = o[parts[i]];
+  }
+  o[parts[parts.length - 1]] = val;
+  renderMinistrySetup();
+}
+function _setupSetNum(path, val) { const n = parseInt(val, 10); _setupSet(path, isNaN(n) ? 0 : n); }
 
 let _adminData = { settings: {}, users: [] };
 
@@ -5077,7 +5184,7 @@ function showAddUser() {
 // class `ugcb` so the two don't collide). `sel` = pre-checked grades.
 function _accGradeChecks(sel) {
   const set = new Set(sel || []);
-  return [7,8,9,10,11,12].map(g =>
+  return _gradeList().map(g =>
     `<label style="display:inline-flex;align-items:center;gap:6px;margin:0 12px 5px 0"><input type="checkbox" value="${g}" class="ugcb" ${set.has(g)?'checked':''}> ${g}</label>`
   ).join('');
 }

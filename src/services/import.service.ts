@@ -22,6 +22,7 @@ import { computeQuad } from '../core/types/enums';
 import { BadRequestError } from '../core/errors/app-error';
 import { computeStatus } from './atrisk.service';
 import { computeStudentAggregates, emptyStudentAggregate, type AggregateResult } from './aggregates';
+import { saturdayOf } from './terms';
 // Deliberate, narrow exception to "services depend on repo interfaces only":
 // atomicity requires a real DB transaction handle, which only the Supabase
 // layer can provide. Only used when `sql` is passed (PERSISTENCE=supabase);
@@ -29,16 +30,14 @@ import { computeStudentAggregates, emptyStudentAggregate, type AggregateResult }
 import type { SqlClient } from '../repositories/supabase/client';
 import { bindImportRepos } from '../repositories/supabase/with-transaction';
 
-// A "week" runs Saturday→Friday — the calendar week that contains that week's
-// Friday service. Map any meeting date to the Saturday on/before it so lifegroup
-// attendance is bucketed per week (a group that meets twice in a week counts as
-// one week).
-function weekStartOf(isoDate: string): string {
-  const d = new Date(isoDate + 'T00:00:00Z');
-  if (isNaN(d.getTime())) return isoDate;
-  const offset = (d.getUTCDay() + 1) % 7; // days since this week's Saturday
-  d.setUTCDate(d.getUTCDate() - offset);
-  return d.toISOString().slice(0, 10);
+// A "week" runs from the day after the service day through the service day — the
+// calendar week that contains that week's service. Map any meeting date to the
+// week-start on/before it so lifegroup attendance is bucketed per week (a group
+// that meets twice in a week counts as one week). Default service day Friday (5)
+// → Sat–Fri weeks, byte-identical to before (structure.serviceDayOfWeek, §5).
+// Shares terms.ts's saturdayOf so the anchor can't drift between the two.
+function weekStartOf(isoDate: string, serviceDayOfWeek: number = 5): string {
+  return saturdayOf(isoDate, serviceDayOfWeek);
 }
 
 // Tolerates "Year 7", "Grade 7", "7th", "Yr 7" (design doc 03 §6.2 point 2) —
@@ -51,20 +50,23 @@ function preprocessGradeText(v: unknown): unknown {
   return m ? m[0] : v;
 }
 
-const ServiceRowSchema = z.object({
-  first_name: z.string().min(1),
-  last_name: z.string().min(1),
-  gender: z.string(),
-  // TODO(phase 6/Opus): read structure.gradeMin/gradeMax from ministryConfig
-  // instead of the hardcoded 7-12 once cohort structure is configurable.
-  grade: z.preprocess(preprocessGradeText, z.coerce.number().int().min(7).max(12).nullable().optional()),
-  mobile: z.string().optional(),
-  phone: z.string().optional(),
-  parent_phone: z.string().optional(),
-  guardian_phone: z.string().optional(),
-  date_of_birth: z.string().optional(),
-  birthday: z.string().optional(),
-});
+// Built per-import from structure.gradeMin/gradeMax (§5.1a) — the grade range is
+// now configurable, so a grade outside it is *reported* (row skipped with a
+// reason) rather than silently accepted. Defaults yield the old 7–12 bound.
+function makeServiceRowSchema(gradeMin: number, gradeMax: number) {
+  return z.object({
+    first_name: z.string().min(1),
+    last_name: z.string().min(1),
+    gender: z.string(),
+    grade: z.preprocess(preprocessGradeText, z.coerce.number().int().min(gradeMin).max(gradeMax).nullable().optional()),
+    mobile: z.string().optional(),
+    phone: z.string().optional(),
+    parent_phone: z.string().optional(),
+    guardian_phone: z.string().optional(),
+    date_of_birth: z.string().optional(),
+    birthday: z.string().optional(),
+  });
+}
 
 const GroupMemberSchema = z.object({
   first_name: z.string().min(1),
@@ -329,6 +331,10 @@ export function makeImportService(
 
       // Process all rows in memory — compute final svcAttended/svcTotal/atRiskStatus here
       // so the final student save pass is eliminated entirely.
+      const ServiceRowSchema = makeServiceRowSchema(
+        settings.ministryConfig.structure.gradeMin,
+        settings.ministryConfig.structure.gradeMax,
+      );
       for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
         const rawRow = rows[rowIndex];
         const parsed = ServiceRowSchema.safeParse(rawRow);
@@ -446,6 +452,7 @@ export function makeImportService(
       const weekStartById = new Map(allWeeks.map((w) => [w.id, w.weekStart]));
       const agg = computeStudentAggregates({
         termGapDays: settings.termGapDays,
+        serviceDayOfWeek: settings.ministryConfig.structure.serviceDayOfWeek,
         serviceSessions: sessionsToCreate.map((s) => ({ id: s.id, date: s.sessionDate, valid: s.isValid })),
         serviceAttendance: attendanceRecords,
         weekStartById,
@@ -593,7 +600,7 @@ export function makeImportService(
         newLifegroups.push(lifegroup);
         groupsAdded++;
 
-        const weekOfIdx = group.meetings.map((d) => weekStartOf(d));
+        const weekOfIdx = group.meetings.map((d) => weekStartOf(d, settings.ministryConfig.structure.serviceDayOfWeek));
 
         // Split roll into leaders ("(leader)" in the name) vs youth members.
         const youthMembers: typeof group.members = [];
@@ -727,6 +734,7 @@ export function makeImportService(
       const weekStartById = new Map(weeksToCreate.map((w) => [w.id, w.weekStart]));
       const agg = computeStudentAggregates({
         termGapDays: settings.termGapDays,
+        serviceDayOfWeek: settings.ministryConfig.structure.serviceDayOfWeek,
         serviceSessions: allSessions.map((s) => ({ id: s.id, date: s.sessionDate, valid: s.isValid })),
         serviceAttendance: allSvcAtt.map((r) => ({ studentId: r.studentId, sessionId: r.sessionId, attended: r.attended })),
         weekStartById,
