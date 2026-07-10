@@ -4220,6 +4220,29 @@ function showAllocationReport(r) {
   modal(h);
 }
 
+// Attendance import report (phase 4 — no silent drops): shows skipped rows
+// and same-upload name collisions instead of a bare success count. Only
+// called when there's something to show — a clean import just gets the
+// existing inline "Import complete" alert.
+function showImportReport(report) {
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const sec = (id, title, items, render) => {
+    if (!items.length) return '';
+    return `<div class="card drop" id="${id}" style="margin-bottom:8px;padding:11px">
+      <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="_drop('${id}')">
+        <span class="drop-chev" style="font-size:12px;color:var(--ink-faint);font-weight:800">›</span>
+        <div style="flex:1;font-size:13px;font-weight:700">${title} (${items.length})</div>
+      </div>
+      <div class="drop-body"><div style="font-size:12px;color:var(--ink-mid);padding-top:6px">${items.map(render).join('')}</div></div>
+    </div>`;
+  };
+  let h = `<div class="mo-title" style="font-size:16px;font-weight:800;margin-bottom:8px">Import report</div>`;
+  h += sec('ir-skip', 'Rows skipped', report.skippedRows, x => `<div>Row ${x.row}: ${esc(x.reason)}</div>`);
+  h += sec('ir-coll', 'Same-name rows in this file', report.nameCollisions, x => `<div>${esc(x.name)} — ${x.count} rows merged into one student</div>`);
+  h += `<button class="btn btn-primary btn-full" style="margin-top:12px" onclick="closeModal()">Done</button>`;
+  modal(h);
+}
+
 function handleUnifiedDrop(e) { const f = e.dataTransfer.files[0]; if (f) detectAndPreview(f); }
 function handleUnifiedFile(input) { const f = input.files[0]; if (f) detectAndPreview(f); }
 
@@ -4297,6 +4320,7 @@ function previewGroupImport(filename, parsed) {
 // so re-parsing and re-confirming a file mid-upload would otherwise be able to
 // kick off a second concurrent request.
 let _importBusy = false;
+let _lastImportReport = null;
 
 async function uploadServiceImport(filename) {
   const statusEl = document.getElementById('import-status');
@@ -4308,9 +4332,13 @@ async function uploadServiceImport(filename) {
   try {
     const result = await API.post('/import/csv', { rows, filename }, 90000);
     Cache.clear();
+    const r = result.report;
+    const issueCount = r ? r.skippedRows.length + r.nameCollisions.length : 0;
+    _lastImportReport = r || null; // read by showImportReport() — avoids inlining report data (names/reasons) into an onclick attribute
     statusEl.innerHTML = `<div class="alert al-ok" style="display:flex;align-items:flex-start;gap:6px;flex-direction:column">
       <div style="display:flex;align-items:center;gap:6px">${icS('check')} Import complete: ${result.studentsAdded} added, ${result.studentsUpdated} updated, ${result.sessionsAdded} sessions</div>
       <div style="font-size:12px;color:var(--ink-mid)">Tip: last-term comparisons refresh on the next service import — re-upload if last term's numbers look off.</div>
+      ${issueCount ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px" onclick="showImportReport(_lastImportReport)">${icS('info')} View import report (${issueCount} item${issueCount === 1 ? '' : 's'})</button>` : ''}
     </div>`;
   } catch (err) { statusEl.innerHTML = `<div class="alert al-err">Import failed: ${err.message}</div>`; }
   finally { _importBusy = false; }
@@ -4327,7 +4355,13 @@ async function uploadGroupImport(filename) {
   try {
     const result = await API.post('/import/group-csv', { groups: parsed.groups, filename }, 90000);
     Cache.clear();
-    statusEl.innerHTML = `<div class="alert al-ok" style="display:flex;align-items:center;gap:6px">${icS('check')} Import complete: ${result.groupsAdded} groups created, ${result.studentsAdded} students added, ${result.studentsUpdated} updated, ${result.weeksAdded} weeks</div>`;
+    const r = result.report;
+    const issueCount = r ? r.skippedRows.length + r.nameCollisions.length : 0;
+    _lastImportReport = r || null;
+    statusEl.innerHTML = `<div class="alert al-ok" style="display:flex;align-items:flex-start;gap:6px;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:6px">${icS('check')} Import complete: ${result.groupsAdded} groups created, ${result.studentsAdded} students added, ${result.studentsUpdated} updated, ${result.weeksAdded} weeks</div>
+      ${issueCount ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px" onclick="showImportReport(_lastImportReport)">${icS('info')} View import report (${issueCount} item${issueCount === 1 ? '' : 's'})</button>` : ''}
+    </div>`;
   } catch (err) { statusEl.innerHTML = `<div class="alert al-err">Import failed: ${err.message}</div>`; }
   finally { _importBusy = false; }
 }

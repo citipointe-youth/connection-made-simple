@@ -22,6 +22,12 @@ import { computeQuad } from '../core/types/enums';
 import { BadRequestError } from '../core/errors/app-error';
 import { computeStatus } from './atrisk.service';
 import { computeStudentAggregates, emptyStudentAggregate, type AggregateResult } from './aggregates';
+// Deliberate, narrow exception to "services depend on repo interfaces only":
+// atomicity requires a real DB transaction handle, which only the Supabase
+// layer can provide. Only used when `sql` is passed (PERSISTENCE=supabase);
+// importing this is side-effect-free (no eager connection).
+import type { SqlClient } from '../repositories/supabase/client';
+import { bindImportRepos } from '../repositories/supabase/with-transaction';
 
 // A "week" runs Saturday→Friday — the calendar week that contains that week's
 // Friday service. Map any meeting date to the Saturday on/before it so lifegroup
@@ -64,6 +70,19 @@ const GroupImportPayloadSchema = z.object({
   groups: z.array(GroupDataSchema),
 });
 
+// No silent drops (design doc 03 §6.1 point 2): every row that fails
+// validation, and every same-upload name collision, is counted and sampled
+// here instead of just vanishing into a success count. Mirrors the pattern
+// connection-allocations.ts already uses for its unmatched/ambiguous report.
+export interface ImportReport {
+  skippedRows: Array<{ row: number; reason: string }>;
+  nameCollisions: Array<{ name: string; count: number }>;
+}
+
+function emptyImportReport(): ImportReport {
+  return { skippedRows: [], nameCollisions: [] };
+}
+
 export interface ImportResult {
   importId: string;
   type: 'service';
@@ -71,6 +90,7 @@ export interface ImportResult {
   studentsAdded: number;
   studentsUpdated: number;
   sessionsAdded: number;
+  report: ImportReport;
 }
 
 export interface GroupImportResult {
@@ -81,6 +101,7 @@ export interface GroupImportResult {
   studentsAdded: number;
   studentsUpdated: number;
   weeksAdded: number;
+  report: ImportReport;
 }
 
 export interface ImportHistoryEntry {
@@ -170,6 +191,11 @@ export function makeImportService(
   lifegroupWeekRepo: ILifegroupWeekRepository,
   lifegroupAttendanceRepo: ILifegroupAttendanceRepository,
   leaderRepo: ILeaderRepository,
+  // Non-null only when PERSISTENCE=supabase — enables wrapping each import's
+  // delete+repopulate in a real DB transaction (see writeServiceImport/
+  // writeGroupImport below). In-memory/JSON mode has no transaction primitive
+  // and doesn't need one (single process, no partial-crash story to model).
+  sql: SqlClient | null = null,
 ): ImportService {
   return {
     async listHistory(actor) {
@@ -262,6 +288,12 @@ export function makeImportService(
 
       let studentsAdded = 0;
       let studentsUpdated = 0;
+      const report = emptyImportReport();
+      // Same-upload name-collision counter (design §6.1 point 3) — two rows in
+      // THIS file sharing a name key silently merge into one student today;
+      // now at least surfaced as a warning (not blocked — DOB, when present on
+      // both sides, is what actually disambiguates two same-named people).
+      const nameKeyRowCount = new Map<string, number>();
       // Map keyed by student ID — prevents duplicate-row errors when the CSV has the same
       // student appearing more than once (ON CONFLICT cannot affect same row twice)
       const studentsToSaveMap = new Map<string, Parameters<typeof studentRepo.save>[0]>();
@@ -271,10 +303,19 @@ export function makeImportService(
 
       // Process all rows in memory — compute final svcAttended/svcTotal/atRiskStatus here
       // so the final student save pass is eliminated entirely.
-      for (const rawRow of rows) {
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        const rawRow = rows[rowIndex];
         const parsed = ServiceRowSchema.safeParse(rawRow);
-        if (!parsed.success) continue;
+        if (!parsed.success) {
+          const reason = parsed.error.issues.map((i) => `${i.path.join('.') || 'row'}: ${i.message}`).join('; ');
+          report.skippedRows.push({ row: rowIndex, reason });
+          continue;
+        }
         const row = parsed.data;
+        {
+          const nk = `${row.first_name.toLowerCase()} ${row.last_name.toLowerCase()}`;
+          nameKeyRowCount.set(nk, (nameKeyRowCount.get(nk) ?? 0) + 1);
+        }
         const genderLower = row.gender.toLowerCase();
         const normalGender: 'male' | 'female' | 'other' =
           genderLower === 'f' || genderLower === 'female' ? 'female' :
@@ -395,36 +436,61 @@ export function makeImportService(
       const studentsToSave = applyAggregatesToStudents([...baseById.values()], agg, settings, now);
 
       // Replace prior service data (sessions + attendance cascade). Students and
-      // connections are NOT touched.
-      await attendanceRepo.deleteAll();
-      await sessionRepo.deleteAll();
+      // connections are NOT touched. Wrapped in a single DB transaction when
+      // running against Supabase — a crash/kill between the delete and the
+      // repopulate previously left the tables truncated-but-empty (the
+      // documented data-loss gap); sql.begin() rolls the whole block back on
+      // any thrown error, matching the in-memory path's effectively-atomic
+      // single-process behaviour.
+      const writeServiceImport = async (repos: {
+        attendance: IServiceAttendanceRepository; sessions: IServiceSessionRepository;
+        imports: IImportRepository; students: IStudentRepository;
+      }) => {
+        await repos.attendance.deleteAll();
+        await repos.sessions.deleteAll();
 
-      // All writes — ordered to satisfy FKs, each step a single bulk SQL statement
-      // 1. Import record first (service_sessions.import_id FK)
-      await importRepo.save({
-        id: importId, type: 'service', filename, fileHash: '',
-        rowCount: rows.length, sessionsAdded: 0, studentsAdded: 0, studentsUpdated: 0,
-        status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id,
-      });
+        // All writes — ordered to satisfy FKs, each step a single bulk SQL statement
+        // 1. Import record first (service_sessions.import_id FK)
+        await repos.imports.save({
+          id: importId, type: 'service', filename, fileHash: '',
+          rowCount: rows.length, sessionsAdded: 0, studentsAdded: 0, studentsUpdated: 0,
+          status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id,
+        });
 
-      // 2. Sessions + students — each a single bulk INSERT ... ON CONFLICT DO UPDATE
-      await sessionRepo.saveMany(sessionsToCreate);
-      await studentRepo.saveMany(studentsToSave);
+        // 2. Sessions + students — each a single bulk INSERT ... ON CONFLICT DO UPDATE
+        await repos.sessions.saveMany(sessionsToCreate);
+        await repos.students.saveMany(studentsToSave);
 
-      // 3. Attendance (depends on sessions + students)
-      await attendanceRepo.saveMany(attendanceRecords);
+        // 3. Attendance (depends on sessions + students)
+        await repos.attendance.saveMany(attendanceRecords);
 
-      // 4. Update import record with final counts
-      await importRepo.save({
-        id: importId, type: 'service', filename, fileHash: '',
-        rowCount: rows.length, sessionsAdded: dateKeys.length, studentsAdded, studentsUpdated,
-        status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id,
-      });
+        // 4. Update import record with final counts
+        await repos.imports.save({
+          id: importId, type: 'service', filename, fileHash: '',
+          rowCount: rows.length, sessionsAdded: dateKeys.length, studentsAdded, studentsUpdated,
+          status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id,
+        });
+      };
+
+      if (sql) {
+        await sql.begin(async (tx) => {
+          const r = bindImportRepos(tx as unknown as SqlClient); // TransactionSql structurally supports every tagged-template call the repos make; postgres.js just types it separately from Sql
+          await writeServiceImport({ attendance: r.attendance, sessions: r.sessions, imports: r.imports, students: r.students });
+        });
+      } else {
+        // In-memory/JSON persistence: single process, no partial-crash story
+        // worth modelling — no transaction primitive to wrap with anyway.
+        await writeServiceImport({ attendance: attendanceRepo, sessions: sessionRepo, imports: importRepo, students: studentRepo });
+      }
+
+      for (const [name, count] of nameKeyRowCount) {
+        if (count > 1) report.nameCollisions.push({ name, count });
+      }
 
       invalidateTrendsCache();
       invalidateLgStatsCache();
       invalidateOverviewCache();
-      return { importId, type: 'service', rowCount: rows.length, studentsAdded, studentsUpdated, sessionsAdded: dateKeys.length };
+      return { importId, type: 'service', rowCount: rows.length, studentsAdded, studentsUpdated, sessionsAdded: dateKeys.length, report };
     },
 
     async importGroupCsv(actor, payload, filename) {
@@ -436,20 +502,12 @@ export function makeImportService(
       const { groups } = parsed.data;
       if (groups.length === 0) throw new BadRequestError('No groups found in upload');
 
-      // Replace semantics: a group import is the authoritative lifegroup dataset.
-      // lifegroup_attendance cascades from BOTH lifegroups (lifegroup_id FK) and
-      // lifegroup_weeks (week_id FK), on delete cascade — truncating these two
-      // (no FK dependency between them, so safe to run concurrently) already
-      // clears attendance; an explicit separate attendance truncate is redundant.
-      // Students + connections are NOT touched.
-      await Promise.all([
-        lifegroupWeekRepo.deleteAll(),
-        lifegroupRepo.deleteAll(),
-      ]);
-
       // Everything this import needs to read, in one round-trip instead of two
       // separate sequential batches (sessions/attendance used later for the term
-      // split — no data dependency forces fetching them after the writes above).
+      // split). Read BEFORE the delete+write phase below — none of these tables
+      // are touched by this import, so there's no ordering dependency, and
+      // reading first keeps the delete/repopulate as one tight transactional
+      // block (see writeGroupImport below).
       const [allStudents, settings, existingLeaders, allSessions, allSvcAtt] = await Promise.all([
         studentRepo.findAll(),
         settingsRepo.getSettings(),
@@ -650,19 +708,58 @@ export function makeImportService(
       for (const { obj } of grpByStudent.values()) baseById.set(obj.id, obj);
       const studentsToSave = applyAggregatesToStudents([...baseById.values()], agg, settings, now);
 
-      // Writes, FK-safe order.
-      await importRepo.save({ id: importId, type: 'lifegroup', filename, fileHash: '', rowCount: 0, sessionsAdded: 0, studentsAdded: 0, studentsUpdated: 0, status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id });
-      await leaderRepo.saveMany([...leadersToWrite.values()]);
-      await lifegroupRepo.saveMany(newLifegroups);
-      await lifegroupWeekRepo.saveMany(weeksToCreate);
-      await studentRepo.saveMany(studentsToSave);
-      if (dedupedAttendance.length > 0) await lifegroupAttendanceRepo.saveMany(dedupedAttendance);
-      await importRepo.save({ id: importId, type: 'lifegroup', filename, fileHash: '', rowCount, sessionsAdded: weeksAdded, studentsAdded, studentsUpdated, status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id });
+      // Replace semantics: a group import is the authoritative lifegroup dataset.
+      // lifegroup_attendance cascades from BOTH lifegroups (lifegroup_id FK) and
+      // lifegroup_weeks (week_id FK), on delete cascade — truncating these two
+      // (no FK dependency between them, so safe to run concurrently) already
+      // clears attendance; an explicit separate attendance truncate is redundant.
+      // Students + connections are NOT touched. The delete AND every write below
+      // run in a single DB transaction (Supabase) — a crash/kill between the
+      // truncate and the repopulate previously left the group tables
+      // truncated-but-empty (the same data-loss gap as the service importer).
+      const writeGroupImport = async (repos: {
+        lifegroupWeeks: ILifegroupWeekRepository; lifegroups: ILifegroupRepository;
+        imports: IImportRepository; leaders: ILeaderRepository; students: IStudentRepository;
+        lifegroupAttendance: ILifegroupAttendanceRepository;
+      }) => {
+        await Promise.all([
+          repos.lifegroupWeeks.deleteAll(),
+          repos.lifegroups.deleteAll(),
+        ]);
+        await repos.imports.save({ id: importId, type: 'lifegroup', filename, fileHash: '', rowCount: 0, sessionsAdded: 0, studentsAdded: 0, studentsUpdated: 0, status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id });
+        await repos.leaders.saveMany([...leadersToWrite.values()]);
+        await repos.lifegroups.saveMany(newLifegroups);
+        await repos.lifegroupWeeks.saveMany(weeksToCreate);
+        await repos.students.saveMany(studentsToSave);
+        if (dedupedAttendance.length > 0) await repos.lifegroupAttendance.saveMany(dedupedAttendance);
+        await repos.imports.save({ id: importId, type: 'lifegroup', filename, fileHash: '', rowCount, sessionsAdded: weeksAdded, studentsAdded, studentsUpdated, status: 'ok', errorMessage: null, importedAt: now, importedBy: actor.id });
+      };
+
+      if (sql) {
+        await sql.begin(async (tx) => {
+          const r = bindImportRepos(tx as unknown as SqlClient); // TransactionSql structurally supports every tagged-template call the repos make; postgres.js just types it separately from Sql
+          await writeGroupImport({
+            lifegroupWeeks: r.lifegroupWeeks, lifegroups: r.lifegroups, imports: r.imports,
+            leaders: r.leaders, students: r.students, lifegroupAttendance: r.lifegroupAttendance,
+          });
+        });
+      } else {
+        await writeGroupImport({
+          lifegroupWeeks: lifegroupWeekRepo, lifegroups: lifegroupRepo, imports: importRepo,
+          leaders: leaderRepo, students: studentRepo, lifegroupAttendance: lifegroupAttendanceRepo,
+        });
+      }
 
       invalidateTrendsCache();
       invalidateLgStatsCache();
       invalidateOverviewCache();
-      return { importId, type: 'lifegroup', rowCount, groupsAdded, studentsAdded, studentsUpdated, weeksAdded };
+      // Group import has no per-row Zod validation step to fail (the payload
+      // is pre-structured by the SPA, not raw CSV rows) and a member appearing
+      // in more than one group is a legitimate, common case — not a collision
+      // — so there's no reliable same-upload duplicate-name signal here the
+      // way there is for the service importer. Report shape kept consistent
+      // with importServiceCsv for the SPA's report renderer either way.
+      return { importId, type: 'lifegroup', rowCount, groupsAdded, studentsAdded, studentsUpdated, weeksAdded, report: emptyImportReport() };
     },
 
     async deleteImport(actor, id) {

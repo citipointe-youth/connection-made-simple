@@ -219,7 +219,7 @@ export async function buildContainer(): Promise<Container> {
   const atRisk = makeAtRiskService(students, settings);
   const trends = makeTrendsService(students, serviceSessions, serviceAttendance, settings);
   const lifegroupStats = makeLifegroupStatsService(students, lifegroups, lifegroupWeeks, lifegroupAttendance, serviceSessions, settings);
-  const importService = makeImportService(students, serviceSessions, serviceAttendance, imports, settings, lifegroups, lifegroupWeeks, lifegroupAttendance, leaders);
+  const importService = makeImportService(students, serviceSessions, serviceAttendance, imports, settings, lifegroups, lifegroupWeeks, lifegroupAttendance, leaders, useSupabase ? sql : null);
   const settingsSvc = makeSettingsService(settings, audit);
   const account = makeAccountService(users);
   const admin = makeAdminService(

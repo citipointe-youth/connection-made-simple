@@ -380,4 +380,54 @@ describe('Import Service', () => {
     const leaders = await r.leaders.findAll();
     expect(leaders.find(l => l.fullName === 'Jane Doe')).toBeDefined();
   });
+
+  // ── Import report (phase 4 — no silent drops) ──
+  describe('import report', () => {
+    it('counts and reports bad rows instead of silently skipping them', async () => {
+      const r = makeRepos();
+      await initRepos(r);
+      const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+      const rows = [
+        { first_name: 'Alice', last_name: 'Smith', gender: 'female', grade: 9, '2025-02-07': true },
+        { first_name: '', last_name: 'NoFirstName', gender: 'female', '2025-02-07': true }, // fails min(1) on first_name
+        { first_name: 'Bob', last_name: '', gender: 'male', '2025-02-07': true }, // fails min(1) on last_name
+      ];
+      const result = await svc.importServiceCsv(ADMIN, rows, 'bad-rows.csv');
+
+      expect(result.studentsAdded).toBe(1); // only Alice made it through
+      expect(result.report.skippedRows).toHaveLength(2);
+      expect(result.report.skippedRows[0]).toMatchObject({ row: 1 });
+      expect(result.report.skippedRows[1]).toMatchObject({ row: 2 });
+      // Reasons are readable, not just a generic "invalid row" message.
+      expect(result.report.skippedRows[0]!.reason).toMatch(/first_name/);
+      expect(result.report.skippedRows[1]!.reason).toMatch(/last_name/);
+    });
+
+    it('reports a same-upload name collision without blocking the import', async () => {
+      const r = makeRepos();
+      await initRepos(r);
+      const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+      const rows = [
+        { first_name: 'Alice', last_name: 'Smith', gender: 'female', grade: 9, '2025-02-07': true },
+        { first_name: 'Alice', last_name: 'Smith', gender: 'female', grade: 10, '2025-02-07': true }, // same name, same file
+        { first_name: 'Bob', last_name: 'Jones', gender: 'male', grade: 9, '2025-02-07': true },
+      ];
+      const result = await svc.importServiceCsv(ADMIN, rows, 'collision.csv');
+
+      expect(result.report.nameCollisions).toEqual([{ name: 'alice smith', count: 2 }]);
+      // Not blocked — the import still completes (both rows merge into one student, existing behaviour).
+      const students = await r.students.findAll();
+      expect(students.find((s) => s.firstName === 'Bob')).toBeDefined();
+    });
+
+    it('a clean import reports empty skippedRows/nameCollisions', async () => {
+      const r = makeRepos();
+      await initRepos(r);
+      const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+      const result = await svc.importServiceCsv(ADMIN, [
+        { first_name: 'Alice', last_name: 'Smith', gender: 'female', grade: 9, '2025-02-07': true },
+      ], 'clean.csv');
+      expect(result.report).toEqual({ skippedRows: [], nameCollisions: [] });
+    });
+  });
 });
