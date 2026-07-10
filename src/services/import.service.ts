@@ -41,11 +41,23 @@ function weekStartOf(isoDate: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Tolerates "Year 7", "Grade 7", "7th", "Yr 7" (design doc 03 §6.2 point 2) —
+// extracts the first integer found rather than requiring a bare number.
+// Passes non-strings through untouched so the existing coerce/range checks
+// still run (and still reject/report anything with no digits at all).
+function preprocessGradeText(v: unknown): unknown {
+  if (typeof v !== 'string') return v;
+  const m = v.match(/\d{1,2}/);
+  return m ? m[0] : v;
+}
+
 const ServiceRowSchema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
   gender: z.string(),
-  grade: z.coerce.number().int().min(7).max(12).nullable().optional(),
+  // TODO(phase 6/Opus): read structure.gradeMin/gradeMax from ministryConfig
+  // instead of the hardcoded 7-12 once cohort structure is configurable.
+  grade: z.preprocess(preprocessGradeText, z.coerce.number().int().min(7).max(12).nullable().optional()),
   mobile: z.string().optional(),
   phone: z.string().optional(),
   parent_phone: z.string().optional(),
@@ -124,13 +136,27 @@ export interface ImportService {
   clearHistory(actor: Actor): Promise<void>;
 }
 
-function normalizeDob(raw: string | null | undefined): string | null {
+// dateOrder ('DMY' default = current behaviour) drives which of a slash-
+// separated date's two leading groups is the day vs the month — but only
+// when it's actually ambiguous. A group > 12 can only be a day, so it
+// auto-resolves regardless of the configured order (design doc 03 §6.2
+// point 3) — this is what lets a file mixing a few unambiguous dates not
+// misparse even under the "wrong" setting.
+function normalizeDob(raw: string | null | undefined, dateOrder: 'DMY' | 'MDY' = 'DMY'): string | null {
   if (!raw) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  // DD/MM/YYYY — Australian format common in Elvanto/UCare exports
-  const ddmm = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (ddmm) return `${ddmm[3]}-${ddmm[2]!.padStart(2, '0')}-${ddmm[1]!.padStart(2, '0')}`;
-  // MM/DD/YYYY fallback
+  const slash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) {
+    const a = parseInt(slash[1]!, 10);
+    const b = parseInt(slash[2]!, 10);
+    // First group > 12 can only be a day (so the format is D*/M*, regardless
+    // of dateOrder); second group > 12 can only be a day (so format is M*/D*).
+    const isDayFirst = a > 12 ? true : b > 12 ? false : dateOrder === 'DMY';
+    const day = isDayFirst ? slash[1]! : slash[2]!;
+    const month = isDayFirst ? slash[2]! : slash[1]!;
+    return `${slash[3]}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  // Dash-separated fallback (rare) — kept as the pre-existing MM-DD-YYYY reading.
   const mmdd = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
   if (mmdd) return `${mmdd[3]}-${mmdd[1]!.padStart(2, '0')}-${mmdd[2]!.padStart(2, '0')}`;
   const d = new Date(raw);
@@ -335,7 +361,7 @@ export function makeImportService(
           // wipes a birthday we already hold. A *present* value still updates it.
           const incomingMobile = row.mobile ?? row.phone ?? null;
           const incomingParentPhone = row.parent_phone ?? row.guardian_phone ?? null;
-          const incomingDob = normalizeDob(row.date_of_birth ?? row.birthday ?? null);
+          const incomingDob = normalizeDob(row.date_of_birth ?? row.birthday ?? null, settings.ministryConfig.import.dateOrder);
           baseStudent = {
             ...existing,
             grade: row.grade ?? existing.grade,
@@ -358,7 +384,7 @@ export function makeImportService(
             quad: computeQuad(grade, normalGender),
             mobile: row.mobile ?? row.phone ?? null,
             parentPhone: row.parent_phone ?? row.guardian_phone ?? null,
-            dateOfBirth: normalizeDob(row.date_of_birth ?? row.birthday ?? null),
+            dateOfBirth: normalizeDob(row.date_of_birth ?? row.birthday ?? null, settings.ministryConfig.import.dateOrder),
             svcAttended: 0,
             svcTotal: 0,
             grpAttended: 0,
@@ -546,9 +572,12 @@ export function makeImportService(
       // studentId -> running grp totals (a student can be in more than one group)
       const grpByStudent = new Map<string, { obj: Parameters<typeof studentRepo.save>[0]; attended: number; total: number }>();
 
-      // Matches "(leader)", "(leaders)", "(assistant leader)", "(assistant leaders)".
-      const LEADER_RE = /\(\s*(?:assistant\s+)?leaders?\s*\)/i;
-      const LEADER_RE_G = /\(\s*(?:assistant\s+)?leaders?\s*\)/ig;
+      // Matches "(<tag>)", "(<tag>s)", "(assistant <tag>)", "(assistant <tag>s)" —
+      // <tag> defaults to "leader" (import.leaderTag, design doc 03 §6.2 point 5)
+      // but some ministries use a different name-tag word for their group leads.
+      const leaderTag = (settings.ministryConfig.import.leaderTag || 'leader').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const LEADER_RE = new RegExp(`\\(\\s*(?:assistant\\s+)?${leaderTag}s?\\s*\\)`, 'i');
+      const LEADER_RE_G = new RegExp(`\\(\\s*(?:assistant\\s+)?${leaderTag}s?\\s*\\)`, 'ig');
 
       for (const group of groups) {
         const { grade: gGrade, gender: gGender } = parseGroupName(group.name);

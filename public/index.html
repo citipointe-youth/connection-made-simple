@@ -5213,13 +5213,17 @@ function computeQuad(grade,gender){
   if(grade>=10&&grade<=12)return isFemale?'g1012':'b1012';
   return null;
 }
-// Display-only shortening for named lifegroups: strips the "Brisbane - YS - "
-// prefix and trailing "Lifegroup" suffix when present, exact match only.
-// Underlying data/exports are untouched — this only affects what's rendered.
+// Display-only shortening for named lifegroups: strips any configured prefix
+// (labels.groupNameStrip, default ["Brisbane - YS - "]) and a trailing
+// smallGroup-label suffix ("Lifegroup" by default) when present, exact match
+// only. Underlying data/exports are untouched — this only affects what's rendered.
 function lgDisplayName(name){
   let n=String(name||'');
-  if(n.startsWith('Brisbane - YS - '))n=n.slice('Brisbane - YS - '.length);
-  if(n.endsWith('Lifegroup'))n=n.slice(0,-'Lifegroup'.length);
+  const labels=(S.settings&&S.settings.ministryConfig&&S.settings.ministryConfig.labels)||{};
+  const prefixes=labels.groupNameStrip||['Brisbane - YS - '];
+  for(const p of prefixes){ if(n.startsWith(p)){ n=n.slice(p.length); break; } }
+  const suffix=L('smallGroup');
+  if(n.endsWith(suffix))n=n.slice(0,-suffix.length);
   return n.trim()||String(name||'');
 }
 function fmtD(iso){if(!iso)return'—';const d=new Date(iso);return isNaN(d)?'—':d.getUTCDate()+'/'+(d.getUTCMonth()+1);}

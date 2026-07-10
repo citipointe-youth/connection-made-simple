@@ -430,4 +430,93 @@ describe('Import Service', () => {
       expect(result.report).toEqual({ skippedRows: [], nameCollisions: [] });
     });
   });
+
+  // ── Import dialect config (phase 5) ──
+  describe('dialect config', () => {
+    it('DMY default (unchanged behaviour): 03/04/2026 is 3 April', async () => {
+      const r = makeRepos();
+      await initRepos(r);
+      const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+      await svc.importServiceCsv(ADMIN, [
+        { first_name: 'Alice', last_name: 'Smith', gender: 'female', grade: 9, date_of_birth: '03/04/2026', '2025-02-07': true },
+      ], 'dmy.csv');
+      const [s] = await r.students.findAll();
+      expect(s!.dateOfBirth).toBe('2026-04-03');
+    });
+
+    it('import.dateOrder=MDY reinterprets an ambiguous slash date as month/day', async () => {
+      const r = makeRepos();
+      await initRepos(r);
+      const current = await r.settings.getSettings();
+      await r.settings.updateSettings({ ministryConfig: { ...current.ministryConfig, import: { ...current.ministryConfig.import, dateOrder: 'MDY' } } });
+      const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+      await svc.importServiceCsv(ADMIN, [
+        { first_name: 'Alice', last_name: 'Smith', gender: 'female', grade: 9, date_of_birth: '03/04/2026', '2025-02-07': true },
+      ], 'mdy.csv');
+      const [s] = await r.students.findAll();
+      expect(s!.dateOfBirth).toBe('2026-03-04'); // now read as March 4th, not April 3rd
+    });
+
+    it('an unambiguous date (day > 12) auto-resolves regardless of dateOrder', async () => {
+      const r = makeRepos();
+      await initRepos(r);
+      const current = await r.settings.getSettings();
+      await r.settings.updateSettings({ ministryConfig: { ...current.ministryConfig, import: { ...current.ministryConfig.import, dateOrder: 'MDY' } } });
+      const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+      await svc.importServiceCsv(ADMIN, [
+        { first_name: 'Alice', last_name: 'Smith', gender: 'female', grade: 9, date_of_birth: '25/12/2026', '2025-02-07': true },
+      ], 'unambig.csv');
+      const [s] = await r.students.findAll();
+      expect(s!.dateOfBirth).toBe('2026-12-25'); // 25 can only be a day, so this can't be misread as month 25
+    });
+
+    it('tolerates "Year 7" / "Grade 9" / "7th" grade text instead of a bare integer', async () => {
+      const r = makeRepos();
+      await initRepos(r);
+      const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+      const result = await svc.importServiceCsv(ADMIN, [
+        { first_name: 'Ann', last_name: 'A', gender: 'female', grade: 'Year 7', '2025-02-07': true },
+        { first_name: 'Bec', last_name: 'B', gender: 'female', grade: 'Grade 9', '2025-02-07': true },
+        { first_name: 'Cat', last_name: 'C', gender: 'female', grade: '7th', '2025-02-07': true },
+      ], 'grade-text.csv');
+      expect(result.report.skippedRows).toEqual([]);
+      const students = await r.students.findAll();
+      expect(students.find((s) => s.firstName === 'Ann')!.grade).toBe(7);
+      expect(students.find((s) => s.firstName === 'Bec')!.grade).toBe(9);
+      expect(students.find((s) => s.firstName === 'Cat')!.grade).toBe(7);
+    });
+
+    it('a genuinely unparsable grade (no digits) is reported, not silently nulled', async () => {
+      const r = makeRepos();
+      await initRepos(r);
+      const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+      const result = await svc.importServiceCsv(ADMIN, [
+        { first_name: 'Dee', last_name: 'D', gender: 'female', grade: 'Senior', '2025-02-07': true },
+      ], 'bad-grade.csv');
+      expect(result.report.skippedRows).toHaveLength(1);
+      expect(result.report.skippedRows[0]!.reason).toMatch(/grade/);
+    });
+
+    it('import.leaderTag lets a ministry use a different name-tag word than "leader"', async () => {
+      const r = makeRepos();
+      await initRepos(r);
+      const current = await r.settings.getSettings();
+      await r.settings.updateSettings({ ministryConfig: { ...current.ministryConfig, import: { ...current.ministryConfig.import, leaderTag: 'coach' } } });
+      const svc = makeImportService(r.students, r.sessions, r.attendance, r.imports, r.settings, r.lifegroups, r.lifegroupWeeks, r.lifegroupAttendance, r.leaders);
+      await svc.importGroupCsv(DIR, {
+        groups: [{
+          name: 'Grade 9 Girls Lifegroup',
+          meetings: ['2026-04-16'],
+          members: [
+            { first_name: 'Jane (coach)', last_name: 'Doe', attendance: [true] },
+            { first_name: 'Alice', last_name: 'Smith', attendance: [true] },
+          ],
+        }],
+      }, 'coach-tag.csv');
+      const leaders = await r.leaders.findAll();
+      expect(leaders.find((l) => l.fullName === 'Jane Doe')).toBeDefined();
+      const students = await r.students.findAll();
+      expect(students.find((s) => s.firstName === 'Jane')).toBeUndefined(); // recognised as a leader, not a youth attendee
+    });
+  });
 });
