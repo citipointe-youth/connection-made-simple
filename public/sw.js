@@ -1,10 +1,10 @@
-const CACHE = 'cms-v23';
+const CACHE = 'cms-v24';
 const APP_SHELL = ['/'];
 
 // API paths that should never be served from cache. NOTE: every API resource must
 // be listed here — a missing one (e.g. lifegroups) falls through to the cache-first
 // asset path and can get the SPA HTML cached under its URL, breaking JSON parsing.
-const API_RE = /^\/(auth|students|leaders|connections|overview|trends|lifegroups|at-risk|import|settings|admin|accounts|push|audits|health|batch)(\/|$|\?)/;
+const API_RE = /^\/(auth|students|leaders|connections|overview|trends|lifegroups|at-risk|import|settings|admin|accounts|push|audits|health|batch|manifest\.json)(\/|$|\?)/;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -58,7 +58,11 @@ self.addEventListener('fetch', (e) => {
 });
 
 self.addEventListener('push', (e) => {
-  let data = { title: 'Connection Made Simple', body: '', icon: '/icons/icon.svg', badge: '/icons/icon.svg' };
+  // Fallback only — every real notification's title comes from the push
+  // payload itself (push.service.ts's send() always takes an explicit title
+  // from the composer). The SW has no access to ministryConfig, so this
+  // generic product name is just for a malformed/empty payload.
+  let data = { title: 'Youth Connection', body: '', icon: '/icons/icon.svg', badge: '/icons/icon.svg' };
   try { data = { ...data, ...e.data.json() }; } catch (_) {}
   e.waitUntil(
     self.registration.showNotification(data.title, {

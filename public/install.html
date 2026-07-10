@@ -27,7 +27,7 @@
   <div class="logo-icon">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2a10 10 0 0 1 10 10M2 12A10 10 0 0 1 12 2"/><path d="M12 22a10 10 0 0 1-10-10M22 12a10 10 0 0 1-10 10"/></svg>
   </div>
-  <div><h1>Youth Connection</h1><p class="sub" style="margin:0">Add to your Home Screen</p></div>
+  <div><h1 class="js-appname">Youth Connection</h1><p class="sub" style="margin:0">Add to your Home Screen</p></div>
 </div>
 
 <div class="card">
@@ -35,7 +35,7 @@
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
     iPhone / iPad (Safari)
   </h2>
-  <div class="step"><div class="num">1</div><p>Open <strong>connection-made-simple.vercel.app</strong> in <strong>Safari</strong> (not Chrome or Firefox).</p></div>
+  <div class="step"><div class="num">1</div><p>Open <strong class="js-host">this app</strong> in <strong>Safari</strong> (not Chrome or Firefox).</p></div>
   <div class="step"><div class="num">2</div><p>Tap the <strong>Share</strong> button — the box with an arrow pointing up at the bottom of the screen.</p></div>
   <div class="step"><div class="num">3</div><p>Scroll down in the share sheet and tap <strong>"Add to Home Screen"</strong>.</p></div>
   <div class="step"><div class="num">4</div><p>Tap <strong>Add</strong> in the top-right corner. The app icon will appear on your Home Screen.</p></div>
@@ -46,12 +46,26 @@
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="17" r="1"/></svg>
     Android (Chrome)
   </h2>
-  <div class="step"><div class="num">1</div><p>Open <strong>connection-made-simple.vercel.app</strong> in <strong>Chrome</strong>.</p></div>
+  <div class="step"><div class="num">1</div><p>Open <strong class="js-host">this app</strong> in <strong>Chrome</strong>.</p></div>
   <div class="step"><div class="num">2</div><p>Tap the <strong>three-dot menu</strong> (⋮) in the top-right corner of Chrome.</p></div>
   <div class="step"><div class="num">3</div><p>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong>.</p></div>
   <div class="step"><div class="num">4</div><p>Tap <strong>Add</strong> or <strong>Install</strong> to confirm. The app icon will appear on your Home Screen.</p></div>
 </div>
 
 <a class="back" href="/">Back to sign in</a>
+<script>
+  // Derive the domain from location.host instead of a hardcoded production
+  // URL — this page is served from whatever origin a given deployment runs
+  // on, not just the original YS Brisbane Vercel URL.
+  document.querySelectorAll('.js-host').forEach(function (el) { el.textContent = location.host; });
+  // Best-effort app-name templating — GET /settings is public. Falls back to
+  // the static "Youth Connection" text already in the markup if it fails.
+  fetch('/settings').then(function (r) { return r.json(); }).then(function (s) {
+    var name = s && s.ministryConfig && s.ministryConfig.branding && s.ministryConfig.branding.appName;
+    if (!name) return;
+    document.title = 'Install ' + name;
+    document.querySelectorAll('.js-appname').forEach(function (el) { el.textContent = name; });
+  }).catch(function () {});
+</script>
 </body>
 </html>

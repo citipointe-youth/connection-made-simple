@@ -456,7 +456,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .htip.tip-left .htip-pop::before{left:auto;right:6px;transform:none}
 
 /* ── CA MODULE CSS START ── */
-:root{--ca-navy:#0a0a2e;--ca-blue:#1a1af2;--ca-teal:#0ea5a4;--ca-amber:#f59e0b;--ca-rose:#e11d48;--ca-green:#16a34a;--ca-paper:#f4f7fc;--ca-card:#fff;--ca-ink:#1f2937;--ca-muted:#647488;--ca-line:#e8edf4;--ca-chip:#ececff;--ca-r:14px;--ca-rs:11px;--ca-sh:0 3px 10px rgba(10,10,46,.06);}
+:root{--ca-navy:var(--navy);--ca-blue:var(--accent);--ca-teal:#0ea5a4;--ca-amber:#f59e0b;--ca-rose:#e11d48;--ca-green:#16a34a;--ca-paper:var(--paper);--ca-card:var(--paper-card);--ca-ink:var(--ink);--ca-muted:var(--ink-mid);--ca-line:var(--line);--ca-chip:var(--chip);--ca-r:14px;--ca-rs:11px;--ca-sh:0 3px 10px rgba(10,10,46,.06);}
 .ca-cw{background:#fef3c7;color:#92660b}
 .ca-tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:4px}
 .ca-tile{background:var(--ca-card);border:1px solid var(--ca-line);border-radius:var(--ca-r);padding:13px 8px;min-height:84px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-shadow:var(--ca-sh);cursor:pointer}
@@ -711,6 +711,9 @@ function applyTheme(cfg) {
   root.setProperty('--navy', b.navy || '#0a0a2e');
   const metaTheme = document.querySelector('meta[name="theme-color"]');
   if (metaTheme) metaTheme.setAttribute('content', b.accent || '#1a1af2');
+  const metaAppleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (metaAppleTitle && b.shortName) metaAppleTitle.setAttribute('content', b.shortName);
+  if (b.appName) document.title = b.appName;
   try { localStorage.setItem(THEME_CACHE_KEY, JSON.stringify(cfg || {})); } catch (e) {}
 }
 (function applyCachedThemeSynchronously() {
@@ -731,6 +734,72 @@ const DEFAULT_LABELS = {
 function L(key) {
   const labels = (S.settings && S.settings.ministryConfig && S.settings.ministryConfig.labels) || {};
   return labels[key] || DEFAULT_LABELS[key] || key;
+}
+// appName()/ministryName() — identity strings, same fallback shape as L().
+// Falls back to the cached theme blob (pre-/settings-response, e.g. the very
+// first paint of the login screen) before falling back to the hardcoded default.
+function _brandingField(key, fallback) {
+  const live = S.settings && S.settings.ministryConfig && S.settings.ministryConfig.branding;
+  if (live && live[key]) return live[key];
+  try {
+    const cached = JSON.parse(localStorage.getItem(THEME_CACHE_KEY) || 'null');
+    if (cached && cached.branding && cached.branding[key]) return cached.branding[key];
+  } catch (e) {}
+  return fallback;
+}
+function appName() { return _brandingField('appName', 'Youth Connection'); }
+function ministryName() { return _brandingField('ministryName', 'Youth Society Brisbane'); }
+
+// Generates the 5-step funnel/ladder colour ramp (darkest -> lightest) from
+// the ministry's accent colour, via HSL lightness steps — the one JS colour
+// array design doc 03 §3.1 says should derive from the accent (unlike
+// QUAD_COLORS / status-chip triplets, which stay fixed on purpose). With the
+// default accent (#1a1af2) this produces a ramp visually equivalent to the
+// previous hardcoded ['#0a0a2e','#1414a0','#1a1af2','#5b5bf7','#9a9afb'].
+function _hexToHsl(hex) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16) / 255, g = parseInt(h.slice(2, 4), 16) / 255, b = parseInt(h.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let hue = 0, sat = 0; const light = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    sat = light > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) hue = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) hue = (b - r) / d + 2;
+    else hue = (r - g) / d + 4;
+    hue /= 6;
+  }
+  return [hue * 360, sat, light];
+}
+function _hslToHex(h, s, l) {
+  h /= 360;
+  const hue2rgb = (p, q, t) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1 / 3);
+  }
+  const toHex = (v) => Math.round(v * 255).toString(16).padStart(2, '0');
+  return '#' + toHex(r) + toHex(g) + toHex(b);
+}
+function accentRamp(accentHex) {
+  const [h, s] = _hexToHsl(accentHex || '#1a1af2');
+  return [0.14, 0.30, 0.50, 0.68, 0.82].map((l) => _hslToHex(h, Math.min(1, s * 1.05), l));
+}
+// Same ramp as [lighter-top, darker-bottom] pairs, for the funnel's per-bar
+// vertical gradient (rFunnel) — each bar is a touch lighter at the top.
+function accentRampPairs(accentHex) {
+  const [h, s] = _hexToHsl(accentHex || '#1a1af2');
+  const sat = Math.min(1, s * 1.05);
+  return [0.14, 0.30, 0.50, 0.68, 0.82].map((l) => [_hslToHex(h, sat, Math.min(1, l + 0.06)), _hslToHex(h, sat, l)]);
 }
 
 // HTML-escape any user-supplied string before interpolating it into innerHTML.
@@ -930,7 +999,7 @@ function _initShell() {
   document.getElementById('app').innerHTML = `
     <div class="hdr">
       <div class="hdr-top">
-        <div class="hdr-brand">${brandMark(26, '#fff')}<h1>Youth Connection</h1></div>
+        <div class="hdr-brand">${brandMark(26, '#fff')}<h1>${esc(appName())}</h1></div>
         <div class="hdr-meta">
           ${roleBadge(u)}
           <div class="btn-icon" onclick="doLogout()" title="Sign out" aria-label="Sign out">${icN('logout')}</div>
@@ -1157,9 +1226,9 @@ function _arQualChips(s) {
   if (category === 'stopped') return _qualChip('Stopped both', 'stopped');
   let h = '';
   if (svcQ === 'stopped') h += _qualChip('No youths', svcQ);
-  else if (svcQ === 'rising' || svcQ === 'declining') h += _qualChip('Youth', svcQ, 'ic-xs');
-  if (grpQ === 'stopped') h += (h ? ' ' : '') + _qualChip('No lifegroup', grpQ);
-  else if (grpQ === 'rising' || grpQ === 'declining') h += (h ? ' ' : '') + _qualChip('Lifegroup', grpQ, 'ic-xs');
+  else if (svcQ === 'rising' || svcQ === 'declining') h += _qualChip(L('service'), svcQ, 'ic-xs');
+  if (grpQ === 'stopped') h += (h ? ' ' : '') + _qualChip('No ' + L('smallGroup').toLowerCase(), grpQ);
+  else if (grpQ === 'rising' || grpQ === 'declining') h += (h ? ' ' : '') + _qualChip(L('smallGroup'), grpQ, 'ic-xs');
   return h;
 }
 
@@ -1262,6 +1331,13 @@ function icEmpty(k){ return `<svg class="empty-icon" viewBox="0 0 24 24">${IC[k]
 // YS brand mark — the square + open-funnel glyph from the logo. Fill-based (not a
 // stroke icon), so it lives outside the IC registry. `color` defaults to currentColor.
 function brandMark(px, color){
+  const custom = S.settings && S.settings.ministryConfig && S.settings.ministryConfig.branding && S.settings.ministryConfig.branding.logoSvg;
+  if (custom) {
+    // Server-sanitised (settings.service.ts strips <script>/foreignObject/event
+    // handlers on save) — still wrapped at a fixed size here, not re-escaped,
+    // since it's markup by design (same trust boundary as the built-in mark).
+    return `<span style="display:inline-flex;width:${px}px;height:${px}px;flex-shrink:0" aria-hidden="true">${custom}</span>`;
+  }
   return `<svg width="${px}" height="${px}" viewBox="0 0 100 100" fill="${color||'currentColor'}" aria-hidden="true" style="flex-shrink:0">`
     + `<rect x="40" y="20" width="20" height="20" rx="2"/>`
     + `<path d="M16 42 L33 42 L44 64 L56 64 L67 42 L84 42 L62 84 L38 84 Z"/></svg>`;
@@ -1389,7 +1465,7 @@ function renderLogin() {
   document.getElementById('app').innerHTML = `
     <div class="login-pg">
       <div class="login-card">
-        <div class="login-logo"><div class="login-badge">${brandMark(42, '#fff')}</div><h1>Youth Connection</h1><p>Youth Society Brisbane · Sign in to continue</p></div>
+        <div class="login-logo"><div class="login-badge">${brandMark(42, '#fff')}</div><h1>${esc(appName())}</h1><p>${esc(ministryName())} · Sign in to continue</p></div>
         <div id="lerr"></div>
         <div class="fg"><label class="fl">Username</label><input class="fi" id="lemail" type="text" placeholder="" autocomplete="username"></div>
         <div class="fg"><label class="fl">Password</label><input class="fi" id="lpw" type="password" placeholder="••••••••" autocomplete="current-password"></div>
@@ -1520,7 +1596,7 @@ function _hAttTile(label, studs, avgWk, opts) {
     <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${avgWk}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`
     + (opts.hideLifegroupRow ? '' : `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center">
-    <div style="font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:64px;opacity:.8">Lifegroups</div>
+    <div style="font-size:9px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:64px;opacity:.8">${L('smallGroupPlural')}</div>
     <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Seen</div></div>
     <div style="text-align:center;background:#eef0fb;border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700;opacity:.85">${grpAvg}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`);
@@ -1642,7 +1718,7 @@ async function _renderHomeInner(stale) {
     <td style="text-align:center;padding:5px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em">${svcAvg}</span></td>
   </tr>`;
   body += `<tr style="background:rgba(255,255,255,.05)">
-    <td style="font-size:13px;font-weight:700;opacity:.62;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Lifegroups</td>
+    <td style="font-size:13px;font-weight:700;opacity:.62;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">${L('smallGroupPlural')}</td>
     <td style="text-align:center;padding:5px 4px"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em;opacity:.82">${grpUniq}</span></td>
     <td style="text-align:center;padding:5px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em;opacity:.82">${grpAvgWk}</span></td>
   </tr></tbody></table>`;
@@ -1802,7 +1878,7 @@ async function _renderHomeInner(stale) {
       if (lgStats && ['admin', 'director'].includes(u.role)) {
         const quads = (lgStats.byQuad || []).filter(q => q.current.uniqueAttenders > 0 || q.current.members > 0);
         if (quads.length) {
-          body += '<div class="sh">Lifegroups by Quad</div><div style="margin-bottom:16px">';
+          body += '<div class="sh">' + L('smallGroupPlural') + ' by Quad</div><div style="margin-bottom:16px">';
           for (const q of quads) {
             const qid = 'hlq-' + q.quad;
             body += `<div class="card drop" id="${qid}" style="margin-bottom:8px;padding:11px">
@@ -1860,8 +1936,12 @@ async function renderHomeFollowup() {
   const changeBtn = `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="setMyLeaderId(null);renderHomeFollowup()">Not you?</button>`;
   // Each "not seen" list reflects the most recent session/week — label it with the
   // Friday that ends that Sat–Fri week so the leader knows which week they're chasing up.
+  // NOTE: "Friday" here is left as a literal — structure.serviceDayOfWeek
+  // (design doc 03 §3.3) is functional, not just a label (it also drives
+  // _fridayLabel()'s date math and week bucketing), and is explicitly phase 6
+  // scope (structure config) — out of bounds for this phase's label sweep.
   const svcTitle = 'Not Seen Last Friday' + (data.latestSvcDate ? ` (${_fridayLabel(data.latestSvcDate)})` : '');
-  const grpTitle = 'Not At A Lifegroup Last Week' + (data.latestGrpDate ? ` (ending ${_fridayLabel(data.latestGrpDate)})` : '');
+  const grpTitle = 'Not At A ' + L('smallGroup') + ' Last Week' + (data.latestGrpDate ? ` (ending ${_fridayLabel(data.latestGrpDate)})` : '');
   let h = `<div class="sh" style="display:flex;align-items:center;justify-content:space-between;font-size:13px"><span>Follow Up · ${esc(data.leader.fullName)} ${helpTip("These are students who've attended a service or lifegroup recently, but weren't here last service.")}</span>${changeBtn}</div>`;
   h += _followupListHtml('Birthdays this week', data.birthdays, 'No birthdays this week');
   h += _followupListHtml(svcTitle, data.notSeenService, data.latestSvcDate ? 'Everyone was seen' : 'No service data yet', 'svc');
@@ -2985,7 +3065,7 @@ async function renderMyStudents() {
               <span style="font-size:11px;color:var(--ink-mid)">Yr ${s.grade || '—'} · ${s.gender}${bd ? ' · ' + bd : ''}</span>${riskChip(s.atRiskStatus)}
             </div>
             ${termRow('Youth', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
-            ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
+            ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow(L('smallGroup'), s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
             ${(s.mobile || s.parentPhone) ? `<div style="font-size:12px;margin-top:4px;color:var(--ink-mid)">${s.mobile ? `<span style="font-weight:600">Mobile:</span> ${phoneLink(s.mobile, s.firstName)}` : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? `<span style="font-weight:600">Parent:</span> ${phoneLink(s.parentPhone, s.firstName, true)}` : ''}</div>` : ''}
           </div>
         </div>`;
@@ -3005,7 +3085,7 @@ async function exportConnectCSV() {
   try {
     const { rows } = await API.get('/connections/export');
     await _ensureXlsx();
-    const header = ['Leader / Student', 'Grade', 'Gender', 'Health', 'Youth %', 'Lifegroup %', 'Date of Birth', 'Mobile', 'Parent Mobile'];
+    const header = ['Leader / Student', 'Grade', 'Gender', 'Health', 'Youth %', L('smallGroup') + ' %', 'Date of Birth', 'Mobile', 'Parent Mobile'];
     const aoa = [header];
     const leaderRowIdx = new Set();
     let lastLeader = null;
@@ -3162,7 +3242,7 @@ function _arSectionsHtml(scoped, u) {
               ${_arQualChips(s)}
             </div>
             ${termRow('Youth', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal, true)}
-            ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal, true):''}
+            ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow(L('smallGroup'), s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal, true):''}
             ${_arPhone ? `<div style="margin-top:4px;font-size:13px">${!s.mobile && s.parentPhone ? '<span style="font-weight:600">Parent: </span>' : ''}${phoneLink(_arPhone, s.firstName, !s.mobile && !!s.parentPhone)}</div>` : ''}
           </div>
           <button class="btn btn-ghost btn-sm" style="position:absolute;bottom:8px;right:8px;padding:4px" onclick="showStudentDetail('${s.id}')" title="View profile" aria-label="View profile for ${esc(s.firstName)} ${esc(s.lastName)}">${icS('id')}</button>
@@ -3310,14 +3390,14 @@ function _studentResultsHtml(vis) {
         </div>
         <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender}${fmtBday(s.dateOfBirth) ? ' · ' + fmtBday(s.dateOfBirth) : ''}</div>
         ${termRow('Youth', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
-        ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow('Lifegroup', s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
+        ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow(L('smallGroup'), s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
       </div>
       <div class="li-right" style="color:var(--ink-faint)">›</div>
     </div>`;
   }
   h += '</div>';
   const sh = (key, label) => `<th onclick="sortStud('${key}')" style="cursor:pointer;user-select:none;white-space:nowrap">${label}${_sortArrow(key)}</th>`;
-  h += `<div class="desk"><table class="dt"><thead><tr>${sh('name','Name')}${sh('gr','Gr')}${sh('gender','Gender')}${sh('dob','DOB')}${sh('youth','Youth (this / last)')}${sh('lifegroup','Lifegroup (this / last)')}${sh('status','Status')}<th></th></tr></thead><tbody>`;
+  h += `<div class="desk"><table class="dt"><thead><tr>${sh('name','Name')}${sh('gr','Gr')}${sh('gender','Gender')}${sh('dob','DOB')}${sh('youth','Youth (this / last)')}${sh('lifegroup',L('smallGroup')+' (this / last)')}${sh('status','Status')}<th></th></tr></thead><tbody>`;
   for (const s of sorted) {
     const pct = svcPct(s);
     const psvc = s.prevSvcTotal > 0 ? Math.round(s.prevSvcAttended / s.prevSvcTotal * 100) + '%' : '—';
@@ -3462,7 +3542,7 @@ async function showStudentDetail(id) {
       </div>
       <div class="stat">
         <div class="stat-v" style="font-size:22px">${grpPct!==null?grpPct+'%':'—'}</div>
-        <div class="stat-l">Lifegroup · this term</div>
+        <div class="stat-l">${L('smallGroup')} · this term</div>
         ${grpPct!==null?pBar(grpPct):''}
         <div style="font-size:11px;color:var(--ink-faint);margin-top:3px">${s.grpAttended}/${s.grpTotal} weeks</div>
         ${s.prevGrpTotal>0?`<div style="font-size:11px;color:var(--ink-faint);margin-top:2px">Last term: ${s.prevGrpAttended}/${s.prevGrpTotal} (${Math.round(s.prevGrpAttended/s.prevGrpTotal*100)}%)</div>`:''}
@@ -3685,7 +3765,7 @@ async function renderTrends() {
   // Tab bar
   body += `<div class="tbbar">
     <button class="tbbtn ${_trTab==='svc'?'on':''}" onclick="_trTab='svc';renderTrends()">Fridays</button>
-    <button class="tbbtn ${_trTab==='grp'?'on':''}" onclick="_trTab='grp';renderTrends()">Lifegroups</button>
+    <button class="tbbtn ${_trTab==='grp'?'on':''}" onclick="_trTab='grp';renderTrends()">${L('smallGroupPlural')}</button>
   </div>`;
 
   // Term label for the "this term" sub-heading (uses the trends term range).
@@ -3795,7 +3875,7 @@ async function renderTrends() {
     // All numbers come from /lifegroups/stats: average = individuals attending a
     // lifegroup each week the scope ran (not a percentage).
     if (!lgStats) {
-      body += `<div class="card"><div style="color:var(--ink-faint);font-size:13px">Lifegroup stats unavailable.</div></div>`;
+      body += `<div class="card"><div style="color:var(--ink-faint);font-size:13px">${L('smallGroup')} stats unavailable.</div></div>`;
     } else {
       const oc = lgStats.overall.current, op = lgStats.overall.previous;
       if (u.role === 'grade') {
@@ -3833,7 +3913,7 @@ async function renderTrends() {
 
       if (u.role === 'grade') {
         const g = (lgStats.byGrade || [])[0];
-        body += `<div class="sh">Grade ${u.grade}${_gsfx(_loginGender(u))} Lifegroups</div><div class="card">`;
+        body += `<div class="sh">Grade ${u.grade}${_gsfx(_loginGender(u))} ${L('smallGroupPlural')}</div><div class="card">`;
         if (g && g.lifegroups.length) for (const lg of g.lifegroups) body += _lgGroupRow(lg, true);
         else body += `<div style="color:var(--ink-faint);font-size:13px">No lifegroups ran this term</div>`;
         body += '</div>';
@@ -5429,7 +5509,7 @@ function model(){
 
 // ---------- shell ----------
 function tabs(page){
-  const T=[['ca-overview','Overview'],['ca-funnel','Funnel'],['ca-groups','Lifegroups'],['ca-people','People'],['ca-data','Data']];
+  const T=[['ca-overview','Overview'],['ca-funnel','Funnel'],['ca-groups',L('smallGroupPlural')],['ca-people','People'],['ca-data','Data']];
   return '<div class="ca-tabs">'+T.map(([id,lb])=>'<span class="ca-tab'+(page===id?' on':'')+'" onclick="go(\''+id+'\')">'+lb+'</span>').join('')+'</div>';
 }
 // A human label for the loaded scope, e.g. "2026 · T2 (in progress)" or
@@ -5495,7 +5575,7 @@ function rOverview(){
     +'<div class="stat"><div class="stat-v">'+k.decisions+'</div><div class="stat-l">Decisions</div>'+(noPrevCompare?'':'<div class="ca-dlt fl">this term</div>')+'</div>'
     +'</div>';
   const max=m.rungs[0].v||1;
-  const cols=['#0a0a2e','#1414a0','#1a1af2','#5b5bf7','#9a9afb'];
+  const cols=accentRamp(D.settings&&D.settings.ministryConfig&&D.settings.ministryConfig.branding&&D.settings.ministryConfig.branding.accent);
   b+='<div class="card"><div class="ca-ct">Integration ladder</div>'+m.rungs.map((r,i)=>'<div class="ca-lrow"><div class="ca-lname">'+r.lb+(i===0?' '+helpTip('The Youth attendance numbers, plus anyone who attended a lifegroup but wasn\'t at a service, plus anyone who submitted a New Connect or Decision form but wasn\'t matched to an existing student record. That\'s why this can be higher than ‘Came to Youth’.'):'')+'</div><div class="ca-lbar"><div class="ca-lfill" style="width:'+Math.max(8,Math.round(r.v/max*100))+'%;background:'+cols[i]+'">'+r.v+'</div></div></div>').join('')+'</div>';
   const row=(g,chip)=>'<div class="ca-alr" onclick="CA.showGroup(\''+g.id+'\')"><div style="font-size:.78rem;font-weight:600">'+esc(g.name)+'</div>'+chip+'</div>';
   const hasTrend=m.groups.some(g=>g.trendPct!==0);
@@ -5537,7 +5617,7 @@ function rOverview(){
 function fopen(){FO=!FO;rerender();}
 function rFunnel(){
   const m=model(),R=m.rungs;
-  const cols=[['#16164d','#0a0a2e'],['#2020b0','#1414a0'],['#3b3bf5','#1a1af2'],['#6b6bf8','#5b5bf7'],['#a5a5fb','#9a9afb']];
+  const cols=accentRampPairs(D.settings&&D.settings.ministryConfig&&D.settings.ministryConfig.branding&&D.settings.ministryConfig.branding.accent);
   const convs=[];for(let i=1;i<R.length;i++)convs.push(R[i-1].v?Math.round(R[i].v/R[i-1].v*100):0);
   const leak=convs.indexOf(Math.min(...convs));
   let f='<div class="ca-fw">';
@@ -5602,7 +5682,7 @@ function rGroups(){
   if(LGQ)rows=rows.filter(r=>r.quad===LGQ);
   rows.sort((a,b)=>b.unique-a.unique||a.name.localeCompare(b.name));
   let b='';
-  b+='<div class="ca-ct" style="margin-bottom:6px">Lifegroup Health '+helpTip('A named lifegroup average divides by the weeks that group actually ran. Grade, quad and overall averages divide by valid services in the term instead, so they are not directly comparable.')+'</div>';
+  b+='<div class="ca-ct" style="margin-bottom:6px">'+L('smallGroup')+' Health '+helpTip('A named lifegroup average divides by the weeks that group actually ran. Grade, quad and overall averages divide by valid services in the term instead, so they are not directly comparable.')+'</div>';
   // Quad filter buttons.
   b+='<div class="ca-fch">'
     +'<span class="chip '+(LGQ===''?'c-accent':'c-neutral')+'" style="cursor:pointer" onclick="CA.lgfilter(\'\')">All</span>'
@@ -5878,7 +5958,8 @@ async function buildDeck(termOverride){
 }
 function _buildDeckBody(){
   const m=model(),k=m.kpis;
-  const ministry=(D.settings&&D.settings.ministryName)||'Youth Ministry';
+  const brand=(D.settings&&D.settings.ministryConfig&&D.settings.ministryConfig.branding)||{};
+  const ministry=brand.ministryName||'Youth Ministry';
   const dateStr=new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'});
   const N=m.people.filter(p=>p.stage>0).length;
   const atLeast=r=>m.rungs[r-1].v;
@@ -6080,7 +6161,7 @@ function _buildDeckBody(){
     +'<div class="pn-col"><h4>Data-visualisation suggestions</h4><ul>'+(s.vizSuggest||[]).map(v=>'<li>'+esc(v)+'</li>').join('')+'</ul></div>'
     +'<div class="pn-col pn-obj"><h4>Likely objections &amp; persuasive responses</h4>'+(s.objections||[]).map(o=>'<div class="obj"><p class="q">&ldquo;'+esc(o.q)+'&rdquo;</p><p class="a">'+esc(o.a)+'</p></div>').join('')+'</div>'
     +'</div></aside></section>';
-  const CSS=':root{--navy:#0a0a2e;--blue:#1a1af2;--accent:#1a1af2;--ink:#1f2937;--muted:#647488;--ok:#15803d;--warn:#dc2626;--line:#e8edf4;--bg:#f4f7fc;}'
+  const CSS=':root{--navy:'+(brand.navy||'#0a0a2e')+';--blue:'+(brand.accent||'#1a1af2')+';--accent:'+(brand.accent||'#1a1af2')+';--ink:#1f2937;--muted:#647488;--ok:#15803d;--warn:#dc2626;--line:#e8edf4;--bg:#f4f7fc;}'
     +'*{box-sizing:border-box;margin:0;padding:0;} html{-webkit-text-size-adjust:100%;}'
     +'body{font:16px/1.6 system-ui,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg);}'
     +'.deck{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:34px 18px 84px;}'

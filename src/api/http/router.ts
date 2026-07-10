@@ -9,6 +9,7 @@ import { makeOverviewController } from '../controllers/overview.controller';
 import { makeAtRiskController } from '../controllers/atrisk.controller';
 import { makeImportController } from '../controllers/import.controller';
 import { makeSettingsController } from '../controllers/settings.controller';
+import { makeManifestController } from '../controllers/manifest.controller';
 import { makeAccountController } from '../controllers/account.controller';
 import { makeAdminController } from '../controllers/admin.controller';
 import { makeTrendsController } from '../controllers/trends.controller';
@@ -31,6 +32,7 @@ export function buildRoutes(services: Services): Route[] {
   });
   const importCtrl = makeImportController({ importService: services.importService });
   const settings = makeSettingsController({ settings: services.settings });
+  const manifest = makeManifestController({ settings: services.settings });
   const account = makeAccountController({ account: services.account });
   const admin = makeAdminController({ admin: services.admin });
   const trends = makeTrendsController({ trends: services.trends });
@@ -63,6 +65,9 @@ export function buildRoutes(services: Services): Route[] {
     // ----- Settings -----
     { method: 'GET',   path: '/settings', auth: false, handler: (r) => settings.get(r) },
     { method: 'PATCH', path: '/settings', auth: true,  handler: (r) => settings.update(r) },
+
+    // ----- Manifest (dynamic — public/manifest.json was removed so this wins) -----
+    { method: 'GET', path: '/manifest.json', auth: false, handler: (r) => manifest.get(r) },
 
     // ----- Students -----
     { method: 'GET',    path: '/students',                    auth: true, handler: (r) => student.list(r) },
