@@ -1087,6 +1087,143 @@ pooler during the incident. Watch the connection count during a real session ins
   alphabetically within each grade (`unallocated.sort(...)` in the same function) — relevant
   for quad/director/admin logins whose list spans multiple grades; a no-op for grade logins.
 
+### Generalisation phases 1–5, 8 — "Connection Made Simple" → "Youth Connection" (2026-07-10)
+
+A separate Claude session ("Generalisation of the app" project, sibling docs
+at `../Generalisation of the app/`) is making this app deployable by **any**
+youth ministry, not just YS Brisbane, via per-deployment configuration. This
+session owned phases 1–5 and 8 of the design (`03-generalisation-design.md`);
+phases 6–7 (structure/gender config, the new `leader` role) are a separate
+Opus session — see `11-handoff-to-opus.md` for what it needs to know. Work
+happened on branch `generalisation-phase-1` (rollback tag `pre-generalisation`
+on `master`); **the YS Brisbane invariant held throughout**: with
+`ministry_config = '{}'` (the default), every screen/import/export behaves
+identically to before this work, verified after every phase.
+
+- **Config storage**: one `ministry_config jsonb` column on `app_settings`
+  (migration `018`), `MinistryConfigSchema` + `MINISTRY_CONFIG_DEFAULTS` in
+  `src/core/ministry-config.ts` — the single source of truth every repo and
+  the SPA read from. `PATCH /settings` deep-merges a partial `ministryConfig`
+  patch via `mergeMinistryConfig`; a submitted `logoSvg` is sanitised
+  (`sanitiseLogoSvg`, a denylist — not a real HTML parser). **Fixed a
+  pre-existing bug while here**: `settings.service.ts.update()` now calls
+  `invalidateOverviewCache()`/`invalidateTrendsCache()`/`invalidateLgStatsCache()`
+  on every write — previously a settings change (even `termGapDays`) served
+  stale stats for up to 60s with no invalidation hook at all.
+- **Youth Ministry Setup wizard** (Admin → Settings → "Open Setup"): a
+  4-preset picker (large-graded-au / two-bracket / small-flat / micro) that
+  PATCHes the full merged `ministryConfig` + preset-scaled
+  `serviceMinAttendance` in one call. **Gotcha fixed during implementation**:
+  switching presets must always merge onto a clean `MINISTRY_CONFIG_DEFAULTS`
+  baseline, never onto whatever the previous preset left in place — otherwise
+  picking "large-graded-au" after "small-flat" wouldn't actually revert
+  `modules.connectionAudit`/`roles.model`/etc. Steps 1–5 (branding/
+  terminology/structure/roles/modules fine-tuning UI, beyond the preset
+  picker) are stubbed (`/* SETUP-STEP-STUB */` in `renderMinistrySetup()`) —
+  filled in by later work.
+- **Theming**: the CA module's `--ca-*` CSS vars now re-point at the main
+  `--accent`/`--navy`/etc. tokens (previously duplicated by value); the
+  funnel/ladder colour ramps (previously 5 hardcoded hex arrays, two places)
+  now generate from `branding.accent` via HSL lightness steps
+  (`accentRamp`/`accentRampPairs`); the Executive Brief deck's inline CSS
+  template interpolates `branding.accent`/`navy` and finally reads the
+  long-dormant `ministryName` hook from the right (nested) path. Status/quad
+  colours are deliberately NOT configurable (categorical, not brand).
+  `applyTheme()`/`L()` (label lookup) live near the top of `index.html`'s
+  main script, right after the `S` state object; a `THEME_CACHE_KEY`
+  localStorage blob lets the login screen theme itself synchronously before
+  `/settings` even resolves. **`GET /settings` is now fetched unconditionally
+  at boot** (`boot()`), not just post-login as before — it's a public route,
+  so the login screen genuinely can be themed pre-auth now, which it
+  previously wasn't despite being able to.
+- **`GET /manifest.json`** is now a dynamic route (`manifest.controller.ts`)
+  templating name/short_name/theme_color from settings — the static
+  `public/manifest.json` was **deleted** (Express serves static files before
+  the route table, so it would otherwise always shadow the dynamic route).
+  `brandMark()` renders a sanitised custom `logoSvg` when set.
+  `install.html` derives its domain from `location.host` instead of a
+  hardcoded production URL.
+- **Label sweep**: `L(key)` (backed by `ministryConfig.labels`) replaced a
+  first pass of "Lifegroup"/"Lifegroups" literals across Home, Trends,
+  Health, Student Search, Connect Setup's xlsx export, and the CA module's
+  tab bar + Lifegroup Health heading. **Deliberately not touched**: "Friday"
+  (tied to `structure.serviceDayOfWeek`, which is functional — it also drives
+  `_fridayLabel()`'s date math and week bucketing — and is phase 6/Opus
+  scope, not just a label), "Student Team"/"Youth" labels beyond what's
+  listed above, and the rest of the CA module's copy. `lgDisplayName()` now
+  reads `labels.groupNameStrip` (prefix list) and `labels.smallGroup`
+  (suffix) instead of the hardcoded `"Brisbane - YS - "` / `"Lifegroup"`.
+- **Module toggles** (`ministryConfig.modules.*`): Connection Audit
+  (`connectionAudit`, default `true`) — nav items gone, `ca-*` routes bounce
+  home, and `ConnectionAuditService`'s 6 remaining methods (down from 7 —
+  **the orphaned `POST /audits/finalize-live` route, controller method,
+  service method, and its only caller `buildLiveLifegroupStats` helper were
+  deleted** — confirmed zero SPA callers first) throw a new 404-shaped
+  `ModuleDisabledError` via `requireCaModule(settings)` when off. The New
+  Year Refresh wizard's steps 2/6 (audit backup/restore) render as "skipped"
+  and count as satisfied for gating when CA is off, so step 3 (Full Reset)
+  doesn't permanently block waiting on an audit export that'll never happen.
+  Push notifications (`pushNotifications`, default `false` — matches
+  today's hidden state) replaces all 5 `PUSH-HIDDEN` comment sites with a
+  real config check (header bell + badge, `navItems()` × 4 roles, the
+  notifications route, `doLogin()`'s permission request). Lifegroups
+  (`lifegroups`, default `true`) hides the Trends tab, Home's "Lifegroups by
+  Quad" section, and quad's per-grade lifegroup dropdown — display-only, the
+  underlying at-risk/aggregate math already tolerates zero lifegroup data.
+  `exportGuides` (`'elvanto'` default / `'hidden'`) gates both Elvanto
+  walkthrough buttons.
+- **Import atomicity** (the top-priority item, independent of
+  generalisation): both importers' delete+repopulate phases now run inside
+  one Postgres transaction (`sql.begin()`) when `PERSISTENCE=supabase` — a
+  crash/kill between the truncate and the repopulate previously left the
+  tables **truncated-but-empty** (a documented data-loss gap). New
+  `src/repositories/supabase/with-transaction.ts`'s `bindImportRepos(tx)`
+  rebuilds the 8 Supabase repos an import touches, bound to the
+  transaction-scoped client instead of the shared module-level one; in-memory/
+  JSON mode is unaffected (`sql: null`, no transaction primitive needed).
+  Verified with a fake transactional `sql.begin` that snapshots/restores
+  in-memory repos around a simulated mid-write throw
+  (`import-atomicity.test.ts`) — a real kill-mid-import run against a
+  scratch Supabase project is still the recommended manual check before this
+  ships to production, since no fully-in-memory test can prove a real
+  Postgres `ROLLBACK`.
+- **Import report**: `ImportResult`/`GroupImportResult` gain a `report` field
+  (`skippedRows` with a readable per-field reason, `nameCollisions` for two
+  rows in the same upload sharing a name key) — no more silent `continue` on
+  a bad row. The Import screen shows a "View import report" button when
+  nonzero, reading from a module-level `_lastImportReport` var rather than
+  inlining JSON into an `onclick` attribute (same apostrophe-escaping
+  concern as `_smsHref()` elsewhere in this file).
+- **Import dialect config** (`ministryConfig.import.*`): `dateOrder`
+  (`'DMY'` default) reinterprets an ambiguous slash-separated date, but any
+  date component `>12` auto-resolves to "day" regardless of the setting.
+  Grade text (`"Year 7"`, `"Grade 9"`, `"7th"`) is now preprocessed into a
+  bare integer before the existing 7–12 range check (range itself stays
+  hardcoded — phase 6/Opus owns `structure.gradeMin/gradeMax`). `leaderTag`
+  (`'leader'` default) makes the group importer's `"(leader)"` name-tag
+  regex configurable. **Not done** (flagged, not silently skipped):
+  client-side header-synonym matching and the long-format
+  (Planning-Center-style) CSV pivot — both need real fixture data from a
+  non-Elvanto export to implement safely.
+- **Packaging**: `package.json` renamed `connection-made-simple` →
+  `youth-connection` (code-side only — GitHub/Vercel dashboard renames are a
+  manual owner step, not attempted). New `APP_ORIGIN` env var
+  (`src/config/env.ts`) — production CORS falls back to it before the
+  hardcoded YS Brisbane URL, so a new deployment sets one env var instead of
+  editing code; the existing deployment needs no env changes. New
+  `README.md` + `docs/DEPLOYING.md` covering the full deploy path incl. the
+  statement_timeout and session-mode-pooler gotchas already documented
+  elsewhere in this file.
+- **SW cache**: bumped once per phase that touched `public/index.html`/
+  `sw.js` (`cms-v22` at the start of this work → `cms-v27` by the end);
+  `API_RE` gained `manifest\.json`.
+- **Test suite**: 190+ → 237, all additive (no existing test was modified to
+  make it pass, per the YS Brisbane invariant) — `ministry-config.test.ts`,
+  `settings.service.test.ts`, `manifest.controller.test.ts`,
+  `import-atomicity.test.ts` are new; `connection-audit.service.test.ts` lost
+  3 `finalizeFromLive` tests and gained 2 module-toggle tests (net −1);
+  `import.service.test.ts` gained report + dialect coverage.
+
 ## Security notes
 
 - **XSS:** all user-supplied strings (names, emails, notification title/message,
