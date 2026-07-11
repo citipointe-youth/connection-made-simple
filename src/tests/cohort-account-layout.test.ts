@@ -2,12 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { gradeBrackets, buildTargetAccounts, planCohortAccountLayout } from '../services/cohort-account-layout';
 
 describe('gradeBrackets', () => {
-  it('splits the default 7-12 range into 2-grade brackets (bug 8: 7/8, 9/10, 11/12)', () => {
+  it('splits the default 7-12 range into 2-grade brackets, anchored from the top (bug 8: 7/8, 9/10, 11/12)', () => {
     expect(gradeBrackets(7, 12)).toEqual([[7, 8], [9, 10], [11, 12]]);
   });
 
-  it('gives the leftover grade to the last bracket on an odd-sized range', () => {
-    expect(gradeBrackets(7, 11)).toEqual([[7, 8], [9, 10], [11]]);
+  it('Grade 6 included: widens the LOWEST bracket to 3 grades instead of adding a 4th bracket (bug 8 follow-up)', () => {
+    expect(gradeBrackets(6, 12)).toEqual([[6, 7, 8], [9, 10], [11, 12]]);
+  });
+
+  it('an odd-sized range folds the leftover grade into the lowest bracket, not a trailing singleton', () => {
+    expect(gradeBrackets(7, 11)).toEqual([[7, 8, 9], [10, 11]]);
   });
 
   it('handles a single-grade range', () => {

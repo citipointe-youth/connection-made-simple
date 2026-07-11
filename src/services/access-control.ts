@@ -121,14 +121,20 @@ export interface StructureScope {
 
 /**
  * Returns true if the actor can access data for a given grade.
- * - grade: own grade only
- * - quad: all grades within their quad
+ * - grade: own grade(s) only — a Simple-ministry grade login is scoped to its
+ *   assigned (broader) bracket exactly the same way a Complex-ministry one is
+ *   scoped to a single grade; cohortModel only changes how many grades an
+ *   account is assigned (via the account layout it was created with), never
+ *   whether the assignment is enforced (bug 8 follow-up, 2026-07-11 — an
+ *   earlier version of this function bypassed grade scoping entirely under
+ *   'none', which made Simple's per-bracket accounts purely cosmetic).
+ * - quad: all grades within their quad (not used under a Simple layout, which
+ *   has no quad accounts, but scoped the same way if one exists)
  * - director/admin: all grades
- * Under cohortModel 'none' there is no cohorting at all, so every login can
- * access every grade (nothing is scoped/excluded by grade).
  */
+// `structure` param kept (unused here) for call-site symmetry with
+// canAccessGender/genderScopeOf below, which do read it.
 export function canAccessGrade(actor: Actor, grade: number | null, structure?: StructureScope): boolean {
-  if (structure?.cohortModel === 'none') return true;
   switch (actor.role) {
     case 'admin':
     case 'director':
@@ -190,10 +196,14 @@ function normGender(g: string | null | undefined): string | null {
  * existing ungendered-login seam promoted to a deployment-wide policy.
  */
 export function genderScopeOf(actor: Actor, structure?: StructureScope): 'male' | 'female' | null {
-  // cohortModel 'none' means no cohorting at all — nothing may be excluded by
-  // grade OR gender (the design's "known trap": 'none' must never hide anyone),
-  // so gender scoping is off regardless of genderPolicy.
-  if (structure?.cohortModel === 'none') return null;
+  // Gender scoping is governed by genderPolicy alone — cohortModel used to
+  // also force this off under 'none' ("nothing may be excluded by grade OR
+  // gender"), but that made a Simple ministry's own boys/girls-bracket
+  // accounts non-functional as scoping (bug 8 follow-up, 2026-07-11): a
+  // grade login's assigned gender is enforced exactly the same under Simple
+  // as under Complex now. cohortModel only changes account LAYOUT (broad
+  // brackets + no quads, vs one account per grade + quad rollups), never
+  // whether an account's own grades/gender are enforced.
   if (structure && structure.genderPolicy && structure.genderPolicy !== 'strict') return null;
   if (actor.role === 'quad') return quadGenderOf(actor.quad);
   if (actor.role === 'grade') return actor.gender ?? null; // ungendered grade login = both

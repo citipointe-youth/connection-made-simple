@@ -878,20 +878,24 @@ document.addEventListener('mouseover', e => { const b = e.target.closest && e.ta
 // tap a screenshot to zoom (the Elvanto modals are dense on a phone at fit-width).
 // Ported from the Camp Platform import guide (its .ig-* viewer), adapted to this app's tokens.
 const _EG_DATE_NOTE = 'Date range — the app only reads the CURRENT term and the term before it, so the dates are flexible. Mid-year, "This calendar year" is fine. In Term 1, choose a Custom date range starting from the beginning of last year\'s Term 4 so the previous term comes with it.';
-const EXPORT_GUIDES = {
+// A function, not a plain object — evaluated per-call (like STG()/STG_SHORT()
+// above) so the <b>service night</b> mentions below pick up a customised
+// labels.serviceNight instead of freezing "Friday Nights" at script-parse
+// time, before settings have loaded.
+function EXPORT_GUIDES() { return {
   import: { title: 'Exporting from Elvanto', steps: [
     { step: 'Step 1 of 2 · Service attendance', note: _EG_DATE_NOTE,
-      cap: 'In Elvanto open <b>Services › Reports</b> and generate the built-in <b>Service Individual Attendance</b> report with the highlighted settings: Attendance <b>"Only people who did attend"</b>; tick <b>"Filter services by service types"</b> and select the <b>Friday Nights</b> youth service; Demographics <b>Youth</b>; add the <b>School Grade</b> people column; tick <b>"Show Individual Service Grid"</b>; Output <b>Comma Delimited .csv</b>.',
+      cap: 'In Elvanto open <b>Services › Reports</b> and generate the built-in <b>Service Individual Attendance</b> report with the highlighted settings: Attendance <b>"Only people who did attend"</b>; tick <b>"Filter services by service types"</b> and select the <b>'+L('serviceNight')+'</b> youth service; Demographics <b>Youth</b>; add the <b>School Grade</b> people column; tick <b>"Show Individual Service Grid"</b>; Output <b>Comma Delimited .csv</b>.',
       imgs: [['/img/export-help/services-report.png', 'Elvanto: Services menu then Reports, Service Individual Attendance in the built-in report list'],
              ['/img/export-help/services-settings.png', 'Service Individual Attendance settings with the required options highlighted']] },
-    { step: 'Step 2 of 2 · Lifegroup attendance', note: _EG_DATE_NOTE,
-      cap: 'Open <b>Groups › Reports</b> and generate <b>Group Individual Attendance</b>: Status <b>Active</b>; <b>All Groups</b>; Group Categories <b>Men\'s + Women\'s Lifegroup</b>; Demographics <b>Youth</b>; Locations <b>Brisbane</b>; Output <b>Comma Delimited .csv</b>. Then upload both files on this screen — each is detected automatically.',
+    { step: 'Step 2 of 2 · '+L('smallGroup')+' attendance', note: _EG_DATE_NOTE,
+      cap: 'Open <b>Groups › Reports</b> and generate <b>Group Individual Attendance</b>: Status <b>Active</b>; <b>All Groups</b>; Group Categories <b>Men\'s + Women\'s '+L('smallGroup')+'</b>; Demographics <b>Youth</b>; Locations <b>Brisbane</b>; Output <b>Comma Delimited .csv</b>. Then upload both files on this screen — each is detected automatically.',
       imgs: [['/img/export-help/groups-report.png', 'Elvanto: Groups menu then Reports, Group Individual Attendance in the built-in report list'],
              ['/img/export-help/groups-settings.png', 'Group Individual Attendance settings with the required options highlighted']] }
   ]},
   audit: { title: 'Exporting the audit files', steps: [
     { step: 'Step 1 of 4 · Student Team',
-      cap: 'The team roster comes from <b>Sunday service attendance</b>: run the same <b>Service Individual Attendance</b> report (Services › Reports), but under "Filter services by service types" tick the <b>Sunday 10:15am</b> service instead of Friday Nights. Keep <b>"Only people who did attend"</b>, Demographics <b>Youth</b> and <b>.csv</b> output.',
+      cap: 'The team roster comes from <b>Sunday service attendance</b>: run the same <b>Service Individual Attendance</b> report (Services › Reports), but under "Filter services by service types" tick the <b>Sunday 10:15am</b> service instead of '+L('serviceNight')+'. Keep <b>"Only people who did attend"</b>, Demographics <b>Youth</b> and <b>.csv</b> output.',
       imgs: [['/img/export-help/team-report.png', 'Service Individual Attendance settings with the Sunday 10:15am service selected']] },
     { step: 'Step 2 of 4 · Decisions',
       cap: 'Open <b>Forms › Brisbane - Youth - Decision Form › Submissions</b>, press <b>Export</b> (top right) and choose <b>CSV</b> — every decision with its date.',
@@ -904,7 +908,7 @@ const EXPORT_GUIDES = {
       imgs: [['/img/export-help/flows-report.png', 'Elvanto: People menu then Reports, People Flow Steps Detail in the built-in report list'],
              ['/img/export-help/flows-settings.png', 'People Flow Steps Detail settings with the New People flow and CSV output highlighted']] }
   ]}
-};
+};}
 let _egKey = 'import', _egIdx = 0, _egTouchX = null;
 function openExportGuide(key) {
   _egKey = EXPORT_GUIDES[key] ? key : 'import'; _egIdx = 0;
@@ -1730,7 +1734,7 @@ function _hAttTile(label, studs, avgWk, opts) {
   const chev = drop ? `<span class="drop-chev" style="display:inline-block;color:var(--ink-faint);font-weight:800">›</span>` : '';
   const inner = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${chev}<div style="font-size:13px;font-weight:700;color:var(--ink-mid)">${label}</div></div>`
     + `<div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px;align-items:center${opts.hideLifegroupRow ? '' : ';margin-bottom:3px'}">
-    <div style="font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:64px">Youth</div>
+    <div style="font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;width:64px">${L('service')}</div>
     <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${svcUniq}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Seen</div></div>
     <div style="text-align:center;background:var(--paper-dark);border-radius:4px;padding:3px 2px"><div style="font-family:var(--font-display);font-size:16px;font-weight:700">${avgWk}</div><div style="font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase">Weekly</div></div>
   </div>`
@@ -1857,7 +1861,7 @@ async function _renderHomeInner(stale) {
     <th style="font-size:11px;font-weight:700;opacity:.6;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:4px">Weekly</th>
   </tr></thead><tbody>`;
   body += `<tr style="background:rgba(255,255,255,.1)">
-    <td style="font-size:13px;font-weight:700;opacity:.82;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td>
+    <td style="font-size:13px;font-weight:700;opacity:.82;padding:5px 6px;border-radius:6px 0 0 6px;white-space:nowrap">${L('service')}</td>
     <td style="text-align:center;padding:5px 4px"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em">${svcUniq}</span></td>
     <td style="text-align:center;padding:5px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.01em">${svcAvg}</span></td>
   </tr>`;
@@ -1894,7 +1898,7 @@ async function _renderHomeInner(stale) {
       <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Seen</th>
       <th style="font-size:11px;font-weight:700;opacity:.4;text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:3px">Weekly</th>
     </tr></thead><tbody>`;
-    if (pSvcTot > 0) body += `<tr style="background:rgba(255,255,255,.06)"><td style="font-size:12px;font-weight:700;opacity:.5;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">Youth</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcAvg}</span></td></tr>`;
+    if (pSvcTot > 0) body += `<tr style="background:rgba(255,255,255,.06)"><td style="font-size:12px;font-weight:700;opacity:.5;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">${L('service')}</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.62">${pSvcAvg}</span></td></tr>`;
     if (lifegroupsOn && pGrpTot > 0) body += `<tr style="background:rgba(255,255,255,.03)"><td style="font-size:12px;font-weight:700;opacity:.45;padding:3px 6px;border-radius:6px 0 0 6px;white-space:nowrap">${L('smallGroupPlural')}</td><td style="text-align:center;padding:3px 4px"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpUniq}</span></td><td style="text-align:center;padding:3px 4px;border-radius:0 6px 6px 0"><span style="font-family:var(--font-display);font-size:15px;font-weight:700;opacity:.52">${pGrpAvg}</span></td></tr>`;
     body += `</tbody></table>`;
     body += `</div>`;
@@ -1985,7 +1989,7 @@ async function _renderHomeInner(stale) {
       if (['admin', 'director'].includes(u.role)) {
         const vq = (stats.byQuad || []).filter(q => q.totalStudents > 0);
         if (vq.length) {
-          body += '<div class="sh">Youth By Quad</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">';
+          body += '<div class="sh">' + L('service') + ' By Quad</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">';
           for (const q of vq) {
             const qStud = sc.filter(s => s.quad === q.quad);
             // Gendered per-grade rows, rendered up-front (hidden until expanded).
@@ -3055,7 +3059,7 @@ async function renderMyStudents() {
               <span class="li-title">${esc(s.fullName)}</span>
               <span style="font-size:11px;color:var(--ink-mid)">Yr ${s.grade || '—'} · ${s.gender}${bd ? ' · ' + bd : ''}</span>${riskChip(s.atRiskStatus)}
             </div>
-            ${termRow('Youth', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
+            ${termRow(L('service'), s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
             ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow(L('smallGroup'), s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
             ${(s.mobile || s.parentPhone) ? `<div style="font-size:12px;margin-top:4px;color:var(--ink-mid)">${s.mobile ? `<span style="font-weight:600">Mobile:</span> ${phoneLink(s.mobile, s.firstName)}` : ''}${s.mobile && s.parentPhone ? ' · ' : ''}${s.parentPhone ? `<span style="font-weight:600">Parent:</span> ${phoneLink(s.parentPhone, s.firstName, true)}` : ''}</div>` : ''}
           </div>
@@ -3076,7 +3080,7 @@ async function exportConnectCSV() {
   try {
     const { rows } = await API.get('/connections/export');
     await _ensureXlsx();
-    const header = ['Leader / Student', 'Grade', 'Gender', 'Health', 'Youth %', L('smallGroup') + ' %', 'Date of Birth', 'Mobile', 'Parent Mobile'];
+    const header = ['Leader / Student', _gradeWord(), 'Gender', 'Health', L('service') + ' %', L('smallGroup') + ' %', 'Date of Birth', 'Mobile', 'Parent Mobile'];
     const aoa = [header];
     const leaderRowIdx = new Set();
     let lastLeader = null;
@@ -3169,7 +3173,7 @@ async function renderAtRisk() {
   let body = `
     <div class="ph">
       <div class="ph-title" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-        <span style="display:flex;align-items:center;gap:7px">${icN('heart')} Health ${helpTip("Worked out automatically from attendance — nothing to set yourself. Rising / Declining: Youth or Lifegroup attendance has changed a lot since last term. Mixed: up in one, down in the other. Stopped: hasn't been to Youth or Lifegroup this term. Stable: no big change.")}</span>
+        <span style="display:flex;align-items:center;gap:7px">${icN('heart')} Health ${helpTip(`Worked out automatically from attendance — nothing to set yourself. Rising / Declining: ${L('service')} or ${L('smallGroup')} attendance has changed a lot since last term. Mixed: up in one, down in the other. Stopped: hasn't been to ${L('service')} or ${L('smallGroup')} this term. Stable: no big change.`)}</span>
         <input id="ar-name-filter" type="text" placeholder="Find student…" value="${_arNameFilter.replace(/"/g,'&quot;')}" oninput="setArNameFilter(this.value)" class="ph-search" style="margin-left:auto">
       </div>
     </div>`;
@@ -3232,7 +3236,7 @@ function _arSectionsHtml(scoped, u) {
               <span>Gr ${s.grade||'—'} · ${s.gender}</span>
               ${_arQualChips(s)}
             </div>
-            ${termRow('Youth', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal, true)}
+            ${termRow(L('service'), s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal, true)}
             ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow(L('smallGroup'), s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal, true):''}
             ${_arPhone ? `<div style="margin-top:4px;font-size:13px">${!s.mobile && s.parentPhone ? '<span style="font-weight:600">Parent: </span>' : ''}${phoneLink(_arPhone, s.firstName, !s.mobile && !!s.parentPhone)}</div>` : ''}
           </div>
@@ -3380,7 +3384,7 @@ function _studentResultsHtml(vis) {
           ${qualChips(s)}
         </div>
         <div class="li-sub">Gr ${s.grade||'—'} · ${s.gender}${fmtBday(s.dateOfBirth) ? ' · ' + fmtBday(s.dateOfBirth) : ''}</div>
-        ${termRow('Youth', s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
+        ${termRow(L('service'), s.svcAttended, s.svcTotal, s.prevSvcAttended, s.prevSvcTotal)}
         ${(s.grpTotal>0||s.prevGrpTotal>0)?termRow(L('smallGroup'), s.grpAttended, s.grpTotal, s.prevGrpAttended, s.prevGrpTotal):''}
       </div>
       <div class="li-right" style="color:var(--ink-faint)">›</div>
@@ -3388,7 +3392,7 @@ function _studentResultsHtml(vis) {
   }
   h += '</div>';
   const sh = (key, label) => `<th onclick="sortStud('${key}')" style="cursor:pointer;user-select:none;white-space:nowrap">${label}${_sortArrow(key)}</th>`;
-  h += `<div class="desk"><table class="dt"><thead><tr>${sh('name','Name')}${sh('gr','Gr')}${sh('gender','Gender')}${sh('dob','DOB')}${sh('youth','Youth (this / last)')}${sh('lifegroup',L('smallGroup')+' (this / last)')}${sh('status','Status')}<th></th></tr></thead><tbody>`;
+  h += `<div class="desk"><table class="dt"><thead><tr>${sh('name','Name')}${sh('gr','Gr')}${sh('gender','Gender')}${sh('dob','DOB')}${sh('youth',L('service')+' (this / last)')}${sh('lifegroup',L('smallGroup')+' (this / last)')}${sh('status','Status')}<th></th></tr></thead><tbody>`;
   for (const s of sorted) {
     const pct = svcPct(s);
     const psvc = s.prevSvcTotal > 0 ? Math.round(s.prevSvcAttended / s.prevSvcTotal * 100) + '%' : '—';
@@ -3749,7 +3753,7 @@ async function renderTrends() {
   const QUAD_COLORS = { g79:'#ec4899', b79:'#3b82f6', g1012:'#8b5cf6', b1012:'#10b981' };
 
   let body = `<div class="ph"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-    <div><div class="ph-title">Attendance Trends</div><div class="ph-sub">Youth &amp; lifegroup overview</div></div>
+    <div><div class="ph-title">Attendance Trends</div><div class="ph-sub">${L('service')} &amp; ${L('smallGroup').toLowerCase()} overview</div></div>
     ${canExport?'<button class="btn btn-secondary btn-sm" onclick="exportTrendsCSV()">Export CSV</button>':''}
   </div></div>`;
 
@@ -3953,7 +3957,7 @@ async function exportTrendsCSV() {
   try {
     const students = await API.get('/students');
     const lgOn = _lifegroupsOn();
-    const header = ['Grade','Students','Seen Svc','Avg Svc Sess'];
+    const header = [_gradeWord(),'Students','Seen Svc','Avg Svc Sess'];
     if (lgOn) header.push(L('smallGroup') + ' Enrolled', 'Seen ' + L('smallGroup'), 'Avg ' + L('smallGroup') + ' Sess');
     const aoa = [header];
     for (const gr of _gradeList()) {
@@ -5149,29 +5153,41 @@ function _youthSetupBody(settings, users) {
   const drlEn = drl.enabled;
   const roleEnabled = (k) => rlEn[k] != null ? rlEn[k] : drlEn[k];
   const cohort = st.cohortModel || dst.cohortModel;
-  // The currently-SAVED cohort model (not the draft) — drives whether the
-  // "Apply account layout" button (bug 8) shows at all. Read from `settings`
-  // (the server value passed into this function), not `_setupDraft`.
+  // The currently-SAVED structure (not the draft) — drives the "Apply account
+  // layout" button (bug 8), which always operates on whatever's actually
+  // saved, never an unsaved draft. Read from `settings` (the server value
+  // passed into this function), not `_setupDraft`.
   const savedStructure = (settings.ministryConfig && settings.ministryConfig.structure) || {};
   const savedCohort = savedStructure.cohortModel || dst.cohortModel;
+  const savedGradeMin = savedStructure.gradeMin != null ? savedStructure.gradeMin : dst.gradeMin;
+  const savedGradeMax = savedStructure.gradeMax != null ? savedStructure.gradeMax : dst.gradeMax;
+  const savedGradeLabel = savedStructure.gradeLabel != null ? savedStructure.gradeLabel : dst.gradeLabel;
   const gLabel = st.gradeLabel != null ? st.gradeLabel : dst.gradeLabel;
   const gMin = st.gradeMin != null ? st.gradeMin : dst.gradeMin;
-  const gMax = st.gradeMax != null ? st.gradeMax : dst.gradeMax;
+  // The highest grade is always 12 — see includeGrade6 below, which is the
+  // only grade-range control exposed in this UI (bug 8 follow-up, 2026-07-11:
+  // replaced separate Lowest/Highest grade number fields).
+  const gMax = 12;
+  const includeGrade6 = gMin <= 6;
   const gPolicy = st.genderPolicy || dst.genderPolicy;
   const svcDay = st.serviceDayOfWeek != null ? st.serviceDayOfWeek : dst.serviceDayOfWeek;
 
-  // Orphaned-accounts warning: switching to cohortModel 'none' leaves any
-  // existing grade/quad logins with no cohort to scope to. Never deletes
-  // anything — just flags them. (Also flags grade accounts whose grade(s) now
-  // fall outside the configured range.)
+  // Heads-up (not a hard warning — nothing is ever auto-deleted or auto-
+  // edited by this note) when the draft's structure would leave existing
+  // grade/quad accounts not matching the intended account layout for that
+  // cohort model — e.g. switching to Simple when 12 single-grade accounts +
+  // 4 quads still exist, or toggling Grade 6 on/off after accounts were
+  // already created. Points at "Apply account layout" (bug 8) as the actual
+  // fix, rather than the old "reassign/remove them yourself in Accounts"
+  // wording, which predates that tool and is no longer the right advice.
   const allUsers = users || [];
   let orphanNote = '';
   if (cohort === 'none') {
-    const gq = allUsers.filter(u => u.role === 'grade' || u.role === 'quad');
-    if (gq.length) orphanNote = `${gq.length} existing grade/quad account${gq.length===1?'':'s'} (${gq.map(u=>esc(u.displayName)).join(', ')}) will have no cohort to scope to under “no cohorting”. Nothing is deleted — reassign or remove them in Accounts.`;
+    const notBracketed = allUsers.filter(u => u.role === 'quad' || (u.role === 'grade' && userGrades(u).length < 2));
+    if (notBracketed.length) orphanNote = `${notBracketed.length} existing account${notBracketed.length===1?'':'s'} (${notBracketed.map(u=>esc(u.displayName)).join(', ')}) ${notBracketed.length===1?"doesn't":"don't"} match Simple's account layout (broad 2-grade brackets, no quads). Nothing is changed automatically — save this, then use “Apply account layout” below to reconcile Accounts, or adjust them yourself.`;
   } else {
     const outOfRange = allUsers.filter(u => u.role === 'grade' && userGrades(u).some(g => g < gMin || g > gMax));
-    if (outOfRange.length) orphanNote = `${outOfRange.length} grade account${outOfRange.length===1?'':'s'} cover grades outside ${gMin}–${gMax} and won't fully match students. Nothing is deleted — adjust them in Accounts.`;
+    if (outOfRange.length) orphanNote = `${outOfRange.length} grade account${outOfRange.length===1?'':'s'} cover grades outside ${gMin}–${gMax} and won't fully match students. Nothing is changed automatically — save this, then use “Apply account layout” below to reconcile Accounts, or adjust them yourself.`;
   }
 
   const dayOpts = _DAY_NAMES.map((n, i) => `<option value="${i}" ${i===svcDay?'selected':''}>${n}</option>`).join('');
@@ -5183,7 +5199,7 @@ function _youthSetupBody(settings, users) {
   const adminRoleRow = `<label class="fg" style="display:flex;align-items:center;gap:8px"><span style="display:flex;align-items:center;gap:8px;opacity:.7"><input type="checkbox" checked disabled> <span>Admin</span></span> ${helpTip("Full access including settings, accounts, and everything the roles below can do. You can create additional Admin accounts freely — but the account named “Admin” specifically can't be renamed, deactivated, or deleted.")}</label>`;
   const roleToggleRows = [
     ['director', 'Director', 'Ministry-wide read/write, can import data.'],
-    ['grade', 'Grade', 'Login scoped to one or more grades (e.g. Grade 9 — one account can cover several grades at once).'],
+    ['grade', 'Grade', 'Login scoped to one or more grades (e.g. '+gLabel+' 9 — one account can cover several grades at once).'],
     ['quad', 'Quad', 'Logins scoped to one gender+bracket (e.g. Girls Yr 7-9) — oversees several grades and leaders at once within that bracket, and sees trends broken down per grade, not just the combined total.'],
     ['leader', 'Leader', 'A narrow login that sees only its own connected students.'],
   ].map(([k, label, hint]) =>
@@ -5219,24 +5235,21 @@ function _youthSetupBody(settings, users) {
   </div>`;
 
   b += _setupCard('structure', 'Structure & Roles', `
-    <div class="fg"><label class="fl">Cohort model ${helpTip('“Complex” = the graded model (grade/quad logins scope by grade & gender) — matches the Complex Ministry preset above. “Simple” = a flat ministry: nobody is scoped by grade/gender and the grade/quad breakdowns are hidden — matches the Simple Ministry preset.')}</label>
+    <div class="fg"><label class="fl">Cohort model ${helpTip('Both models scope every grade/quad login to its own assigned students — nobody sees outside their bracket. The difference is account layout, not access: Complex is one account per single grade plus 4 gender+bracket quad rollups (12-18 grade/quad accounts total); Simple is 3 broad 2-3-grade brackets per gender and no quad accounts (6 accounts total). Pick Simple for a smaller team that doesn\'t need grade-by-grade logins or quad-level reporting.')}</label>
       <select class="fs" onchange="_setupSet('structure.cohortModel', this.value)">
-        <option value="grades-quads" ${cohort==='grades-quads'?'selected':''}>Complex (grades + quads)</option>
-        <option value="none" ${cohort==='none'?'selected':''}>Simple (no cohorting)</option>
+        <option value="grades-quads" ${cohort==='grades-quads'?'selected':''}>Complex — one account per grade + quads</option>
+        <option value="none" ${cohort==='none'?'selected':''}>Simple — 3 broad brackets, no quads</option>
       </select></div>
     ${orphanNote ? `<div class="alert al-warn" style="margin-bottom:10px">${orphanNote}</div>` : ''}
-    <div style="display:flex;gap:8px">
-      <div class="fg" style="flex:1"><label class="fl">Lowest grade</label><input class="fi" type="number" value="${gMin}" onchange="_setupSetNum('structure.gradeMin', this.value)"></div>
-      <div class="fg" style="flex:1"><label class="fl">Highest grade</label><input class="fi" type="number" value="${gMax}" onchange="_setupSetNum('structure.gradeMax', this.value)"></div>
-    </div>
-    <div class="fg"><label class="fl">Gender policy ${helpTip('Strict = leaders connect within their own gender and reads are gender-scoped (current YS Brisbane). Soft = gender shown but never blocks. Off = no gendered UI at all.')}</label>
+    <label class="fg" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${includeGrade6?'checked':''} onchange="_setupSetGrade6(this.checked)"> <span>Include ${esc(gLabel)} 6 (kids-church intake) ${helpTip('The oldest grade an account can be responsible for is always '+esc(gLabel)+' 12. Turn this on if your ministry also receives incoming '+esc(gLabel).toLowerCase()+' 6 students straight from kids church. Under Complex this adds 2 more single-grade accounts ('+esc(gLabel)+' 6 Girls/Boys); under Simple the lowest bracket widens to cover '+esc(gLabel)+'s 6-8 instead of 7-8 — it does NOT add a 4th Simple account.')}</span></label>
+    <div class="fg"><label class="fl">Gender policy ${helpTip('Strict = every read is gender-scoped and leaders can only connect within their own gender (current YS Brisbane, both cohort models). Soft = gender is still shown but never blocks access or connecting. Off = gender is hidden everywhere, including on quad-login labels and grade badges.')}</label>
       <select class="fs" onchange="_setupSet('structure.genderPolicy', this.value)">
         ${[['strict','Strict'],['soft','Soft'],['off','Off']].map(([v,l])=>`<option value="${v}" ${gPolicy===v?'selected':''}>${l}</option>`).join('')}
       </select></div>
-    <div class="fg"><label class="fl">Service day ${helpTip('The night your main service runs. Drives week bucketing for terms and the follow-up “not seen last …” labels, not just wording.')}</label>
+    <div class="fg"><label class="fl">Service day ${helpTip('The night your main service runs, e.g. Friday. Drives week bucketing for current-vs-previous term boundaries and the Home follow-up "Not Seen Last …" labels — a real scheduling input, not just display wording (that\'s the separate "Service night wording" field in Terminology below).')}</label>
       <select class="fs" onchange="_setupSetNum('structure.serviceDayOfWeek', this.value)">${dayOpts}</select></div>
     <div class="sh" style="margin:16px 0 8px">Roles</div>
-    <div class="help-text" style="margin-bottom:8px">Role names are fixed. Admin is always available for every ministry — choose which of the others this ministry uses.</div>
+    <div class="help-text" style="margin-bottom:8px">Role names are fixed. Admin is always available for every ministry — choose which of the others this ministry uses. Turning a role off here deactivates every currently-active account of that role (Accounts screen) — turning it back on does not reactivate them automatically.</div>
     ${adminRoleRow}
     ${roleToggleRows}
     <div class="sh" style="margin:16px 0 8px">Attendance</div>
@@ -5301,7 +5314,7 @@ function _youthSetupBody(settings, users) {
 
   b += _setupCard('modules', 'Modules & Import', `
     <label class="fg" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${mv('connectionAudit')?'checked':''} onchange="_setupSet('modules.connectionAudit', this.checked)"> <span>Connection Audit ${helpTip('The year-over-year integration-funnel module (Data tab). Requires uploading a New Person form, a Decision form, and Student Team service data, in addition to the basic service/group attendance this app already needs — turn off for ministries that do not run those extra forms.')}</span></label>
-    <label class="fg" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${mv('lifegroups')?'checked':''} onchange="_setupSet('modules.lifegroups', this.checked)"> <span>Lifegroups ${helpTip('Small-group attendance tracking and stats. Turn off for ministries with no small groups.')}</span></label>
+    <label class="fg" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${mv('lifegroups')?'checked':''} onchange="_setupSet('modules.lifegroups', this.checked)"> <span>${esc(lv('smallGroupPlural'))} ${helpTip('Small-group attendance tracking and stats. Turn off for ministries with no small groups.')}</span></label>
     <div class="fg"><label class="fl">Export guides ${helpTip('The in-app Elvanto CSV-export walkthroughs. Hide them if your church uses a different management system.')}</label>
       <select class="fs" onchange="_setupSet('modules.exportGuides', this.value)">
         ${[['elvanto','Show Elvanto guides'],['hidden','Hidden']].map(([v,l])=>`<option value="${v}" ${mv('exportGuides')===v?'selected':''}>${l}</option>`).join('')}
@@ -5328,19 +5341,72 @@ function _youthSetupBody(settings, users) {
   b += `<button class="btn btn-primary btn-full" style="margin-top:4px" onclick="confirmSaveMinistrySetup()">Save Youth Setup</button>`;
 
   // "Apply account layout" (bug 8) — a separate, explicit, typed-confirm
-  // action that reconciles Accounts with a cohort model, independent of
-  // Save. Only shown once the draft's cohort model differs from what's
-  // actually saved, i.e. there's a real switch to reconcile accounts for.
-  if (cohort !== savedCohort) {
-    const targetLabel = cohort === 'none' ? 'Simple' : 'Complex';
-    b += `<button class="btn btn-secondary btn-full" style="margin-top:8px" onclick="previewCohortLayout('${cohort}')">Apply account layout for ${targetLabel}</button>
-      <div class="help-text" style="margin-top:4px;margin-bottom:4px">Creates/deactivates grade &amp; quad accounts to match the Cohort model selected above — separate from Save, and only touches Accounts (not students, leaders or connections).</div>`;
-  }
+  // action that reconciles Accounts with whatever cohort model/grade range is
+  // actually SAVED (never an unsaved draft — matching savedCohort/savedGrade*
+  // above), independent of the Save button. Always visible (2026-07-12 follow-
+  // up) — greyed out via the client-side plan mirror below when Accounts
+  // already match, rather than only appearing while switching models; a
+  // grade-6-toggle change with the SAME cohort model still needs this to
+  // pick up new/changed bracket accounts.
+  const alignPlan = planCohortAccountLayoutClient(savedCohort, savedGradeMin, savedGradeMax, savedGradeLabel, allUsers);
+  const aligned = !alignPlan.toCreate.length && !alignPlan.toDeactivate.length;
+  const targetLabel = savedCohort === 'none' ? 'Simple' : 'Complex';
+  b += `<button class="btn btn-secondary btn-full" style="margin-top:8px" ${aligned?'disabled':''} onclick="previewCohortLayout('${savedCohort}')">Apply account layout for ${targetLabel}${aligned?' (already aligned)':''}</button>
+    <div class="help-text" style="margin-top:4px;margin-bottom:4px">Creates/deactivates grade &amp; quad accounts to match the SAVED Cohort model/grade range above — separate from Save (save first if you just changed either), and only touches Accounts, never students, leaders or connections.</div>`;
 
   return b;
 }
 
 // ── Apply account layout (bug 8) ──
+// Client-side mirror of src/services/cohort-account-layout.ts, purely so the
+// button above can grey itself out instantly from data already on the page
+// (_adminData.users + the saved settings) instead of an extra round-trip on
+// every Youth Setup render. The server re-derives the same plan itself when
+// actually previewing/applying — this copy only ever decides the button's
+// enabled/disabled state, never performs a mutation itself. Keep in sync with
+// the backend file's gradeBrackets/buildTargetAccounts/planCohortAccountLayout.
+function _gradeBracketsClient(gradeMin, gradeMax) {
+  const top = [];
+  let g = gradeMax;
+  while (g - 1 >= gradeMin + 2) { top.unshift([g - 1, g]); g -= 2; }
+  const lowest = [];
+  for (let n = gradeMin; n <= g; n++) lowest.push(n);
+  if (lowest.length) top.unshift(lowest);
+  return top;
+}
+function _gradeWordLabelClient(grades, gradeWord) {
+  const g = grades.slice().sort((a, b) => a - b);
+  const nums = g.length > 1 ? (g[0] + '–' + g[g.length - 1]) : String(g[0]);
+  return gradeWord + (g.length > 1 ? 's' : '') + ' ' + nums;
+}
+function buildTargetAccountsClient(targetCohort, gradeMin, gradeMax, gradeWord) {
+  const out = [];
+  const genders = [{ gender: 'female', label: 'Girls', suffix: 'g' }, { gender: 'male', label: 'Boys', suffix: 'b' }];
+  if (targetCohort === 'none') {
+    for (const bracket of _gradeBracketsClient(gradeMin, gradeMax)) {
+      for (const g of genders) out.push({ role: 'grade', username: 'grade' + bracket.join('') + g.suffix, displayName: _gradeWordLabelClient(bracket, gradeWord) + ' ' + g.label });
+    }
+  } else {
+    for (let grade = gradeMin; grade <= gradeMax; grade++) {
+      for (const g of genders) out.push({ role: 'grade', username: 'grade' + grade + g.suffix, displayName: _gradeWordLabelClient([grade], gradeWord) + ' ' + g.label });
+    }
+    for (const q of [['g79', 'Girls Yr 7-9'], ['b79', 'Boys Yr 7-9'], ['g1012', 'Girls Yr 10-12'], ['b1012', 'Boys Yr 10-12']]) {
+      out.push({ role: 'quad', username: q[0], displayName: q[1] });
+    }
+  }
+  return out;
+}
+function planCohortAccountLayoutClient(targetCohort, gradeMin, gradeMax, gradeWord, existing) {
+  const targets = buildTargetAccountsClient(targetCohort, gradeMin, gradeMax, gradeWord);
+  const existingUsernames = new Set(existing.map(u => (u.email || '').toLowerCase()));
+  const targetUsernames = new Set(targets.map(t => t.username.toLowerCase()));
+  const toCreate = targets.filter(t => !existingUsernames.has(t.username.toLowerCase()));
+  const toDeactivate = existing
+    .filter(u => (u.role === 'grade' || u.role === 'quad') && u.status === 'active' && !targetUsernames.has((u.email || '').toLowerCase()))
+    .map(u => ({ id: u.id, username: u.email, displayName: u.displayName }));
+  return { targetCohort, toCreate, toDeactivate };
+}
+
 async function previewCohortLayout(targetCohort) {
   try {
     const plan = await API.post('/accounts/cohort-layout/preview', { targetCohort });
@@ -5422,6 +5488,17 @@ function _setupSet(path, val) {
   _setupRerender();
 }
 function _setupSetNum(path, val) { const n = parseInt(val, 10); _setupSet(path, isNaN(n) ? 0 : n); }
+// "Include Grade 6" toggle (bug 8 follow-up) replaces separate Lowest/Highest
+// grade number fields — the highest grade is always 12, so this is really
+// just gradeMin: 6 (kids-church intake included) vs 7 (the old default).
+// Sets both fields in one go so there's only one re-render, not two.
+function _setupSetGrade6(checked) {
+  if (!_setupDraft) _setupDraft = {};
+  if (!_setupDraft.structure) _setupDraft.structure = {};
+  _setupDraft.structure.gradeMin = checked ? 6 : 7;
+  _setupDraft.structure.gradeMax = 12;
+  _setupRerender();
+}
 // Store a newline-separated textarea as a trimmed, non-empty string array
 // (e.g. labels.groupNameStrip). _setupSet would otherwise store the raw string.
 function _setupSetList(path, val) {
@@ -6222,7 +6299,7 @@ function model(){
     const quad=computeQuad(x.grade,x.gender);
     people.push({id:'cax-'+h32(k),name:x.name,s:null,caOnly:true,stage,trend:'stable',score:scoreOf(stage,null,'stable'),connect:x.connect||null,decision:x.decision||null,conn:!!x.hasConnect,dec:!!x.hasDecision,team:!!x.team,quad});
   }
-  const rungs=[[1,'Interacted'],[2,'Came to Youth'],[3,'Regular'],[4,'Attended a lifegroup this period'],[5,'Student team']]
+  const rungs=[[1,'Interacted'],[2,'Came to '+L('service')],[3,'Regular'],[4,'Attended a '+L('smallGroup').toLowerCase()+' this period'],[5,'Student team']]
     .map(([n,lb])=>({n,lb,v:people.filter(p=>p.stage>=n).length}));
   // KPIs
   const act=students.filter(s=>s.sA>0).length;
@@ -6330,13 +6407,13 @@ function rOverview(){
   let b='';
   b+='<div class="stat-grid">'
     +'<div class="stat"><div class="stat-v">'+k.act+'</div><div class="stat-l">Active youth</div>'+at+'</div>'
-    +'<div class="stat"><div class="stat-v">'+k.avgFri+'</div><div class="stat-l">Avg Youth</div>'+dl(k.svcD)+'</div>'
+    +'<div class="stat"><div class="stat-v">'+k.avgFri+'</div><div class="stat-l">Avg '+L('service')+'</div>'+dl(k.svcD)+'</div>'
     +'<div class="stat"><div class="stat-v">'+k.inLG+'</div><div class="stat-l">In a lifegroup'+(k.act?' ('+Math.round(k.inLG/k.act*100)+'%)':'')+'</div>'+dl(k.grpD)+'</div>'
     +'<div class="stat"><div class="stat-v">'+k.decisions+'</div><div class="stat-l">Decisions</div>'+(noPrevCompare?'':'<div class="ca-dlt fl">this term</div>')+'</div>'
     +'</div>';
   const max=m.rungs[0].v||1;
   const cols=accentRamp(D.settings&&D.settings.ministryConfig&&D.settings.ministryConfig.branding&&D.settings.ministryConfig.branding.accent);
-  b+='<div class="card"><div class="ca-ct">Integration ladder</div>'+m.rungs.map((r,i)=>'<div class="ca-lrow"><div class="ca-lname">'+r.lb+(i===0?' '+helpTip('The Youth attendance numbers, plus anyone who attended a lifegroup but wasn\'t at a service, plus anyone who submitted a New Connect or Decision form but wasn\'t matched to an existing student record. That\'s why this can be higher than ‘Came to Youth’.'):'')+'</div><div class="ca-lbar"><div class="ca-lfill" style="width:'+Math.max(8,Math.round(r.v/max*100))+'%;background:'+cols[i]+'">'+r.v+'</div></div></div>').join('')+'</div>';
+  b+='<div class="card"><div class="ca-ct">Integration ladder</div>'+m.rungs.map((r,i)=>'<div class="ca-lrow"><div class="ca-lname">'+r.lb+(i===0?' '+helpTip('The '+L('service')+' attendance numbers, plus anyone who attended a '+L('smallGroup').toLowerCase()+' but wasn\'t at a service, plus anyone who submitted a New Connect or Decision form but wasn\'t matched to an existing student record. That\'s why this can be higher than ‘Came to '+L('service')+'’.'):'')+'</div><div class="ca-lbar"><div class="ca-lfill" style="width:'+Math.max(8,Math.round(r.v/max*100))+'%;background:'+cols[i]+'">'+r.v+'</div></div></div>').join('')+'</div>';
   const row=(g,chip)=>'<div class="ca-alr" onclick="CA.showGroup(\''+g.id+'\')"><div style="font-size:.78rem;font-weight:600">'+esc(g.name)+'</div>'+chip+'</div>';
   const hasTrend=m.groups.some(g=>g.trendPct!==0);
   const tops=m.groups.filter(g=>g.active>0).slice().sort((a,b)=>hasTrend?(b.trendPct-a.trendPct||b.active-a.active):(b.active-a.active||b.va-a.va)).slice(0,2);
@@ -6392,7 +6469,7 @@ function rFunnel(){
   const qc={};for(const p of stuck){const q=p.quad;if(q)qc[q]=(qc[q]||0)+1;}
   const worst=Object.entries(qc).sort((a,b)=>b[1]-a[1])[0];
   let b='';
-  b+='<div class="card"><div class="ca-ct">This term&#39;s conversion '+helpTip('Stages run Interacted, Youth, Regular, Lifegroup, then Student team. Each bar shows how many people reached that stage this term.')+'</div><div style="font-size:.62rem;color:var(--ca-muted);margin-bottom:10px">'+R[0].lb+' → '+R[4].lb+'</div>'+f+'</div>';
+  b+='<div class="card"><div class="ca-ct">This term&#39;s conversion '+helpTip('Stages run Interacted, '+L('service')+', Regular, '+L('smallGroup')+', then Student team. Each bar shows how many people reached that stage this term.')+'</div><div style="font-size:.62rem;color:var(--ca-muted);margin-bottom:10px">'+R[0].lb+' → '+R[4].lb+'</div>'+f+'</div>';
   b+='<div class="card" style="background:#fff5f5;border-left:3px solid var(--ca-rose)"><div style="font-size:.66rem;font-weight:800;color:#b91c1c;text-transform:uppercase;letter-spacing:.05em">Biggest leak</div><div style="font-size:.78rem;margin-top:3px">'+R[leak].lb+' → '+R[leak+1].lb+' loses <b>'+lost+' people</b>.'+(worst?' Largest cluster: '+(QLBL[worst[0]]||worst[0])+' ('+worst[1]+').':'')+'</div></div>';
   b+='<button class="btn btn-secondary btn-full" onclick="CA.fquad()">'+(FQ?'Hide quad funnels ▴':'View funnel per quad ▾')+'</button>';
   if(FQ){
@@ -6451,7 +6528,7 @@ function rGroups(){
   if(!rows.length){b+='<div class="card" style="text-align:center;color:var(--ca-muted);font-size:.78rem">No lifegroups'+(LGQ?' in this quad':' yet')+'</div>';caShell(b,'ca-groups');return;}
   const rc='text-align:center;padding:7px 8px;white-space:nowrap';
   b+='<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.72rem">'
-    +'<thead><tr style="color:var(--ca-muted)"><th style="text-align:left;padding:8px 10px">Lifegroup</th>'
+    +'<thead><tr style="color:var(--ca-muted)"><th style="text-align:left;padding:8px 10px">'+L('smallGroup')+'</th>'
     +['Enrolled','Seen','Visits/person','Run','Weekly'].map(h=>'<th style="'+rc+'">'+h+'</th>').join('')
     +'</tr></thead><tbody>';
   for(const r of rows){
@@ -6487,16 +6564,20 @@ function showGroup(id){
     +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:.72rem;color:var(--ca-muted)">'+g.enrolled+' enrolled · '+g.active+' active · '+g.va+' visits/person · '+g.weeksRun+' weeks run</span>'+gChip(g)+'</div>';
   h+='<div style="max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid var(--ca-line)">';
   for(const s of g.mem.slice().sort((a,b)=>b.gA-a.gA)){
-    h+='<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--ca-line)"><div style="font-size:.8rem;font-weight:600">'+esc(s.fn+' '+s.ln)+'</div><div style="font-size:.72rem;color:var(--ca-muted)">'+s.gA+'/'+s.gT+' lifegroups · '+s.sA+'/'+s.sT+' Youth</div></div>';
+    h+='<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--ca-line)"><div style="font-size:.8rem;font-weight:600">'+esc(s.fn+' '+s.ln)+'</div><div style="font-size:.72rem;color:var(--ca-muted)">'+s.gA+'/'+s.gT+' '+L('smallGroupPlural').toLowerCase()+' · '+s.sA+'/'+s.sT+' '+L('service')+'</div></div>';
   }
   h+='</div>';
   h+='<button class="btn btn-secondary btn-full" style="margin-top:12px" onclick="closeModal()">Close</button>';
   modal(h);
 }
-const STG={0:'No data',1:'Interacted',2:'Youth',3:'Regular',4:'Lifegroup',5:'Student team'};
+// Functions, not plain objects — evaluated per-call so a customised
+// labels.service/smallGroup takes effect without a page reload (they used to
+// be module-scope consts frozen at script-parse time, before S.settings/L()
+// had loaded).
+function STG(){return {0:'No data',1:'Interacted',2:L('service'),3:'Regular',4:L('smallGroup'),5:'Student team'};}
 // Compact per-student badge label (People tab list + person detail popup) — a
-// shorter set of words than STG, e.g. "1 - Interacted" instead of "Stage 1 · Interacted".
-const STG_SHORT={0:'No data',1:'Interacted',2:'Youth',3:'Regular',4:'Lifegroup',5:'S-Team'};
+// shorter set of words than STG(), e.g. "1 - Interacted" instead of "Stage 1 · Interacted".
+function STG_SHORT(){return {0:'No data',1:'Interacted',2:L('service'),3:'Regular',4:L('smallGroup'),5:'S-Team'};}
 function plist(){
   const m=model();
   let list;
@@ -6508,7 +6589,7 @@ function plist(){
   let b='';
   for(const p of list.slice(0,PF.cap)){
     const s=p.s;
-    const stChip='<span class="chip '+(p.stage>=4?'c-success':p.stage>0?'c-accent':'c-neutral')+'">'+p.stage+' - '+STG_SHORT[p.stage]+'</span>';
+    const stChip='<span class="chip '+(p.stage>=4?'c-success':p.stage>0?'c-accent':'c-neutral')+'">'+p.stage+' - '+STG_SHORT()[p.stage]+'</span>';
     const meta=s?'<span style="font-size:.72rem;color:var(--ca-muted)">Yr '+(s.grade||'—')+' · '+(s.gender==='female'?'F':'M')+'</span>':'<span class="chip ca-cw">Not in platform</span>';
     const declChip=p.trend==='declining'?'<span class="chip c-danger">▼ Declining</span>':'';
     const tail=s
@@ -6526,7 +6607,7 @@ function rPeople(){
   let b='';
   b+='<input class="fi" style="margin-bottom:9px" placeholder="Search '+m.people.length+' people…" value="'+PF.q.replace(/"/g,'&quot;')+'" oninput="CA.pq(this.value)">';
   b+='<div class="ca-fch">'
-    +'<select class="fs ca-sel" onchange="CA.pstage(this.value)"><option value="">All stages</option>'+[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(PF.stage==n?' selected':'')+'>Stage '+n+' · '+STG[n]+'</option>').join('')+'</select>'
+    +'<select class="fs ca-sel" onchange="CA.pstage(this.value)"><option value="">All stages</option>'+[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(PF.stage==n?' selected':'')+'>Stage '+n+' · '+STG()[n]+'</option>').join('')+'</select>'
     +'<select class="fs ca-sel" onchange="CA.pquad(this.value)"><option value="">All quads</option>'+Object.entries(QLBL).map(([k,v])=>'<option value="'+k+'"'+(PF.quad===k?' selected':'')+'>'+v+'</option>').join('')+'</select>'
     +'</div>';
   b+='<div id="ca-plist">'+plist()+'</div>';
@@ -6543,8 +6624,8 @@ function showPerson(id){
   const cons=s&&s.sT>0?Math.round(10*s.sA/s.sT):0;
   const tm=p.trend==='rising'?5:p.trend==='declining'?-10:0;
   let h='<div style="font-size:1rem;font-weight:800;margin-bottom:6px">'+esc(p.name)+'</div>';
-  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+(s?'<span class="chip c-neutral">Yr '+(s.grade||'—')+' · '+(s.gender==='female'?'F':'M')+'</span>':'<span class="chip ca-cw">Not in platform</span>')+'<span class="chip c-accent">'+p.stage+' - '+STG_SHORT[p.stage]+'</span>'+(p.trend==='rising'?'<span class="chip c-success">▲ Rising</span>':p.trend==='declining'?'<span class="chip c-danger">▼ Declining</span>':'')+'</div>';
-  h+='<div class="card" style="margin-bottom:10px"><div class="ca-ct">Score · '+p.score+'</div><div style="font-size:.74rem;line-height:1.8;color:var(--ca-muted)">Stage base <b style="color:var(--ca-ink)">'+base+'</b> · Consistency <b style="color:var(--ca-ink)">+'+cons+'</b>'+(s&&s.sT?' ('+s.sA+'/'+s.sT+' Youth)':'')+' · Trend <b style="color:var(--ca-ink)">'+(tm>=0?'+':'')+tm+'</b></div></div>';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+(s?'<span class="chip c-neutral">Yr '+(s.grade||'—')+' · '+(s.gender==='female'?'F':'M')+'</span>':'<span class="chip ca-cw">Not in platform</span>')+'<span class="chip c-accent">'+p.stage+' - '+STG_SHORT()[p.stage]+'</span>'+(p.trend==='rising'?'<span class="chip c-success">▲ Rising</span>':p.trend==='declining'?'<span class="chip c-danger">▼ Declining</span>':'')+'</div>';
+  h+='<div class="card" style="margin-bottom:10px"><div class="ca-ct">Score · '+p.score+'</div><div style="font-size:.74rem;line-height:1.8;color:var(--ca-muted)">Stage base <b style="color:var(--ca-ink)">'+base+'</b> · Consistency <b style="color:var(--ca-ink)">+'+cons+'</b>'+(s&&s.sT?' ('+s.sA+'/'+s.sT+' '+L('service')+')':'')+' · Trend <b style="color:var(--ca-ink)">'+(tm>=0?'+':'')+tm+'</b></div></div>';
   const ev=[];
   if(p.connect)ev.push(['Connect card',p.connect]);
   if(p.decision)ev.push(['Decision',p.decision]);
@@ -6560,7 +6641,7 @@ function exportMenu(){
 }
 function exportQuad(q){
   const m=model();
-  const rows=[['Name','Grade','Gender','Phone','Reason','Score']];
+  const rows=[['Name',_gradeWord(),'Gender','Phone','Reason','Score']];
   for(const p of m.people){
     if(!p.s||p.s.quad!==q)continue;
     let reason=null;
@@ -6602,8 +6683,8 @@ function rData(){
   // shown here so it's clear re-uploading Service alone won't blank these out.
   const carried=(kind)=>(AUDIT&&AUDIT.uploads&&AUDIT.uploads[kind]&&AUDIT.uploads[kind].length)?(AUDIT.uploads[kind].length+' rows carried over from '+esc(AUDIT_YEAR)):null;
   b+='<div class="sh">Upload year-to-date data</div><div class="card" style="padding:4px 13px">'
-    +slot('service','Youth attendance — required','Year-to-date Youth export',PENDING.service?(PENDING._serviceFn||(PENDING.service.rows.length+' rows')):null)
-    +slot('group','Lifegroup attendance','Year-to-date Lifegroup export',PENDING.group?(PENDING._groupFn||(PENDING.group.groups.length+' groups')):null)
+    +slot('service',L('service')+' attendance — required','Year-to-date '+L('service')+' export',PENDING.service?(PENDING._serviceFn||(PENDING.service.rows.length+' rows')):null)
+    +slot('group',L('smallGroup')+' attendance','Year-to-date '+L('smallGroup')+' export',PENDING.group?(PENDING._groupFn||(PENDING.group.groups.length+' groups')):null)
     +slot('team','Student Team CSV','Current team roster',PENDING.team.length?(PENDING._teamFn||(PENDING.team.length+' rows')):carried('team'))
     +slot('connect','New Connect CSV','Connect dates',PENDING.connect.length?(PENDING._connectFn||(PENDING.connect.length+' rows')):carried('connect'))
     +slot('decision','Decision CSV','Decision dates',PENDING.decision.length?(PENDING._decisionFn||(PENDING.decision.length+' rows')):carried('decision'))
@@ -6640,11 +6721,11 @@ function upload(kind,input){
       catch(err){toast((err&&err.message)||'Could not read that Excel file');return;}
     }
     if(kind==='service'){
-      if(parseGroupCSV(text)){toast('That looks like a Lifegroup export — use the Lifegroup slot');return;}
+      if(parseGroupCSV(text)){toast('That looks like a '+L('smallGroup')+' export — use the '+L('smallGroup')+' slot');return;}
       const rows=parseCSV(text);
-      if(!rows.length){toast('Could not read that as a Youth attendance CSV');return;}
+      if(!rows.length){toast('Could not read that as a '+L('service')+' attendance CSV');return;}
       PENDING.service={rows};PENDING._serviceFn=f.name;
-      toast(rows.length+' Youth rows staged');rerender();return;
+      toast(rows.length+' '+L('service')+' rows staged');rerender();return;
     }
     if(kind==='group'){
       const grp=parseGroupCSV(text);
@@ -6753,13 +6834,13 @@ function _buildDeckBody(){
     const X=i=>P+(W-2*P)*i/(n-1),Y=v=>H-P-(H-2*P)*(max===min?.5:(v-min)/(max-min));
     const pts=vals.map((v,i)=>X(i).toFixed(0)+','+Y(v).toFixed(0)).join(' ');
     const dots=vals.map((v,i)=>'<circle cx="'+X(i).toFixed(0)+'" cy="'+Y(v).toFixed(0)+'" r="3.5" fill="#1d4ed8"/>').join('');
-    return '<div class="vizwrap"><svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet"><polyline points="'+pts+'" fill="none" stroke="#1d4ed8" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+dots+'</svg><p class="vcap">Youth attendance · '+vals.length+' sessions · outliers excluded by the server</p></div>';
+    return '<div class="vizwrap"><svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet"><polyline points="'+pts+'" fill="none" stroke="#1d4ed8" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+dots+'</svg><p class="vcap">'+L('service')+' attendance · '+vals.length+' sessions · outliers excluded by the server</p></div>';
   };
   const lgTableViz=()=>{
     const rows=lifegroupRows().sort((a,b)=>b.unique-a.unique||a.name.localeCompare(b.name));
     if(!rows.length)return '<p class="muted">No lifegroup data.</p>';
     const tr=rows.map(r=>'<tr><td>'+esc(lgDisplayName(r.name))+'</td><td class="r">'+r.enrolled+'</td><td class="r">'+r.unique+'</td><td class="r">'+r.vpu+'</td><td class="r">'+r.run+'</td><td class="r">'+r.avgT+'</td><td class="r">'+r.avgL+'</td></tr>').join('');
-    return '<table class="lgt"><thead><tr><th>Lifegroup</th><th class="r">Enrolled</th><th class="r">Seen</th><th class="r">Visits/person</th><th class="r">Run</th><th class="r">Weekly this</th><th class="r">Weekly last</th></tr></thead><tbody>'+tr+'</tbody></table>';
+    return '<table class="lgt"><thead><tr><th>'+L('smallGroup')+'</th><th class="r">Enrolled</th><th class="r">Seen</th><th class="r">Visits/person</th><th class="r">Run</th><th class="r">Weekly this</th><th class="r">Weekly last</th></tr></thead><tbody>'+tr+'</tbody></table>';
   };
   const tilesViz=()=>{
     const tile=(n,l)=>'<div class="tile ok"><b>'+n+'</b><span>'+esc(l)+'</span></div>';
@@ -6768,7 +6849,7 @@ function _buildDeckBody(){
   const bigNumViz=(num,cap)=>'<div class="bignum"><b>'+num+'</b><span>'+esc(cap)+'</span></div>';
   const quadFunnelViz=()=>{
     const QUADS=[['g79','Girls Yr 7–9'],['b79','Boys Yr 7–9'],['g1012','Girls Yr 10–12'],['b1012','Boys Yr 10–12']];
-    const RLBL=['Interacted','Came to Youth','Regular','Attended a lifegroup','Student Team'];
+    const RLBL=['Interacted','Came to '+L('service'),'Regular','Attended a '+L('smallGroup').toLowerCase(),'Student Team'];
     const cells=QUADS.map(([q,ql])=>{
       const qp=m.people.filter(p=>p.quad===q);
       if(!qp.length)return '<div class="qfcell"><div class="qfl">'+esc(ql)+'</div><p class="muted" style="font-size:.82rem">No data</p></div>';
@@ -6784,7 +6865,7 @@ function _buildDeckBody(){
       title:'The Health of '+ministry,
       core:'An honest, data-driven read on how students move from first contact to committed discipleship — and the one move that matters most this term.',
       body:isStale?'<p class="covfoot">'+esc(currency)+'</p>':'',
-      notes:'Open with warmth, then candour. Every figure here — Youth attendance, lifegroup attendance, Student Team, Connect and Decision — comes from the one year-to-date snapshot uploaded on the Data tab. Set the frame: one governing message, three lenses, one ask.',
+      notes:'Open with warmth, then candour. Every figure here — '+L('service')+' attendance, '+L('smallGroup').toLowerCase()+' attendance, Student Team, Connect and Decision — comes from the one year-to-date snapshot uploaded on the Data tab. Set the frame: one governing message, three lenses, one ask.',
       vizSuggest:['Full-bleed photo of a packed youth night behind a dark gradient','A single hero metric — students currently engaged — fading up on entry'],
       objections:[
         {q:'Ministry is not a spreadsheet — people are not numbers.',a:'Completely agree; numbers never saved anyone. They simply tell us which name to chase this week. Every figure here drills down to a real student in the People tab.'},
@@ -6794,7 +6875,7 @@ function _buildDeckBody(){
       title:'We reach students well — but lose '+dropPct+'% at one step. Fix that step and everything downstream compounds.',
       core:'Read top-down. The ministry’s health rests on three sequential, non-overlapping questions. We are strong on the first, breaking on the second, and quietly promising on the third.',
       args:[
-        'REACH — do students arrive? '+atLeast(1)+' have made first contact, and '+convs[0]+'% of them went on to attend Youth.',
+        'REACH — do students arrive? '+atLeast(1)+' have made first contact, and '+convs[0]+'% of them went on to attend '+L('service')+'.',
         'RETAIN — do they keep coming? '+regulars+' are regulars, but '+decliningN+' show a declining connection and '+dropPct+'% never cross '+Lfrom+' → '+Lto+'.',
         'DEEPEN — do they put down roots? '+atLeast(4)+' are active in a lifegroup, '+k.decisions+' have recorded a decision, and '+teamN+' now serve on Student Team.'
       ],
@@ -6855,7 +6936,7 @@ function _buildDeckBody(){
         {q:'We cannot chase everyone.',a:'You do not have to — that is the point of the list. It narrows everyone down to the specific few whose pattern just changed.'}
       ]},
     {kicker:'Deepen',
-      title:'Lifegroups: where attendance becomes belonging',
+      title:L('smallGroupPlural')+': where attendance becomes belonging',
       core:partPct+'% of active youth attended a lifegroup (at least once this term) across '+lifegroupRows().length+' lifegroups'+(strongLg&&weakLg?'. '+strongLg.name+' is our strongest at '+strongLg.va+' visits/person; '+weakLg.name+' most needs support at '+weakLg.va+'.':'.'),
       body:lgTableViz(),
       notes:'Reframe lifegroups as the destination, not a programme. Trend is the term-over-term attendance-rate change for students we hold both terms for. Celebrate the strong cohort publicly; offer the weak one help privately — '+gDecl+' cohort'+(gDecl===1?' is':'s are')+' declining.',
@@ -6898,10 +6979,10 @@ function _buildDeckBody(){
       title:'How these numbers are built',
       core:'So you can trust them — and challenge them.',
       args:[
-        'Ladder: 1 Interacted (Youth attendance, plus anyone who attended a lifegroup but wasn’t at a service, plus anyone who submitted a connect/decision record but wasn’t matched to an existing student) · 2 Came to Youth · 3 Regular (≥'+rrPct+'% of Youth nights) · 4 Attended a lifegroup (≥1 this term) · 5 Student Team. Each rung counts people at that stage or beyond.',
+        'Ladder: 1 Interacted ('+L('service')+' attendance, plus anyone who attended a '+L('smallGroup').toLowerCase()+' but wasn’t at a service, plus anyone who submitted a connect/decision record but wasn’t matched to an existing student) · 2 Came to '+L('service')+' · 3 Regular (≥'+rrPct+'% of '+L('service')+' nights) · 4 Attended a '+L('smallGroup').toLowerCase()+' (≥1 this term) · 5 Student Team. Each rung counts people at that stage or beyond.',
         'Personal trend compares each student’s current-term attendance rate with their previous-term rate (students tracked both terms); cohort trend does the same per grade × gender.',
-        'Youth and lifegroup attendance are part of the same audit snapshot as the uploads below — a frozen, year-keyed record computed when the audit was last saved, not a live feed. '+currency,
-        'Names in uploads are matched to platform students; unmatched names are tracked as audit-only people. The whole audit — Youth and lifegroup attendance plus Student Team, Connect and Decision uploads — is stored server-side as one snapshot for the year.'
+        L('service')+' and '+L('smallGroup').toLowerCase()+' attendance are part of the same audit snapshot as the uploads below — a frozen, year-keyed record computed when the audit was last saved, not a live feed. '+currency,
+        'Names in uploads are matched to platform students; unmatched names are tracked as audit-only people. The whole audit — '+L('service')+' and '+L('smallGroup').toLowerCase()+' attendance plus Student Team, Connect and Decision uploads — is stored server-side as one snapshot for the year.'
       ],
       notes:'Pre-empt the methodology sceptic by volunteering the method first. Confidence here makes every prior slide more credible. Invite challenge — every number drills to a person in the People tab.',
       vizSuggest:['A compact footnote / definitions card','A data-lineage diagram: platform + 3 uploads → one person record → scores'],

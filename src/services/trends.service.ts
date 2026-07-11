@@ -127,8 +127,9 @@ export function makeTrendsService(
       const cohorted = structure.cohortModel !== 'none';
 
       // Scope students to actor (grade -> own grade(s) + own gender; quad ->
-      // bracket + gender). Under cohortModel 'none' canAccessStudent short-circuits
-      // true for everyone, so nothing is excluded by grade/gender.
+      // bracket + gender) — enforced the same way under both cohort models
+      // (bug 8 follow-up, 2026-07-11: cohortModel used to make canAccessStudent
+      // short-circuit true for everyone under 'none'; it no longer does).
       const scopedStudents = allStudents.filter((s) =>
         (actor.role === 'grade' || actor.role === 'quad')
           ? canAccessStudent(actor, s.grade, s.gender, structure)
@@ -220,8 +221,10 @@ export function makeTrendsService(
       };
 
       // ── Per-quad + per-grade trends (same valid-session mask). Under
-      // cohortModel 'none' there is no cohorting, so both breakdowns are empty
-      // (the SPA hides these sections). Grade range comes from config. ──
+      // cohortModel 'none' (Simple ministry) there's nothing meaningful to
+      // break down by, so both are empty (the SPA hides these sections) — a
+      // reporting-granularity choice only, per-actor scoping is unaffected
+      // (bug 8 follow-up, 2026-07-11). Grade range comes from config. ──
       const byQuad: QuadTrend[] = !cohorted ? [] : QUADS.map((quad) => {
         const quadStudentIds = new Set(
           scopedStudents.filter((s) => s.quad === quad).map((s) => s.id),

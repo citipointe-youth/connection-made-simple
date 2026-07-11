@@ -12,10 +12,17 @@ import type { Actor } from '../core/entities/user';
 import type { Student } from '../core/entities/student';
 import { computeQuad } from '../core/types/enums';
 
-// Design §9 risk 2 — the visibility test matrix. cohortModel 'none' must NEVER
-// exclude/hide a student by grade or gender (the computeQuad-null exclusion
-// inverts to "show everyone"), and genderPolicy relaxes gender scoping. Asserted
-// as student-visibility counts across every scoped read service.
+// Design §9 risk 2 — the visibility test matrix. cohortModel used to make
+// 'none' bypass ALL grade/gender scoping ("show everyone"); as of the bug 8
+// follow-up (2026-07-11) it no longer does — a Simple ministry's own grade
+// accounts are scoped to their assigned bracket exactly like a Complex one's,
+// so 'none' and 'grades-quads' now scope identically for a per-actor read.
+// cohortModel's only remaining effect is on REPORTING breakdowns (overview's
+// byQuad/byGrade, last describe block below), which stay hidden under 'none'
+// since a Simple ministry has no quad rollups and coarser grade brackets to
+// break down by. genderPolicy independently relaxes gender scoping regardless
+// of cohortModel. Asserted as student-visibility counts across every scoped
+// read service.
 
 const COHORTS = ['grades-quads', 'none'] as const;
 const POLICIES = ['strict', 'soft', 'off'] as const;
@@ -37,10 +44,9 @@ describe('canAccessStudent — cohortModel × genderPolicy matrix (multi-grade g
       it(`${cohortModel} / ${genderPolicy}`, () => {
         const sc = scope(cohortModel, genderPolicy);
         const visible = sample.filter((s) => canAccessStudent(juniorGirls, s.grade, s.gender, sc));
-        if (cohortModel === 'none') {
-          // No cohorting: EVERYONE is visible regardless of gender policy.
-          expect(visible.length).toBe(sample.length);
-        } else if (genderPolicy === 'strict') {
+        // Same result under 'none' as under 'grades-quads' — cohortModel no
+        // longer affects per-actor scoping (only genderPolicy does).
+        if (genderPolicy === 'strict') {
           // grades 7,8,9 AND female only.
           expect(visible.every((s) => [7, 8, 9].includes(s.grade) && s.gender === 'female')).toBe(true);
           expect(visible.length).toBe(3);
@@ -98,9 +104,9 @@ describe('student.service.list threads structure (multi-grade junior-girls login
     ['grades-quads', 'strict', 3], // grades 7,8,9 female
     ['grades-quads', 'soft', 6],   // grades 7,8,9 both genders
     ['grades-quads', 'off', 6],
-    ['none', 'strict', 8],         // EVERYONE (6 in-range + 2 grade-10)
-    ['none', 'soft', 8],
-    ['none', 'off', 8],
+    ['none', 'strict', 3],         // same as grades-quads — cohortModel no longer bypasses scoping
+    ['none', 'soft', 6],
+    ['none', 'off', 6],
   ];
   for (const [cohortModel, genderPolicy, expected] of cases) {
     it(`${cohortModel}/${genderPolicy} → ${expected} students`, async () => {
@@ -112,11 +118,13 @@ describe('student.service.list threads structure (multi-grade junior-girls login
 });
 
 describe('atrisk.service.list threads structure', () => {
-  it('junior-girls sees only grades 7-9 female under strict; everyone under none', async () => {
+  it('junior-girls sees only grades 7-9 female under strict, whichever cohortModel', async () => {
     const strict = await harness('grades-quads', 'strict');
     expect((await strict.atriskSvc.list(juniorGirls)).length).toBe(3);
+    // 'none' scopes identically to 'grades-quads' now (bug 8 follow-up) — no
+    // longer bypasses grade/gender scoping.
     const none = await harness('none', 'strict');
-    expect((await none.atriskSvc.list(juniorGirls)).length).toBe(8);
+    expect((await none.atriskSvc.list(juniorGirls)).length).toBe(3);
   });
 });
 

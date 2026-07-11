@@ -35,15 +35,23 @@ function gradeWordLabel(grades: number[], gradeWord: string): string {
   return `${gradeWord}${g.length > 1 ? 's' : ''} ${nums}`;
 }
 
-// Split an inclusive [gradeMin, gradeMax] range into 2-grade brackets — the
-// default 7-12 range yields [[7,8],[9,10],[11,12]] (bug 8's "boys and girls
-// 7/8, 9/10, 11/12"). An odd-sized range's last bracket gets the extra grade.
+// Split [gradeMin, gradeMax] into brackets, anchored from the TOP down in
+// pairs — the default 7-12 range yields [[7,8],[9,10],[11,12]] (bug 8's
+// "boys and girls 7/8, 9/10, 11/12"). Anything below the top two pairs folds
+// into ONE lowest bracket instead of spawning a separate one: with Grade 6
+// included (gradeMin 6), the range 6-12 yields [[6,7,8],[9,10],[11,12]] — the
+// 7/8 account widens to 6-7-8, it does NOT become a 4th account (bug 8
+// follow-up, 2026-07-11 — "the 7,8 account should include grade 6, not a
+// separate grade 6 account"). gradeMax is always 12 in practice (the Youth
+// Setup UI no longer exposes it), but this stays generic over both bounds.
 export function gradeBrackets(gradeMin: number, gradeMax: number): number[][] {
-  const all: number[] = [];
-  for (let g = gradeMin; g <= gradeMax; g++) all.push(g);
-  const out: number[][] = [];
-  for (let i = 0; i < all.length; i += 2) out.push(all.slice(i, i + 2));
-  return out;
+  const top: number[][] = [];
+  let g = gradeMax;
+  while (g - 1 >= gradeMin + 2) { top.unshift([g - 1, g]); g -= 2; }
+  const lowest: number[] = [];
+  for (let n = gradeMin; n <= g; n++) lowest.push(n);
+  if (lowest.length) top.unshift(lowest);
+  return top;
 }
 
 const QUAD_TARGETS: { quad: 'g79' | 'b79' | 'g1012' | 'b1012'; label: string }[] = [

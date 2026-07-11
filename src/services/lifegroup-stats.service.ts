@@ -233,8 +233,10 @@ export function makeLifegroupStatsService(
       };
 
       // Visible grades/quads for this login. Grade range from config; under
-      // cohortModel 'none' there is no cohorting, so both breakdowns are empty
-      // (the SPA hides these sections) while the top-level `overall` still shows.
+      // cohortModel 'none' (Simple ministry) there's nothing meaningful to
+      // break down by, so both are empty (the SPA hides these sections) while
+      // the top-level `overall` still shows — a reporting-granularity choice
+      // only, per-actor scoping is unaffected (bug 8 follow-up, 2026-07-11).
       const allGrades = gradeRange(structure);
       const visibleGrades = !cohorted ? [] : actor.role === 'grade'
         ? actorGrades(actor)

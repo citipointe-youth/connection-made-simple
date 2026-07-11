@@ -119,9 +119,12 @@ export function makeOverviewService(
         }
       }
 
-      // Under cohortModel 'none' there is no cohorting — both breakdowns are
-      // empty (the SPA hides these sections); nothing is dropped by computeQuad
-      // returning null, because nothing groups by quad/grade at all.
+      // Under cohortModel 'none' (Simple ministry — coarse brackets, no
+      // quads) there's nothing meaningful to break down BY quad/grade, so
+      // both are left empty and the SPA hides these sections. This is a
+      // reporting-granularity choice only — per-actor scoping (`scoped`
+      // above, via canAccessStudent) is unaffected and enforces the same way
+      // under both cohort models (bug 8 follow-up, 2026-07-11).
       const byQuad: QuadStat[] = !cohorted ? [] : QUADS.map((quad) => {
         const qConn = connectable.filter((s) => s.quad === quad);
         return {
