@@ -81,10 +81,10 @@ describe('Account Service — create() defaults mustChangePassword to false', ()
   });
 });
 
-describe('Account Service — the "Admin" display-name account is always protected', () => {
-  // Sets up TWO admin-role accounts: one named exactly "Admin" (the protected
+describe('Account Service — the protected admin account (username "admin") is always protected', () => {
+  // Sets up TWO admin-role accounts: one with username "admin" (the protected
   // one) and a second, differently-named admin ("Ops Admin") that should
-  // remain freely manageable — the guard must key off displayName, not role.
+  // remain freely manageable — the guard must key off username/email, not role.
   async function buildTwoAdmins() {
     const users = new InMemoryUserRepository();
     await users.init();
@@ -116,25 +116,26 @@ describe('Account Service — the "Admin" display-name account is always protect
     await expect(svc.toggleStatus(actor, admin.id)).rejects.toBeInstanceOf(BadRequestError);
   });
 
-  it('cannot rename the account named "Admin" to something else via update()', async () => {
+  it('cannot change the username of the protected admin account via update()', async () => {
     const { svc, actor, admin } = await buildTwoAdmins();
     await expect(
-      svc.update(actor, admin.id, { displayName: 'Not Admin' }),
+      svc.update(actor, admin.id, { email: 'notadmin' }),
     ).rejects.toBeInstanceOf(BadRequestError);
   });
 
-  it('other fields on the "Admin" account (e.g. email) remain freely editable', async () => {
+  it('other fields on the protected admin account (e.g. displayName) remain freely editable', async () => {
     const { svc, users, actor, admin } = await buildTwoAdmins();
-    const updated = await svc.update(actor, admin.id, { email: 'newadmin' });
-    expect(updated.email).toBe('newadmin');
+    const updated = await svc.update(actor, admin.id, { displayName: 'Youth Pastor' });
+    expect(updated.displayName).toBe('Youth Pastor');
     const stored = await users.findById(admin.id);
-    expect(stored?.displayName).toBe('Admin');
+    expect(stored?.email).toBe('admin');
   });
 
-  it('submitting displayName unchanged ("Admin") via update() is not blocked', async () => {
+  it('submitting username unchanged ("admin") via update() is not blocked', async () => {
     const { svc, actor, admin } = await buildTwoAdmins();
-    const updated = await svc.update(actor, admin.id, { displayName: 'Admin', email: admin.email });
-    expect(updated.displayName).toBe('Admin');
+    const updated = await svc.update(actor, admin.id, { email: 'admin', displayName: 'Head Admin' });
+    expect(updated.email).toBe('admin');
+    expect(updated.displayName).toBe('Head Admin');
   });
 
   it('a second admin account with a different display name CAN be deleted', async () => {
@@ -153,6 +154,25 @@ describe('Account Service — the "Admin" display-name account is always protect
     const { svc, actor, opsAdmin } = await buildTwoAdmins();
     const updated = await svc.update(actor, opsAdmin.id, { displayName: 'Renamed Ops Admin' });
     expect(updated.displayName).toBe('Renamed Ops Admin');
+  });
+
+  it('back-compat: an account already renamed away from username "admin" (under the old displayName-locked rules) is still protected by its displayName', async () => {
+    const users = new InMemoryUserRepository();
+    await users.init();
+    const now = new Date().toISOString();
+    const renamedAdmin = await users.save({
+      id: 'u-renamed-admin', displayName: 'Admin', email: 'headoffice', role: 'admin',
+      grade: null, quad: null, status: 'active', passwordHash: await hashPassword('correcthorse1'),
+      mustChangePassword: false, createdAt: now, updatedAt: now,
+    });
+    const settings = new InMemorySettingsRepository();
+    await settings.init();
+    const svc = makeAccountService(users, settings);
+    const actor = actorFor(renamedAdmin.id, 'admin');
+    await expect(svc.remove(actor, renamedAdmin.id)).rejects.toBeInstanceOf(BadRequestError);
+    await expect(
+      svc.update(actor, renamedAdmin.id, { email: 'somethingelse' }),
+    ).rejects.toBeInstanceOf(BadRequestError);
   });
 
   it('a second, freely-named admin account CAN be created alongside the protected "Admin" one', async () => {

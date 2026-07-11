@@ -55,6 +55,19 @@ function toSafe(u: User): SafeUser {
   return safe as SafeUser;
 }
 
+// The bootstrap admin account (seeded username "admin") can never be deleted or
+// deactivated, and its USERNAME can never be changed — that's the stable login
+// identity. Its display name is freely editable like any other account's (bug 9,
+// 2026-07-12 — the lock used to be on displayName instead, which was backwards:
+// a display name is a human-friendly label, the username is the actual
+// credential). Also matches on displayName === 'Admin' for back-compat with any
+// account that was already renamed away from the literal username "admin" back
+// when email was the freely-editable field — so a prior rename can't accidentally
+// strip protection from the real bootstrap account.
+function isProtectedAdmin(u: User): boolean {
+  return u.email === 'admin' || u.displayName === 'Admin';
+}
+
 export interface CohortLayoutApplyReport {
   created: { username: string; displayName: string; password: string }[];
   deactivated: { username: string; displayName: string }[];
@@ -155,14 +168,16 @@ export function makeAccountService(users: IUserRepository, settings: ISettingsRe
       if (!existing) throw new NotFoundError('User not found');
       if (existing.role === 'admin') await guardAdmin(id, 'modify');
       const patch = CreateUserSchema.omit({ password: true }).partial().parse(input);
+      // The protected admin account's username is its stable login identity — it
+      // can never be changed, unlike its display name (see isProtectedAdmin above).
+      if (isProtectedAdmin(existing) && patch.email !== undefined && patch.email !== existing.email) {
+        throw new BadRequestError("This account's username cannot be changed");
+      }
       // Email is editable (so grade logins can be renamed, e.g. grade7g / grade7b),
       // but must stay unique across accounts.
       if (patch.email && patch.email !== existing.email) {
         const other = await users.findByEmail(patch.email);
         if (other && other.id !== id) throw new ConflictError('Username already in use');
-      }
-      if (existing.displayName === 'Admin' && patch.displayName !== undefined && patch.displayName !== 'Admin') {
-        throw new BadRequestError('The Admin account name cannot be changed');
       }
       const gradeSet = normaliseGrades(patch.grade, patch.grades);
       const nextRole = (patch.role ?? existing.role) as UserRole;
@@ -222,8 +237,8 @@ export function makeAccountService(users: IUserRepository, settings: ISettingsRe
       if (existing.role === 'admin' && existing.status === 'active') {
         await guardAdmin(id, 'deactivate');
       }
-      if (existing.displayName === 'Admin' && existing.status === 'active') {
-        throw new BadRequestError('The "Admin" account cannot be deactivated');
+      if (isProtectedAdmin(existing) && existing.status === 'active') {
+        throw new BadRequestError(`The "${existing.displayName}" account cannot be deactivated`);
       }
       const updated = await users.save({
         ...existing,
@@ -251,8 +266,8 @@ export function makeAccountService(users: IUserRepository, settings: ISettingsRe
       const existing = await users.findById(id);
       if (!existing) throw new NotFoundError('User not found');
       if (existing.role === 'admin') await guardAdmin(id, 'delete');
-      if (existing.displayName === 'Admin') {
-        throw new BadRequestError('The "Admin" account cannot be deleted');
+      if (isProtectedAdmin(existing)) {
+        throw new BadRequestError(`The "${existing.displayName}" account cannot be deleted`);
       }
       await users.delete(id);
     },
