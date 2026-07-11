@@ -180,6 +180,37 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
   in `account.service.ts` defaults `mustChangePassword: false` — if a freshly-created account is
   gated, that default regressed). The gate itself lives in `express-adapter.ts` right after
   `resolveContext` and in `render()` (public/index.html) via `S.user.mustChangePassword`.
+- **Editing a grade account's grades doesn't update the display name, or DOES update a name the
+  admin already customised** (2026-07-11/12): `suggestEmail()` (public/index.html) — it only
+  overwrites the username/display-name fields while their CURRENT value still equals what it
+  last generated, tracked in `_acctAutoEmail`/`_acctAutoName`. `showEditUser()` seeds those
+  trackers by comparing the account's stored email/displayName against
+  `_acctSuggestedGradeEmail`/`_acctSuggestedGradeName` for its CURRENT grades/gender — if they
+  don't match (already customised), the trackers are set to `null` so nothing gets touched. If a
+  seeded prod grade account (`grade9g` etc.) isn't recognised as "still default", check its
+  `gender` column isn't null — migration `0004` should have backfilled it (see "Seed demo
+  accounts" in CLAUDE.md).
+- **Inactive accounts aren't at the bottom of their role group in Accounts**: the stable sort in
+  `renderAdminView()` (grep `status === 'inactive'`) runs AFTER the existing grade-number/
+  quad-label sort — if a role group looks unsorted, check both sorts are still there and in that
+  order (JS `Array#sort` is stable, so reordering them would silently drop one).
+- **A grade/quad account row's background tint looks wrong**: `_loginGender(u)` drives the
+  `.acct-girls`/`.acct-boys` class in `renderAdminView()` — it mirrors the backend's
+  `deriveActorGender()` (explicit `gender` field first, username/quad fallback), so a wrong tint
+  usually means the account's `gender` field doesn't match what you'd expect, not a CSS bug.
+
+### Allocation import
+
+- **"Auto-create leaders that don't match an existing leader" checkbox does nothing / creates the
+  wrong grade or gender**: the checkbox (`#alloc-auto-leaders`, Admin → Data tab) is read at
+  upload time in `processAllocationImport()` and sent as `autoCreateLeaders` on
+  `POST /connections/allocations/import` — confirm it's actually checked (default OFF) and the
+  request body has it. Server-side, `deriveLeadersToCreate()` (`connection-allocations.ts`) only
+  derives a new leader's grade(s)/gender from an UNAMBIGUOUS single-student match per row — a
+  leader name paired only with an ambiguous (duplicate-name) or unmatched student contributes
+  nothing, so a leader created from rows like that gets `grades: []`, `gender: null`. Check
+  `report.leadersCreated` (returned alongside the usual counts) to see exactly what was derived
+  before assuming a bug.
 
 ### Youth Ministry Setup / ministryConfig
 
@@ -231,6 +262,27 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
   `API.setToken()`. If this regresses, the symptom is the old one: the page after password-set
   looks broken/stretched and every subsequent request 403s `MUST_CHANGE_PASSWORD` until the user
   manually signs out and back in.
+- **"Apply account layout" button is missing, or won't turn active**: it's ALWAYS rendered now
+  (2026-07-12) at the bottom of Structure & Roles, next to Save — if it's not there at all, check
+  the render didn't throw before reaching it. Greyed out ("already aligned") is computed
+  CLIENT-SIDE from `_adminData.users` + the SAVED settings (not the draft) via
+  `planCohortAccountLayoutClient()` (public/index.html) — it must stay in sync with the backend's
+  `planCohortAccountLayout()` (`cohort-account-layout.ts`); if the button says "aligned" but the
+  server's own preview shows a real diff (or vice versa), the two have drifted. Also remember it
+  targets whatever's SAVED, not the unsaved draft — changing Cohort model or the Grade 6 toggle
+  and clicking the button before hitting "Save Youth Setup" reconciles against the OLD structure.
+- **Grade 6 toggle doesn't change the account layout the way you'd expect**: `gradeBrackets()`
+  (`cohort-account-layout.ts`) anchors brackets from the TOP down (`11-12`, `9-10`, ...) and folds
+  whatever's left into the LOWEST bracket — turning Grade 6 on should widen the lowest Simple
+  bracket to `6-7-8`, NOT add a 4th bracket/account. If a 4th Simple account shows up, this
+  function regressed back toward simple forward-chunking.
+- **Switching the Cohort model dropdown didn't change Director/Quad below it**: expected to,
+  via `_setupSetCohortModel()` (2026-07-12) — Complex turns both on, Simple turns both off. If it
+  doesn't, check the `<select>`'s `onchange` still calls that function and not the older
+  `_setupSet('structure.cohortModel', ...)`.
+- **A Simple-ministry grade/quad login can see students outside its own grade/gender**: this
+  would be a REGRESSION of the bug 8 follow-up fix (2026-07-12) — see the RBAC entry directly
+  below before assuming it's expected "flat ministry" behavior. It isn't, as of that date.
 
 ### RBAC / scoping (backend)
 
@@ -244,6 +296,16 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
   endpoints that deliberately skip it are `updateSmsTemplate` and `updateGrades` — both have a
   comment explaining why (no server-side binding between an Actor and "the leader they
   identify as").
+- **`cohortModel: 'none'` (Simple ministry) — do NOT make this bypass grade/gender scoping
+  again.** It used to (`canAccessGrade`/`genderScopeOf` in `access-control.ts` short-circuited to
+  "everyone sees everyone" under `'none'`, documented at the time as a deliberate "known trap").
+  That was found to be wrong and fixed 2026-07-12: a Simple ministry's grade/quad accounts are
+  now scoped to their assigned grades/gender exactly like a Complex ministry's — cohortModel only
+  changes account LAYOUT (bug 8's "Apply account layout") and report-breakdown granularity
+  (`overview`/`trends`/`lifegroup-stats` still legitimately hide `byQuad`/`byGrade` under
+  `'none'` — that part is fine and unrelated to per-actor scoping). `genderPolicy`
+  (`strict`/`soft`/`off`) is the only thing that still relaxes gender scoping, independent of
+  cohortModel. See `visibility-matrix.test.ts` for the regression coverage.
 
 ### Production performance / DB connection issues
 

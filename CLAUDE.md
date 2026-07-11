@@ -55,7 +55,7 @@ Seed data only runs when `PERSISTENCE=memory`. Production uses `PERSISTENCE=supa
 | Auth | `POST /auth/login`, `GET /auth/me`, `POST /auth/logout` |
 | Students | `GET/POST /students`, `GET /students/search`, `GET/PATCH/DELETE /students/:id`. `GET /students` takes `?crossGrade=1` — widens a grade/quad login's scoping from "own grade/bracket + own gender" to "own gender only" (Connect Setup's Add Students picker; see "Add Students picker now actually offers a broadened leader's other grade(s)" below) |
 | Leaders | `GET/POST /leaders`, `GET/PATCH/DELETE /leaders/:id`, `PATCH /leaders/:id/sms-template` (self-service, no ownership check — see the SMS templates note below), `PATCH /leaders/:id/grades` (self-service grade broadening, same no-ownership-check pattern — see "Leader self-service grade broadening" below) |
-| Connections | `GET/POST /connections` (also takes `?crossGrade=1`, same widening as `/students` above), `GET /connections/export` (own-gender-only for grade/quad, unconditionally), `GET /connections/student/:id`, `GET /connections/leader/:id`, `DELETE /connections/:studentId/:leaderId`, `GET /connections/allocations/export`, `POST /connections/allocations/import` (admin-only allocation CSV round-trip) |
+| Connections | `GET/POST /connections` (also takes `?crossGrade=1`, same widening as `/students` above), `GET /connections/export` (own-gender-only for grade/quad, unconditionally), `GET /connections/student/:id`, `GET /connections/leader/:id`, `DELETE /connections/:studentId/:leaderId`, `GET /connections/allocations/export`, `POST /connections/allocations/import` (admin-only allocation CSV round-trip; body optionally takes `autoCreateLeaders: true` — see "Admin bug/improvement batch" below) |
 | Overview | `GET /overview` |
 | At-risk | `GET /at-risk`, `POST /at-risk/recompute` |
 | Trends | `GET /trends` |
@@ -64,7 +64,7 @@ Seed data only runs when `PERSISTENCE=memory`. Production uses `PERSISTENCE=supa
 | Settings | `GET/PATCH /settings` |
 | Admin | `POST /admin/reset` (clears students+leaders+connections+attendance **and connection_audits** — see below), `POST /admin/clear-service-group` (clears service/lifegroup data, **keeps** students+connections+leaders, resets student aggregates), `GET /admin/audit` (log kept; unreachable from the SPA since the Audit tab was removed) |
 | Connection audits | `POST/GET /audits`, `GET/DELETE /audits/:year`, `POST /audits/finalize-live` (builds this year's snapshot from live tables, no CSV upload — used by the New Year Refresh wizard), `GET /audits/export-all` / `POST /audits/import-all` (admin-only full-table backup/restore — see "New Year Refresh wizard" below; registered before `/audits/:year` since Express matches route registration order) |
-| Accounts | `GET/POST /accounts/users`, `PATCH /accounts/users/:id`, `POST /accounts/users/password` (admin resets another account), `POST /accounts/me/password` (self-service, requires current password — distinct endpoint, no admin:manage needed; returns `{ ok, token }` — a freshly-issued session token, since `mustChangePassword` is baked into the token at login and this is the one write that needs the caller's own token refreshed — see "Forced password change" gotcha below) |
+| Accounts | `GET/POST /accounts/users`, `PATCH /accounts/users/:id`, `POST /accounts/users/password` (admin resets another account), `POST /accounts/me/password` (self-service, requires current password — distinct endpoint, no admin:manage needed; returns `{ ok, token }` — a freshly-issued session token, since `mustChangePassword` is baked into the token at login and this is the one write that needs the caller's own token refreshed — see "Forced password change" gotcha below), `POST /accounts/cohort-layout/preview` / `POST /accounts/cohort-layout/apply` (admin-only "Apply account layout" dry-run/apply pair — see "Admin bug/improvement batch" below) |
 
 **Clearing import history ≠ deleting data.** The Import screen's "Clear All" and per-row
 trash only remove `import_records` log rows. `service_sessions.import_id` /
@@ -213,6 +213,12 @@ e.g. `grade7g`, `grade7b` (NOT `…f` / `…m`, an earlier naming scheme). Usern
 with a uniqueness check — the field is internally still named `email`, it's just
 not treated as one anywhere in the app), so the actual logins can be renamed to
 this scheme.
+
+**`gender` is now set explicitly on every seeded grade account** (migration `0003`
+inserts it; migration `0004` backfills it for a database `0003` already ran
+against) rather than being inferred from the `g`/`b` suffix at sign-in time —
+see "Admin bug/improvement batch" below for why (the grade-change auto-rename
+needs it to tell a still-default account name from a customised one).
 
 ## Environment variables
 
@@ -1211,10 +1217,14 @@ rollback recipe still holds.
   `canAccessGrade`/`genderScopeOf`/`canAccessGender`/`canAccessStudent` gained an
   **optional** `StructureScope` param (`{cohortModel, genderPolicy}`) — undefined =
   today's `grades-quads`+`strict`, so existing tests/callers are unchanged.
-  **cohortModel `'none'` short-circuits BOTH grade AND gender scoping to visible**
-  (the design's "known trap" — under `'none'` nothing may be hidden by grade *or*
-  gender; `genderScopeOf` returns null under `'none'` regardless of genderPolicy).
-  `genderPolicy` `soft`/`off` drops gender scoping. Services pass
+  **⚠ Superseded 2026-07-12 — see "Bug 8 follow-up" below.** This paragraph
+  originally had cohortModel `'none'` short-circuit BOTH grade AND gender
+  scoping to visible for everyone (the design's "known trap"). That's no
+  longer true: a Simple ministry's grade/quad accounts are now scoped to
+  their assigned grades/gender exactly like a Complex ministry's. Left here
+  for history; don't rely on the old behavior.
+  `genderPolicy` `soft`/`off` drops gender scoping (still true, independent
+  of cohortModel). Services pass
   `settings.ministryConfig.structure`; `overview` + `student` gained an **optional**
   `settingsRepo` (defaults when absent, so their existing test constructors are
   unmodified). Under `'none'`, `overview`/`trends`/`lifegroup-stats` return empty
@@ -1255,7 +1265,10 @@ rollback recipe still holds.
   policy / service day / role model / role labels, with an **orphaned-accounts
   warning** when switching cohortModel to `'none'` with grade/quad accounts present
   (never deletes — just flags). Branding/terminology/module editors remain phase
-  2/3 stubs.
+  2/3 stubs. **Grade range and the orphan warning were reworked 2026-07-12 —
+  see "Bug 8 follow-up" below** (grade range is now an "Include Grade 6"
+  toggle, not raw min/max fields; the warning now points at "Apply account
+  layout" instead of manual Accounts edits).
 - **Deliberate choices / deviations** (also in `../Generalisation of the app/12-handoff-final.md`):
   the seed (`src/seed.ts`) stays graded — it IS the YS Brisbane reference; a flat
   deployment uses the small-flat preset + manual account creation (design §7.1).
@@ -1487,6 +1500,138 @@ covered by the existing multi-grade `grade` account feature (§5.1a, phase
 - **SW cache**: `ysc-v39` → **`ysc-v40`**.
 - New/updated tests: `auth.service.test.ts` (`issueTokenFor`),
   `settings.service.test.ts` (role-disable deactivation cascade, 5 new cases).
+
+### Admin bug/improvement batch (2026-07-12)
+
+An admin-reported punch list, worked through in three passes. Bugs 1-7 below are
+independent small fixes; bug 8 (cohort model / account layout) grew into the
+biggest change and is split into its own subsections.
+
+**Bugs 1-7:**
+- **Grade-change auto-rename now also syncs display name** (was: username only).
+  `suggestEmail()` (public/index.html) tracks `_acctAutoEmail`/`_acctAutoName` —
+  a field is only overwritten while its current value still equals what this
+  logic last generated (or is empty), so a grade/gender edit keeps a
+  still-default name in sync but never clobbers a name the admin already
+  customised (bug 3's ask). Scoped to `role==='grade'` only.
+- **Seed grade accounts get an explicit `gender`** — see the Seed demo accounts
+  section above (migrations `0003`/`0004`).
+- **Inactive accounts sort to the bottom of their role group** in Accounts
+  (`renderAdminView`) — a stable sort layered after the existing grade-number/
+  quad-label ordering.
+- **Grade/quad account rows get a light girls/boys background tint**
+  (`.li.acct-girls`/`.acct-boys`) via the existing `_loginGender()` helper.
+- **Allocation re-import gained an opt-in "auto-create unmatched leaders"
+  checkbox** (Admin → Data tab, default OFF). `POST /connections/allocations/
+  import` takes `autoCreateLeaders: true`; `deriveLeadersToCreate()`
+  (`connection-allocations.ts`) derives grade(s)/gender from whichever
+  already-matched students in the file are paired with that unmatched leader
+  name (null gender if they disagree), `connection.service.ts` creates the
+  `Leader` rows via `leaderRepo.saveMany` before planning the sync so those
+  rows resolve as matched instead of landing in `unmatchedLeaders`. Report
+  gained `leadersCreated`.
+- **Youth Setup terminology fields got tooltips** explaining where each one
+  actually shows up in the app (see the terminology-wiring entry just below —
+  two of these tooltips went stale within the same day and got corrected).
+
+**Bug 8 — Cohort model / Simple ministry, in the order it actually shipped:**
+
+1. **"Apply account layout"** (`src/services/cohort-account-layout.ts`, new
+   file) — a separate, explicit, typed-confirm action in Youth Setup
+   (`POST /accounts/cohort-layout/preview` then `/apply`) that reconciles
+   Accounts with the ministry's cohort model, decoupled from Save. `Complex`
+   target = one grade account per grade + the 4 quads; `Simple` target = 6
+   grade-bracket accounts (2 genders × 3 brackets), no quads.
+   `planCohortAccountLayout` diffs by username (case-insensitive) against
+   existing accounts — matches are left completely alone, unmatched active
+   grade/quad accounts are **deactivated, never deleted**, missing targets are
+   **created** with a random one-time password (`mustChangePassword: true`,
+   shown once in the result modal). `account.service.ts` gained
+   `planCohortLayout`/`applyCohortLayout`; needs `ISettingsRepository` now
+   (`makeAccountService(users, settings)` — 2 args, was 1; 3 test files
+   updated).
+2. **Simple preset also disables Director** (was: Admin+Director+Grade;
+   now Admin+Grade only) — `PRESET_CONFIGS.simple`/`PRESET_CONFIGS_CLIENT`
+   set `roles.enabled.director: false`, reusing the existing generic
+   role-disable-deactivates-accounts cascade in `settings.service.ts`.
+3. **Cohort model dropdown relabelled Complex/Simple** (was "Grades + quads
+   (graded)" / "No cohorting (flat)") — **UI label only**, the stored enum
+   values (`'grades-quads'`/`'none'`) are unchanged.
+4. **Real scoping bug found and fixed**: `cohortModel: 'none'` used to make
+   `canAccessGrade`/`genderScopeOf` (`access-control.ts`) bypass ALL grade/
+   gender access control for every login — the documented "known trap" ("under
+   'none' nothing may be hidden by grade or gender"). This made a Simple
+   ministry's own boys/girls-bracket accounts (from #1 above) purely cosmetic
+   labels with **zero actual restriction** — a "Girls 7/8" login could see
+   Boys 11/12 students too. Fixed: grade/quad accounts are now scoped by their
+   assigned grades/gender identically under both cohort models. cohortModel
+   now ONLY changes account layout (#1) and report-breakdown granularity
+   (`overview`/`trends`/`lifegroup-stats` still hide `byQuad`/`byGrade` under
+   `'none'` — that part is unchanged and is a reporting choice, not a security
+   one). `visibility-matrix.test.ts` rewritten — 'none' now asserts the SAME
+   visibility as 'grades-quads' throughout, not "everyone sees everyone."
+   **If you're touching `canAccessGrade`/`genderScopeOf` again: do not
+   reintroduce a `cohortModel === 'none'` bypass** — see the superseded-note
+   left in the phase 6b entry above.
+5. **"Include Grade 6" toggle** replaces the old Lowest/Highest grade number
+   inputs in Structure & Roles — the top grade is always 12 in practice, so
+   the only real question is whether the ministry also takes grade 6 straight
+   from kids' church. `_setupSetGrade6()` sets `structure.gradeMin` to 6 or 7
+   and forces `gradeMax` to 12 in one PATCH. `gradeBrackets()`
+   (`cohort-account-layout.ts`) reworked to anchor brackets from the TOP down
+   (`11-12`, `9-10`, ...) and fold any remainder into the LOWEST bracket
+   instead of spawning a new one — grade 6 included → lowest bracket becomes
+   `6-7-8`, not a separate 4th Simple account. Complex is unaffected by this
+   change (still one account per grade in range, so grade 6 there just adds 2
+   accounts: Grade 6 Girls/Boys).
+6. **"Apply account layout" is always visible** (was: only shown while the
+   draft's cohort model differed from the saved one), greyed out when Accounts
+   already match. Enablement is computed **client-side**, via a mirror of the
+   backend's plan logic (`_gradeBracketsClient`/`buildTargetAccountsClient`/
+   `planCohortAccountLayoutClient` in public/index.html — keep in sync with
+   `cohort-account-layout.ts` the way `MINISTRY_CONFIG_DEFAULTS_CLIENT` etc.
+   already mirror their backend counterparts) against `_adminData.users` +
+   the SAVED settings, so a Grade-6-toggle-only change (same cohort model)
+   still surfaces the button, and there's no extra round-trip on every
+   Youth Setup render. The button always targets the SAVED cohort/grade
+   range, never the unsaved draft — save Youth Setup first if you just
+   changed either.
+7. **Changing the Cohort model dropdown directly now also auto-selects
+   Director/Quad** the same way the preset buttons do (`_setupSetCohortModel()`
+   — Complex turns both on, Simple turns both off), without resetting the
+   rest of the draft the way `pickMinistryPreset()` does.
+8. **Every Youth Setup tooltip rewritten** for plain language (no assumed
+   knowledge of the app's internals — "login" not "actor"/"scope", no
+   `cohortModel`/`genderPolicy` literal values in the copy) and trimmed for
+   length, after an initial pass had gotten dense/jargon-heavy. Two
+   Terminology tooltips (Service / Service night wording) had to be corrected
+   twice the same day: once because the terminology-wiring work below made
+   their "not really used yet" wording stale, and again for the plain-language
+   pass.
+
+**`labels.service`/`labels.serviceNight` terminology wiring**, done alongside
+the above after discovering (while writing bug 7's tooltips) that both fields
+were mostly decorative — `service` ("Youth") had exactly one real call site
+(`L('service')`) and `serviceNight` ("Friday Nights") had zero. Both are now
+threaded through Home, Trends, Health, Student Search, Connect Setup's export,
+and the whole Connection Audit module (funnel labels, Data-tab slots/toasts,
+the deck, the Elvanto export-guide instructions). Two module-scope `const`s had
+to become functions since they were evaluated once at script-parse time, before
+`S.settings`/`L()` had anything to read — **`STG`/`STG_SHORT` → `STG()`/
+`STG_SHORT()`** (stage-name maps) and **`EXPORT_GUIDES` → `EXPORT_GUIDES()`**
+(the Elvanto walkthrough content); every call site updated to call them.
+Deliberately left un-wired: the Elvanto guide's literal Elvanto UI values that
+aren't this app's own terminology (e.g. "Demographics: Youth" is an Elvanto
+filter option name, not `labels.service`), and the two preset-picker
+description strings in `MINISTRY_PRESETS_INFO` (still a frozen module-scope
+array — same staleness risk as `STG` used to have, but low-traffic enough
+(shown once, pre-customisation) that it wasn't worth converting too). A
+follow-up pass also caught missed `labels.smallGroup`/`smallGroupPlural`/
+`structure.gradeLabel` spots (the Lifegroups module toggle label, CA
+lifegroup-health table headers, Data-tab group slot/toasts, a few CSV headers,
+the Elvanto guide's "Lifegroup" category-name mentions) — grep for a bare
+`'Lifegroup'`/`'Grade'` string literal before adding new UI copy; the
+correct call is `L('smallGroup')`/`L('smallGroupPlural')`/`_gradeWord()`.
 
 ## Security notes
 
