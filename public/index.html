@@ -5101,12 +5101,15 @@ function _youthSetupBody(settings, users) {
 
   const dayOpts = _DAY_NAMES.map((n, i) => `<option value="${i}" ${i===svcDay?'selected':''}>${n}</option>`).join('');
   // Admin is a fixed, always-on row (checked + disabled) — shown so its
-  // tooltip is reachable, not because it's a real toggle.
-  const adminRoleRow = `<label class="fg" style="display:flex;align-items:center;gap:8px;opacity:.7"><input type="checkbox" checked disabled> <span>Admin ${helpTip("Full access including settings, accounts, and everything the roles below can do. Always on — there is exactly one Admin account and it can't be turned off.")}</span></label>`;
+  // tooltip is reachable, not because it's a real toggle. The dimming
+  // (opacity) is scoped to a nested span, NOT the whole label — opacity < 1
+  // creates a new CSS stacking context, which was trapping the helpTip
+  // popup's z-index and letting the next role row paint over it.
+  const adminRoleRow = `<label class="fg" style="display:flex;align-items:center;gap:8px"><span style="display:flex;align-items:center;gap:8px;opacity:.7"><input type="checkbox" checked disabled> <span>Admin</span></span> ${helpTip("Full access including settings, accounts, and everything the roles below can do. You can create additional Admin accounts freely — but the account named “Admin” specifically can't be renamed, deactivated, or deleted.")}</label>`;
   const roleToggleRows = [
     ['director', 'Director', 'Ministry-wide read/write, can import data.'],
     ['grade', 'Grade', 'Login scoped to one or more grades (e.g. Grade 9 — one account can cover several grades at once).'],
-    ['quad', 'Quad', 'Logins scoped to one gender+bracket (e.g. Girls Yr 7-9).'],
+    ['quad', 'Quad', 'Logins scoped to one gender+bracket (e.g. Girls Yr 7-9) — oversees several grades and leaders at once within that bracket, and sees trends broken down per grade, not just the combined total.'],
     ['leader', 'Leader', 'A narrow login that sees only its own connected students.'],
   ].map(([k, label, hint]) =>
     `<label class="fg" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${roleEnabled(k)?'checked':''} onchange="_setupSet('roles.enabled.${k}', this.checked)"> <span>${esc(label)} ${helpTip(hint)}</span></label>`
@@ -5198,7 +5201,7 @@ function _youthSetupBody(settings, users) {
     <div class="fg"><label class="fl">Small group (singular)</label><input class="fi" value="${esc(lv('smallGroup'))}" onchange="_setupSetSmallGroup(this.value)"></div>
     <div class="fg"><label class="fl">Small group (plural) ${helpTip('Generated automatically from the singular above (e.g. “Lifegroup” -> “Lifegroups”) — no longer a separate field.')}</label>
       <input class="fi" value="${esc(lv('smallGroupPlural'))}" disabled></div>
-    ${[['service','Service / main gathering'],['serviceNight','Service night wording'],['studentTeam','Student team'],['connection','Connection']].map(([k,lab])=>
+    ${[['service','Service / main gathering'],['serviceNight','Service night wording']].map(([k,lab])=>
       `<div class="fg"><label class="fl">${lab}</label><input class="fi" value="${esc(lv(k))}" onchange="_setupSet('labels.${k}', this.value)"></div>`).join('')}
     <div class="fg"><label class="fl">Grade word</label>
       <select class="fs" onchange="_setupSet('structure.gradeLabel', this.value)">
@@ -5208,7 +5211,7 @@ function _youthSetupBody(settings, users) {
       <textarea class="fi" rows="2" onchange="_setupSetList('labels.groupNameStrip', this.value)">${esc((lv('groupNameStrip') || []).join('\n'))}</textarea></div>`);
 
   b += _setupCard('modules', 'Modules', `
-    <label class="fg" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${mv('connectionAudit')?'checked':''} onchange="_setupSet('modules.connectionAudit', this.checked)"> <span>Connection Audit ${helpTip('The year-over-year integration-funnel module (Data tab). Turn off for ministries that do not run it.')}</span></label>
+    <label class="fg" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${mv('connectionAudit')?'checked':''} onchange="_setupSet('modules.connectionAudit', this.checked)"> <span>Connection Audit ${helpTip('The year-over-year integration-funnel module (Data tab). Requires uploading a New Person form, a Decision form, and Student Team service data, in addition to the basic service/group attendance this app already needs — turn off for ministries that do not run those extra forms.')}</span></label>
     <label class="fg" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" ${mv('lifegroups')?'checked':''} onchange="_setupSet('modules.lifegroups', this.checked)"> <span>Lifegroups ${helpTip('Small-group attendance tracking and stats. Turn off for ministries with no small groups.')}</span></label>
     <div class="fg"><label class="fl">Export guides ${helpTip('The in-app Elvanto CSV-export walkthroughs. Hide them if your church uses a different management system.')}</label>
       <select class="fs" onchange="_setupSet('modules.exportGuides', this.value)">
@@ -5269,10 +5272,7 @@ function _deployGuideText(cfg, svcMin) {
   const b = cfg.branding || {};
   const appName = b.appName || 'YS Connection';
   const ministry = b.ministryName || 'your ministry';
-  const preset = cfg.preset || 'large-graded-au';
   const json = JSON.stringify(cfg, null, 2);
-  const sqlJson = json.replace(/'/g, "''"); // escape single quotes for the SQL literal
-  const minAtt = (svcMin == null ? 100 : svcMin);
   return [
     `# Deploy "${appName}" for ${ministry}`,
     ``,
@@ -5311,18 +5311,6 @@ function _deployGuideText(cfg, svcMin) {
     `   Never leave a seeded password in place.`,
     `2. In Admin -> Accounts, create this church's real leaders and delete the`,
     `   placeholder accounts you don't need.`,
-    ``,
-    `## 4. Apply THIS ministry's configuration`,
-    `Preset: ${preset}`,
-    `Minimum service attendance (valid-service floor): ${minAtt}`,
-    ``,
-    `Two ways to reproduce this exact setup:`,
-    ` (a) By hand: Admin -> Youth Setup, pick the "${preset}"`,
-    `     preset, then match the fields to the configuration below; or`,
-    ` (b) Directly in Supabase (SQL editor) — fastest, exact copy:`,
-    `     update app_settings`,
-    `        set ministry_config = '${sqlJson}'::jsonb,`,
-    `            service_min_attendance = ${minAtt};`,
     ``,
     `## This ministry's configuration (ministryConfig)`,
     json,

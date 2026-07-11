@@ -93,7 +93,7 @@ There is always exactly one `admin` account. It cannot be deleted.
 
 **Scoping reality:**
 - `Actor.gender` is **derived at sign-in** (`auth.service.deriveActorGender`): quad logins
-  from their quad; grade logins from the **email convention** (`grade7g`→female, `grade7b`→male,
+  from their quad; grade logins from the **username convention** (`grade7g`→female, `grade7b`→male,
   or a "girls"/"boys" word). An ungendered grade account (`grade7@`) → `gender: null` → sees
   **both** genders (back-compat). `access-control` exposes `genderScopeOf` + `canAccessStudent`
   (`canAccessGrade && canAccessGender`); every read path (students, at-risk, trends,
@@ -186,7 +186,7 @@ is the default, previous is shown as a comparison.
 
 ## Seed demo accounts
 
-| Email | Role | Scope |
+| Username | Role | Scope |
 |-------|------|-------|
 | `admin@youth.ministry` | admin | All |
 | `director@youth.ministry` | director | All |
@@ -199,15 +199,18 @@ is the default, previous is shown as a comparison.
 Local `PERSISTENCE=memory` dev/demo mode: password `demo1234` for all of the above,
 same as before. **Supabase/production accounts are different:** every account
 inserted by `002_seed_admin.sql` / `005_seed_users.sql` (and any account matching
-one of the emails above, post-rename) is flagged `must_change_password = true` by
+one of the usernames above, post-rename) is flagged `must_change_password = true` by
 migration `017_must_change_password.sql` — the account holder must set their own
 password via `POST /accounts/me/password` (or the forced first-login screen) before
 anything else is reachable. See "Forced password change" under Security notes.
 
-**Email convention:** grade logins use **`g` (girls) / `b` (boys)** suffixes —
-e.g. `grade7g@youth.ministry`, `grade7b@youth.ministry` (NOT `…f` / `…m`). Account
-emails are **editable** in admin → Accounts → Edit (`account.service.update` accepts
-`email` with a uniqueness check), so the actual logins can be renamed to this scheme.
+**Username convention:** grade logins use **`g` (girls) / `b` (boys)** suffixes —
+e.g. `grade7g@youth.ministry`, `grade7b@youth.ministry` (NOT `…f` / `…m`) — the
+username just happens to be shaped like an email address. Usernames are
+**editable** in admin → Accounts → Edit (`account.service.update` accepts `email`
+with a uniqueness check — the field is internally still named `email`, it's just
+not treated as one anywhere in the app), so the actual logins can be renamed to
+this scheme.
 
 ## Environment variables
 
@@ -377,7 +380,7 @@ back expand-state vars / `renderHome()`/`renderTrends()` toggles.
 `/lifegroups/stats` on a page you've left can't overwrite the new page (the stuck-spinner /
 wrong-page bug when switching menus fast).
 
-**Gendered tile labels** — `_loginGender(u)` (quad→quad gender; grade→email `…g`/`…b`) +
+**Gendered tile labels** — `_loginGender(u)` (quad→quad gender; grade→username `…g`/`…b`) +
 `_gsfx(gender)` (" Girls"/" Boys") append the gender to grade/quad tiles whose numbers are
 gender-specific (e.g. "Grade 11 Boys").
 
@@ -493,7 +496,7 @@ service worker (`public/sw.js`) — those were left fully intact.
   was a rename + display tweak, not a scoring change.
 - **Admin**: the Audit tab was removed from Admin Settings (the backend `/admin/audit`
   route and its log are kept, just unreachable from the SPA — nothing in the frontend
-  calls it). Deleting an account now requires typing its email to confirm.
+  calls it). Deleting an account now requires typing its username to confirm.
 - **Connection Audit**: the separate audit-hub and deck-preview screens were deleted;
   the CA tab nav moved to the top of the module and the YTD/term strip was dropped in
   favour of the `scopeBar()` year+period picker described elsewhere in this doc.
@@ -893,7 +896,7 @@ collectively got 10 logins / 15 min → everyone past that got a 15-min `429`. P
 version (so rollback couldn't remove it) and in-memory (so a DB restart couldn't clear it),
 which is why it masked/compounded the outage.
 - **Fix (shipped, `664e9f7`): re-key the limiter by IP + account** (falls back to IP-only if
-  email absent) and raise the per-account cap to 30/15 min. Per-account brute-force protection
+  username absent) and raise the per-account cap to 30/15 min. Per-account brute-force protection
   is retained; it's best-effort throttling, not a hard boundary.
 
 **Also done in the same pass:**
@@ -1243,7 +1246,7 @@ rollback recipe still holds.
   grade case, `leader.service`, `connection.service`, `lifegroup-stats`,
   `actor-key` — which MUST key on the full set or two multi-grade accounts collide
   their scoped caches) uses it. `deriveActorGender` prefers the explicit gender,
-  falling back to the `grade7g`/`grade7b` email convention for untouched
+  falling back to the `grade7g`/`grade7b` username convention for untouched
   single-grade accounts. Account form: grade `<select>` → grade checkboxes
   (`ugcb`) + a gender-scope select. `account.service` stores `grade = grades.length===1 ? grades[0] : null`.
 - **Structure config threading (§5.1/§5.2, phase 6b).** `access-control`'s
@@ -1456,7 +1459,7 @@ covered by the existing multi-grade `grade` account feature (§5.1a, phase
 
 ## Security notes
 
-- **XSS:** all user-supplied strings (names, emails, notification title/message,
+- **XSS:** all user-supplied strings (names, usernames, notification title/message,
   lifegroup names) are HTML-escaped via the global `esc()` helper before going into
   `innerHTML`. A `Content-Security-Policy` meta tag in `index.html` is defence-in-depth
   (`'unsafe-inline'` is required by the inline-script/onclick architecture; its value is
@@ -1482,5 +1485,5 @@ covered by the existing multi-grade `grade` account feature (§5.1a, phase
   new admin-created accounts to `false` (not in scope — see migration 017's comment for why the
   scope is deliberately narrow: only the historically-seeded accounts, not every admin-set
   password). This exists because `002_seed_admin.sql` / `005_seed_users.sql` and this file used
-  to document a shared default password in plaintext next to real account emails, in a *public*
+  to document a shared default password in plaintext next to real account usernames, in a *public*
   repo — see `017_must_change_password.sql`.
