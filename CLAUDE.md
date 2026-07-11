@@ -1666,8 +1666,30 @@ same-user "at-camp preview") are in
     mid-preview of an account with a genuinely-unset password would re-trigger its forced-
     password screen even though the initial preview response had already suppressed it.
 - **Explicitly not built** (decided during brainstorming, matches "the app is already agnostic
-  about who makes changes"): no write-blocking, no audit/logging of preview sessions, no
-  confirmation modal before entering preview.
+  about who makes changes"): no write-blocking, no audit/logging of preview sessions.
+- **Follow-up, same day**: the Preview button/banner now use a dedicated `eye` icon (was
+  reusing `id`, the profile-view icon, which read ambiguously). A confirm modal
+  (`confirmEnterPreview(id)` — looks the account up from `_adminData.users` rather than passing
+  `displayName` through the `onclick` string, avoiding the apostrophe-escaping gotcha noted
+  under Connect Setup's SMS templates above) now asks "Do you want to preview the *X* login?"
+  before `enterPreview()` actually runs — the brainstorming decision above to skip a
+  confirmation step was revisited and reversed.
+
+### Admin account protection now locks the username, not the display name (2026-07-12)
+
+Bug fix: `isProtectedAdmin()` (`account.service.ts`, mirrored client-side as `_isProtectedAdmin()`
+in `public/index.html`) used to key off `displayName === 'Admin'` and lock *that* field — backwards,
+since the display name is a cosmetic label and the username (`email` field) is the actual login
+credential. Now keys off `email === 'admin'` (the seeded bootstrap username) — that account's
+username is permanently locked, its display name is freely editable like any other account's.
+Falls back to `displayName === 'Admin'` too (OR, not replace) so an account already renamed away
+from username "admin" under the old rules doesn't silently lose protection — this matters because
+`email` used to be the freely-editable field, so a real admin may already have changed it in
+production before this fix shipped. Same swap applied in three places: `AccountService.update()`
+(guard moved from `patch.displayName` to `patch.email`), `toggleStatus()`/`remove()` (guard
+condition swapped to `isProtectedAdmin()`, error text now interpolates the account's current
+`displayName` instead of hardcoding "Admin"), and the Edit Account modal (Username input now
+`disabled` for the protected account instead of Display Name).
 
 ## Security notes
 

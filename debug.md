@@ -221,6 +221,19 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
   - **Stuck in preview with no way back**: `exitPreview()` restores the admin's stashed
     token/user — if the admin's original 12h token had already expired by the time they exit,
     the next API call 401s and falls back to the login screen (known limitation, not a bug).
+  - **Preview icon looks wrong / no confirm popup before previewing**: the button/banner use
+    the `eye` IC key (grep `icS('eye')`); `confirmEnterPreview(id)` shows the "Do you want to
+    preview the X login?" modal and only calls `enterPreview(id)` on confirm — if either
+    regressed, check the row's `onclick` still points at `confirmEnterPreview`, not
+    `enterPreview` directly.
+- **The protected admin account's Display Name field won't save, or its Username field DOES
+  save** (should be the reverse, fixed 2026-07-12): `isProtectedAdmin()`
+  (`account.service.ts`) / `_isProtectedAdmin()` (public/index.html) key off `email === 'admin'`
+  (falls back to `displayName === 'Admin'` for an account already renamed under the old rules —
+  see CLAUDE.md). If a protected account's username changed anyway, check `AccountService.update()`'s
+  guard is still checking `patch.email` (not `patch.displayName`) before the uniqueness check.
+  If the Edit Account modal has the wrong field disabled, check `showEditUser()`'s `_protectedEdit`
+  const is applied to `#u-email`, not `#u-name`.
 
 ### Allocation import
 
