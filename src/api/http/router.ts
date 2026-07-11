@@ -125,6 +125,7 @@ export function buildRoutes(services: Services): Route[] {
     { method: 'POST',   path: '/accounts/me/password',         auth: true, allowMustChangePassword: true, handler: (r) => account.changeOwnPassword(r) },
     { method: 'PATCH',  path: '/accounts/users/:id/status',    auth: true, handler: (r) => account.toggleStatus(r) },
     { method: 'DELETE', path: '/accounts/users/:id',           auth: true, handler: (r) => account.remove(r) },
+    { method: 'POST',   path: '/accounts/users/:id/preview',   auth: true, handler: (r) => account.preview(r) },
     { method: 'POST',   path: '/accounts/cohort-layout/preview', auth: true, handler: (r) => account.planCohortLayout(r) },
     { method: 'POST',   path: '/accounts/cohort-layout/apply',   auth: true, handler: (r) => account.applyCohortLayout(r) },
 

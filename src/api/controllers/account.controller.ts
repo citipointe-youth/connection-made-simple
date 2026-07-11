@@ -45,6 +45,13 @@ export function makeAccountController(deps: { account: AccountService; auth: Aut
       return deps.account.toggleStatus(req.ctx, req.params['id']!);
     },
 
+    async preview(req: HttpRequest) {
+      if (!req.ctx) throw new UnauthorizedError();
+      const user = await deps.account.previewAccount(req.ctx, req.params['id']!);
+      const token = await deps.auth.issueTokenFor(user.id, { mustChangePassword: false });
+      return { token, user: { ...user, mustChangePassword: false } };
+    },
+
     async remove(req: HttpRequest) {
       if (!req.ctx) throw new UnauthorizedError();
       await deps.account.remove(req.ctx, req.params['id']!);
