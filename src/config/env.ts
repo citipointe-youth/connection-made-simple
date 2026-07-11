@@ -21,7 +21,4 @@ export const env = {
   CORS_ORIGINS: getEnv('CORS_ORIGINS', corsDefault).split(','),
   APP_ORIGIN: process.env['APP_ORIGIN'],
   DATABASE_URL: process.env['DATABASE_URL'],
-  VAPID_PUBLIC_KEY: process.env['VAPID_PUBLIC_KEY'] ?? '',
-  VAPID_PRIVATE_KEY: process.env['VAPID_PRIVATE_KEY'] ?? '',
-  VAPID_SUBJECT: process.env['VAPID_SUBJECT'] ?? '',
 };

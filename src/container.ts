@@ -16,8 +16,6 @@ import {
   InMemorySettingsRepository,
   InMemoryAuditRepository,
   InMemoryConnectionAuditRepository,
-  InMemoryPushSubscriptionRepository,
-  InMemoryNotificationRepository,
 } from './repositories/in-memory';
 import { JsonFilePersistence } from './repositories/persistence';
 import {
@@ -34,8 +32,6 @@ import {
   SupabaseSettingsRepository,
   SupabaseAuditRepository,
   SupabaseConnectionAuditRepository,
-  SupabasePushSubscriptionRepository,
-  SupabaseNotificationRepository,
   getSqlClient,
 } from './repositories/supabase/index';
 
@@ -53,8 +49,6 @@ import type {
   ISettingsRepository,
   IAuditRepository,
   IConnectionAuditRepository,
-  IPushSubscriptionRepository,
-  INotificationRepository,
 } from './repositories/interfaces';
 
 import { makeAuthService, type AuthService } from './services/auth.service';
@@ -70,7 +64,6 @@ import { makeAccountService, type AccountService } from './services/account.serv
 import { makeAdminService, type AdminService } from './services/admin.service';
 import { makeTrendsService, type TrendsService } from './services/trends.service';
 import { makeLifegroupStatsService, type LifegroupStatsService } from './services/lifegroup-stats.service';
-import { makePushService, type PushService } from './services/push.service';
 import { makeConnectionAuditService, type ConnectionAuditService } from './services/connection-audit.service';
 
 export interface Repositories {
@@ -87,8 +80,6 @@ export interface Repositories {
   settings: ISettingsRepository;
   audit: IAuditRepository;
   connectionAudits: IConnectionAuditRepository;
-  pushSubscriptions: IPushSubscriptionRepository;
-  notifications: INotificationRepository;
 }
 
 export interface Services {
@@ -105,7 +96,6 @@ export interface Services {
   settings: SettingsService;
   account: AccountService;
   admin: AdminService;
-  push: PushService;
   connectionAudit: ConnectionAuditService;
   users: IUserRepository;
 }
@@ -164,12 +154,6 @@ export async function buildContainer(): Promise<Container> {
   const connectionAudits: IConnectionAuditRepository = useSupabase
     ? new SupabaseConnectionAuditRepository(sql)
     : new InMemoryConnectionAuditRepository(useJson ? makeJson('connection-audits.json') : undefined);
-  const pushSubscriptions: IPushSubscriptionRepository = useSupabase
-    ? new SupabasePushSubscriptionRepository(sql)
-    : new InMemoryPushSubscriptionRepository();
-  const notifications: INotificationRepository = useSupabase
-    ? new SupabaseNotificationRepository(sql)
-    : new InMemoryNotificationRepository();
 
   // Home/Trends fan out to several endpoints in parallel that each independently
   // re-fetch the same full tables (e.g. studentRepo.findAll() runs 4x for one Home
@@ -193,7 +177,6 @@ export async function buildContainer(): Promise<Container> {
     serviceSessions, serviceAttendance,
     lifegroups, lifegroupWeeks, lifegroupAttendance,
     imports, settings, audit, connectionAudits,
-    pushSubscriptions, notifications,
   };
 
   // Init all repos
@@ -202,7 +185,6 @@ export async function buildContainer(): Promise<Container> {
     serviceSessions.init(), serviceAttendance.init(),
     lifegroups.init(), lifegroupWeeks.init(), lifegroupAttendance.init(),
     imports.init(), settings.init(), audit.init(), connectionAudits.init(),
-    pushSubscriptions.init(), notifications.init(),
   ]);
 
   // ----- Services -----
@@ -228,19 +210,11 @@ export async function buildContainer(): Promise<Container> {
     lifegroups, lifegroupWeeks, lifegroupAttendance,
     imports, audit, connectionAudits,
   );
-  const push = makePushService({
-    vapidPublicKey: env.VAPID_PUBLIC_KEY,
-    vapidPrivateKey: env.VAPID_PRIVATE_KEY,
-    vapidSubject: env.VAPID_SUBJECT,
-    pushRepo: pushSubscriptions,
-    notifRepo: notifications,
-    userRepo: users,
-  });
   const connectionAudit = makeConnectionAuditService(connectionAudits, settings);
 
   const services: Services = {
     auth, student, leader, connection, followup, overview, atRisk, trends, lifegroupStats,
-    importService, settings: settingsSvc, account, admin, push, connectionAudit,
+    importService, settings: settingsSvc, account, admin, connectionAudit,
     users,
   };
 

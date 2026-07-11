@@ -188,25 +188,27 @@ is the default, previous is shown as a comparison.
 
 | Username | Role | Scope |
 |-------|------|-------|
-| `admin@youth.ministry` | admin | All |
-| `director@youth.ministry` | director | All |
-| `g79@youth.ministry` | quad | Girls Yr 7–9 |
-| `b79@youth.ministry` | quad | Boys Yr 7–9 |
-| `g1012@youth.ministry` | quad | Girls Yr 10–12 |
-| `b1012@youth.ministry` | quad | Boys Yr 10–12 |
-| `grade7@youth.ministry` … `grade12@youth.ministry` | grade | one per grade (the in-code seed has one account per grade) |
+| `admin` | admin | All |
+| `director` | director | All |
+| `g79` | quad | Girls Yr 7–9 |
+| `b79` | quad | Boys Yr 7–9 |
+| `g1012` | quad | Girls Yr 10–12 |
+| `b1012` | quad | Boys Yr 10–12 |
+| `grade7` … `grade12` | grade | one per grade (the in-code seed has one account per grade) |
 
 Local `PERSISTENCE=memory` dev/demo mode: password `demo1234` for all of the above,
 same as before. **Supabase/production accounts are different:** every account
-inserted by `002_seed_admin.sql` / `005_seed_users.sql` (and any account matching
-one of the usernames above, post-rename) is flagged `must_change_password = true` by
-migration `017_must_change_password.sql` — the account holder must set their own
-password via `POST /accounts/me/password` (or the forced first-login screen) before
-anything else is reachable. See "Forced password change" under Security notes.
+inserted by `0003_seed_accounts.sql` (`supabase/migrations/` — the pre-2026-07
+history of this seed data, back when it used fake `@youth.ministry` emails, lives
+archived in `supabase/migrations_archive/002_seed_admin.sql` /
+`005_seed_users.sql` / `017_must_change_password.sql`) is flagged
+`must_change_password = true` inline at insert — the account holder must set their
+own password via `POST /accounts/me/password` (or the forced first-login screen)
+before anything else is reachable. See "Forced password change" under Security
+notes.
 
 **Username convention:** grade logins use **`g` (girls) / `b` (boys)** suffixes —
-e.g. `grade7g@youth.ministry`, `grade7b@youth.ministry` (NOT `…f` / `…m`) — the
-username just happens to be shaped like an email address. Usernames are
+e.g. `grade7g`, `grade7b` (NOT `…f` / `…m`, an earlier naming scheme). Usernames are
 **editable** in admin → Accounts → Edit (`account.service.update` accepts `email`
 with a uniqueness check — the field is internally still named `email`, it's just
 not treated as one anywhere in the app), so the actual logins can be renamed to
@@ -430,56 +432,12 @@ No emoji or Unicode symbol characters anywhere in the SPA — everything is SVG.
   showing" — a snapshot cached before the lgStats fix was served forever). `audits`
   is now in `API_RE` as of `cms-v6`.
 
-## Notifications (web push)
+## Notifications (web push) — removed
 
-> **CURRENTLY HIDDEN** (as of 2026-06-27). The feature is fully implemented and all code
-> is intact — only the UI entry points and the permission request have been disabled. To
-> re-enable, see the **Re-enabling push notifications** section below.
-
-- Backend: `push.service.ts` + `/push/*` routes (`vapid-key`, `subscribe`, `unsubscribe`,
-  `send`, `notifications`, `notifications/:id` delete, `notifications/:id/dismiss`).
-- **Targeting:** `all` (director/admin only), `quad`, `grade` (gendered). A **quad**
-  notification fans out to the quad login **and** the gendered grade logins inside that
-  quad (e.g. `g79` → `grade7g`/`grade8g`/`grade9g`) — see `getUsersForTarget`.
-- **Expiry:** notifications expire **7 days** after creation (`send()` in `push.service.ts`).
-- `findReceivedByUser` already filters out dismissed/deleted/expired, so the SPA unread
-  count is just `received.length`.
-- **SPA:** notifications live on their **own page** (`renderNotifications`, route
-  `notifications`, in `navItems()` for every role incl. grade). The header **bell**
-  navigates there and shows a red unread **badge** (`_updateNotifBadge`). Admin/director/
-  quad get a **Send notification** button at the top of that page (`showSendNotification`).
-
-## Re-enabling push notifications
-
-All changes are in `public/index.html`. Search for `// PUSH-HIDDEN` to locate every
-disabled touch point. There are five things to restore:
-
-1. **Header bell button** — in the function that builds the persistent app shell
-   (the function called after login that sets up the header, top nav, and bottom nav),
-   restore the bell icon button that sits between the role badge and the logout button.
-   It should navigate to the `notifications` route on click and contain an empty badge
-   element (`id="notif-badge"`) that the badge-refresh function uses to show an unread
-   count. The `PUSH-HIDDEN` comment marks where it was removed.
-
-2. **Badge refresh on login** — in the same shell-building function, after it calls the
-   prefetch helper, there was a call to `_updateNotifBadge()`. Uncomment it (marked
-   `PUSH-HIDDEN`).
-
-3. **Nav items for all roles** — in the function that returns the navigation item list
-   (`navItems()`), each role's array (grade, quad, admin, director) had a `notifications`
-   entry with the bell icon, labelled "Notifications" / "Alerts". Uncomment the four
-   commented-out entries (each marked `PUSH-HIDDEN`).
-
-4. **Route handler** — in the main page-routing function (`go()`), the `notifications`
-   route currently redirects to home. Change it back to call `renderNotifications()`
-   (marked `PUSH-HIDDEN` on the same line).
-
-5. **Permission request on login** — in the login submit handler (`doLogin()`), the call
-   to `initPushSubscription()` (which requests browser permission and registers the push
-   subscription) was commented out. Uncomment it (marked `PUSH-HIDDEN`).
-
-No changes are needed to the backend (`router.ts`, `push.service.ts`, etc.) or the
-service worker (`public/sw.js`) — those were left fully intact.
+Push notifications were fully removed from the codebase 2026-07-11 and archived to
+`../Archive/push-notifications-2026-07-11/` (source + a README with reinstatement notes).
+The Supabase `push_subscriptions`/`notifications`/`notification_recipients` tables may
+still exist in the database — that's out of scope for this code-only removal.
 
 ## Trend qualifiers
 

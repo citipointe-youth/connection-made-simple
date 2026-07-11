@@ -104,7 +104,6 @@ export const MinistryConfigSchema = z.object({
     .object({
       connectionAudit: z.boolean().default(true),
       lifegroups: z.boolean().default(true),
-      pushNotifications: z.boolean().default(false),
       exportGuides: z.enum(['elvanto', 'hidden']).default('elvanto'),
     })
     .default({}),

@@ -98,7 +98,6 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .role-badge{background:rgba(255,255,255,.18);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;text-transform:uppercase;white-space:nowrap}
 .btn-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.15);color:#fff;cursor:pointer;flex-shrink:0}
 .btn-icon:hover{background:rgba(255,255,255,.25)}
-.notif-badge{position:absolute;top:-2px;right:-2px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#dc2626;color:#fff;font-size:10px;font-weight:800;line-height:17px;text-align:center;box-shadow:0 0 0 2px var(--navy)}
 @media(min-width:768px){.hdr{padding:0 28px}.hdr-top{height:56px}.hdr h1{font-size:20px}}
 
 /* SVG icons */
@@ -998,7 +997,7 @@ function _updateNavActive() {
 }
 // Root pages = this role's bottom-nav tabs (the "home base" screens). Anything
 // else (Trends, Student Search, Import, Admin, Connection Audit, Birthdays,
-// Notifications, and every screen/tab/wizard nested inside those) counts as a
+// and every screen/tab/wizard nested inside those) counts as a
 // sub-page, so the header's brand mark swaps for a back arrow that always
 // returns to Home — a flat "back to base" rather than a real history stack.
 function _isRootPage(page) {
@@ -1016,21 +1015,16 @@ function _hdrBrandHtml() {
 function _initShell() {
   const u = S.user;
   if (!u) return;
-  const pushOn = S.settings && S.settings.ministryConfig && S.settings.ministryConfig.modules && S.settings.ministryConfig.modules.pushNotifications === true;
   const items = navItems();
   const bn = bottomNavItems();
   const dlinks = items.map(it => `<a data-nav-page="${it.id}" onclick="go('${it.id}')">${icN(it.ic)}<span class="nav-lbl"> ${it.label}</span></a>`).join('');
   const mlinks = bn.map(it => `<a data-nav-page="${it.id}" onclick="go('${it.id}')">${icN(it.ic)}<span>${it.mbl||it.label}</span></a>`).join('');
-  const bellBtn = pushOn
-    ? `<div class="btn-icon" style="position:relative" onclick="go('notifications')" title="Notifications" aria-label="Notifications">${icN('bell')}<span class="notif-badge" id="notif-badge" style="display:none"></span></div>`
-    : '';
   document.getElementById('app').innerHTML = `
     <div class="hdr">
       <div class="hdr-top">
         <div class="hdr-brand" id="hdr-brand"><span id="hdr-brand-ic">${_hdrBrandHtml()}</span><h1>${esc(appName())}</h1></div>
         <div class="hdr-meta">
           ${roleBadge(u)}
-          ${bellBtn}
           <div class="btn-icon" onclick="doLogout()" title="Sign out" aria-label="Sign out">${icN('logout')}</div>
         </div>
       </div>
@@ -1041,7 +1035,6 @@ function _initShell() {
   _shellReady = true;
   _positionNprog();
   _prefetch();
-  if (pushOn) _updateNotifBadge();
 }
 
 function _prefetch() {
@@ -1449,12 +1442,9 @@ function brandMark(px, color){
 function navItems() {
   const u = S.user; if (!u) return [];
   const modules = (S.settings && S.settings.ministryConfig && S.settings.ministryConfig.modules) || {};
-  // CA defaults true (empty/absent config = current behaviour); push defaults
-  // false (it's hidden today, so false IS the faithful default).
+  // CA defaults true (empty/absent config = current behaviour).
   const caOn = modules.connectionAudit !== false;
-  const pushOn = modules.pushNotifications === true;
   const caItem = { id:'ca-overview', ic:'link', label:'Connection Audit', mbl:'Connection Audit' };
-  const notifItem = { id:'notifications', ic:'bell', label:'Notifications', mbl:'Alerts' };
   // Leader (junior leader, §5.2): a slim, follow-up-focused nav — Home (lite) |
   // My Connections | Health | Birthdays. No Connect Setup / Trends / Import.
   if (u.role === 'leader') return [
@@ -1462,7 +1452,6 @@ function navItems() {
     { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:8px">Connections</span></span>' },
     { id:'at-risk',    ic:'heart',    label:'Health',            mbl:'Health' },
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
-    ...(pushOn ? [notifItem] : []),
   ];
   // Grade: Home | Health | My Students | Connect Setup  (Trends + Birthdays in quick actions)
   if (u.role === 'grade') return [
@@ -1473,7 +1462,6 @@ function navItems() {
     // quick actions:
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
-    ...(pushOn ? [notifItem] : []),
   ];
   // Quad: Home | Health | Trends | Connect Setup
   if (u.role === 'quad') return [
@@ -1485,7 +1473,6 @@ function navItems() {
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
     { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:8px">Connections</span></span>' },
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays', wide:true },
-    ...(pushOn ? [notifItem] : []),
   ];
   // Admin: Home | Health | Trends | Connect Setup + quick actions
   if (u.role === 'admin') return [
@@ -1499,7 +1486,6 @@ function navItems() {
     { id:'admin',      ic:'settings', label:'Admin Settings',     mbl:'Settings' },
     ...(caOn ? [caItem] : []), /*CA-HOOK*/
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
-    ...(pushOn ? [notifItem] : []),
   ];
   // Director: same as admin minus admin tile
   return [
@@ -1512,7 +1498,6 @@ function navItems() {
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
     ...(caOn ? [caItem] : []), /*CA-HOOK*/
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays', wide:true },
-    ...(pushOn ? [notifItem] : []),
   ];
 }
 function bottomNavItems() { return navItems().slice(0, 4); }
@@ -1563,7 +1548,7 @@ async function render() {
   const p = S.page;
   // Junior leaders can only reach their own slim set of pages (§5.2) — bounce any
   // other route home (defence-in-depth; the server also scopes/403s their data).
-  if (S.user.role === 'leader' && !['home','my-students','at-risk','birthdays','notifications'].includes(p)) { go('home'); return; }
+  if (S.user.role === 'leader' && !['home','my-students','at-risk','birthdays'].includes(p)) { go('home'); return; }
   if (p && p.indexOf('ca-') === 0 && window.CA) { await CA.render(p); return; } /*CA-HOOK*/
   if (p==='home') await renderHome();
   else if (p==='leaders') await renderConnect();
@@ -1577,10 +1562,6 @@ async function render() {
   else if (p==='import') await renderImport();
   else if (p==='birthdays') await renderUpcomingBirthdays();
   else if (p==='admin') await renderAdmin();
-  else if (p==='notifications') {
-    const pushOn = S.settings && S.settings.ministryConfig && S.settings.ministryConfig.modules && S.settings.ministryConfig.modules.pushNotifications === true;
-    if (pushOn) await renderNotifications(); else go('home');
-  }
   else await renderHome();
 }
 
@@ -1610,8 +1591,6 @@ async function doLogin() {
   try {
     const res = await API.post('/auth/login', { email, password });
     API.setToken(res.token); S.user = res.user; go('home');
-    const pushOn = S.settings && S.settings.ministryConfig && S.settings.ministryConfig.modules && S.settings.ministryConfig.modules.pushNotifications === true;
-    if (pushOn) initPushSubscription();
   } catch (e) { errEl.innerHTML = `<div class="alert al-err">${e.message}</div>`; }
 }
 
@@ -2189,190 +2168,6 @@ function _toggleHomePrev() {
   const open = b.style.display === 'none';
   b.style.display = open ? 'block' : 'none';
   if (c) c.style.transform = open ? 'rotate(90deg)' : '';
-}
-
-// ============================================================
-// PUSH NOTIFICATIONS
-// ============================================================
-
-function _urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
-}
-
-async function initPushSubscription() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-  try {
-    const { publicKey } = await API.get('/push/vapid-key');
-    if (!publicKey) return;
-    const reg = await navigator.serviceWorker.ready;
-    const existing = await reg.pushManager.getSubscription();
-    if (existing) return;
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') return;
-    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _urlBase64ToUint8Array(publicKey) });
-    const j = sub.toJSON();
-    await API.post('/push/subscribe', { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth });
-  } catch (e) { console.error('[push] subscribe error', e); }
-}
-
-function showSendNotification() {
-  const u = S.user;
-  if (!u || !['admin','director','quad'].includes(u.role)) return;
-  let opts = '';
-  if (u.role === 'admin' || u.role === 'director') {
-    opts += '<option value="all">Everyone</option>';
-    ['g79','b79','g1012','b1012'].forEach(q => { opts += `<option value="quad:${q}">${QUAD_LABELS[q]||q}</option>`; });
-    _gradeList().forEach(gr => {
-      opts += `<option value="grade:${gr}:female">Grade ${gr} Girls</option>`;
-      opts += `<option value="grade:${gr}:male">Grade ${gr} Boys</option>`;
-    });
-  } else {
-    opts += `<option value="quad:${u.quad}">${QUAD_LABELS[u.quad]||u.quad} (whole quad)</option>`;
-    quadGrades(u.quad).forEach(gr => { const g = quadGender(u.quad); opts += `<option value="grade:${gr}:${g}">Grade ${gr}${_gsfx(g)}</option>`; });
-  }
-  modal(`
-    <div class="mo-title">${icN('bell')} Send Notification</div>
-    <div id="push-err"></div>
-    <div class="fg"><label class="fl">To</label><select class="fs" id="push-target">${opts}</select></div>
-    <div class="fg"><label class="fl">Title</label><input class="fi" id="push-title" maxlength="100" placeholder="e.g. Service reminder"></div>
-    <div class="fg"><label class="fl">Message</label><textarea class="fi" id="push-msg" maxlength="500" rows="3" placeholder="e.g. See you tonight at 6:30pm" style="resize:vertical"></textarea></div>
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="btn btn-primary" style="flex:1" onclick="submitSendNotification()">Send</button>
-      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-    </div>`);
-}
-
-async function submitSendNotification() {
-  const raw = document.getElementById('push-target')?.value || '';
-  const title = document.getElementById('push-title')?.value?.trim() || '';
-  const message = document.getElementById('push-msg')?.value?.trim() || '';
-  const errEl = document.getElementById('push-err');
-  if (!title || !message) { errEl.innerHTML = '<div class="alert al-err" style="margin-bottom:8px">Title and message are required</div>'; return; }
-  let target;
-  if (raw === 'all') { target = { type: 'all' }; }
-  else if (raw.startsWith('quad:')) { target = { type: 'quad', quad: raw.slice(5) }; }
-  else if (raw.startsWith('grade:')) { const [,gr,gender] = raw.split(':'); target = { type: 'grade', grade: parseInt(gr,10), gender }; }
-  else { errEl.innerHTML = '<div class="alert al-err" style="margin-bottom:8px">Invalid target</div>'; return; }
-  try {
-    const res = await API.post('/push/send', { target, title, message });
-    closeModal();
-    Cache.del('/push/notifications');
-    if (S.page === 'notifications') renderNotifications();
-    const t = document.createElement('div');
-    t.className = 'alert al-ok';
-    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.15)';
-    t.textContent = `Sent ${res.sent} · Failed ${res.failed}`;
-    document.body.appendChild(t); setTimeout(() => t.remove(), 3500);
-  } catch (e) { errEl.innerHTML = `<div class="alert al-err" style="margin-bottom:8px">${e.message}</div>`; }
-}
-
-function _pushTargetLabel(target) {
-  if (!target) return '—';
-  if (target.type === 'all') return 'Everyone';
-  if (target.type === 'quad') return QUAD_LABELS[target.quad] || target.quad;
-  if (target.type === 'grade') return `Grade ${target.grade}${_gsfx(target.gender)}`;
-  return '—';
-}
-
-function _timeAgo(isoStr) {
-  if (!isoStr) return '';
-  const diff = Date.now() - new Date(isoStr).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
-// Notifications screen — dedicated page for every role. Admin/director/quad get
-// a "Send notification" button at the top; everyone sees their received list.
-async function renderNotifications() {
-  const u = S.user; if (!u) return;
-  const canSend = ['admin', 'director', 'quad'].includes(u.role);
-  if (!_allCached('/push/notifications')) setApp(shell(''));
-  let data;
-  try { data = await API.get('/push/notifications'); }
-  catch {
-    if (S.page === 'notifications') setApp(shell('<h2 style="font-size:20px;font-weight:800;margin-bottom:12px">Notifications</h2><div class="alert al-err">Could not load notifications.</div>'));
-    return;
-  }
-  if (S.page !== 'notifications') return; // stale-render guard (user navigated away)
-  const { received = [], sent = [] } = data;
-
-  let h = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">'
-    + '<h2 style="font-size:20px;font-weight:800">Notifications</h2>'
-    + (canSend ? `<button class="btn btn-primary btn-sm" onclick="showSendNotification()">${icS('bell')} Send notification</button>` : '')
-    + '</div>';
-
-  h += '<div class="sh">Received</div>';
-  if (received.length) {
-    h += '<div class="card" style="padding:10px;margin-bottom:14px">';
-    for (const n of received) {
-      h += `<div style="padding:8px 0;border-bottom:1px solid var(--paper-dark)">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-          <div style="flex:1">
-            <div style="font-size:13px;font-weight:700">${esc(n.title)}</div>
-            <div style="font-size:12px;color:var(--ink-mid);margin:2px 0">${esc(n.message)}</div>
-            <div style="font-size:11px;color:var(--ink-faint)">${esc(n.senderName)} · ${_timeAgo(n.createdAt)}</div>
-          </div>
-          <button class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;flex-shrink:0" onclick="dismissNotification('${n.id}')">Dismiss</button>
-        </div></div>`;
-    }
-    h += '</div>';
-  } else {
-    h += '<p style="color:var(--ink-faint);font-size:13px;padding:8px 0 14px">No new notifications.</p>';
-  }
-
-  if (canSend) {
-    h += '<div class="sh">Sent</div>';
-    if (sent.length) {
-      h += '<div class="card" style="padding:10px;margin-bottom:14px">';
-      for (const n of sent) {
-        h += `<div style="padding:8px 0;border-bottom:1px solid var(--paper-dark)">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-            <div style="flex:1">
-              <div style="font-size:13px;font-weight:700">${esc(n.title)}</div>
-              <div style="font-size:12px;color:var(--ink-mid);margin:2px 0">${esc(n.message)}</div>
-              <div style="font-size:11px;color:var(--ink-faint)">To: ${_pushTargetLabel(n.target)} · ${_timeAgo(n.createdAt)} · ${n.sent} sent</div>
-            </div>
-            <button class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11px;flex-shrink:0;color:var(--danger);border-color:var(--danger)" onclick="deleteNotification('${n.id}')">Delete</button>
-          </div></div>`;
-      }
-      h += '</div>';
-    } else {
-      h += '<p style="color:var(--ink-faint);font-size:13px;padding:8px 0 14px">You haven\'t sent any notifications.</p>';
-    }
-  }
-
-  setApp(shell(h));
-  _updateNotifBadge(data);
-}
-
-// Refresh the red unread badge on the header bell = count of current (undismissed,
-// unexpired) received notifications for the logged-in account.
-async function _updateNotifBadge(data) {
-  if (!S.user) return;
-  try { if (!data) data = await API.get('/push/notifications'); }
-  catch { return; }
-  const count = (data && data.received ? data.received : []).length;
-  const el = document.getElementById('notif-badge');
-  if (!el) return;
-  if (count > 0) { el.textContent = count > 99 ? '99+' : String(count); el.hidden = false; }
-  else { el.hidden = true; }
-}
-
-async function dismissNotification(id) {
-  try { await API.post(`/push/notifications/${id}/dismiss`, {}); Cache.del('/push/notifications'); await _updateNotifBadge(); if (S.page === 'notifications') renderNotifications(); }
-  catch (e) { console.error('[push] dismiss error', e); }
-}
-
-async function deleteNotification(id) {
-  try { await API.del(`/push/notifications/${id}`); Cache.del('/push/notifications'); if (S.page === 'notifications') renderNotifications(); }
-  catch (e) { console.error('[push] delete error', e); }
 }
 
 // ============================================================
@@ -5225,7 +5020,7 @@ const MINISTRY_CONFIG_DEFAULTS_CLIENT = {
   labels: { smallGroup: 'Lifegroup', smallGroupPlural: 'Lifegroups', service: 'Youth', serviceNight: 'Friday Nights', studentTeam: 'Student Team', connection: 'Connection', groupNameStrip: ['Brisbane - YS - '] },
   structure: { cohortModel: 'grades-quads', gradeMin: 7, gradeMax: 12, gradeLabel: 'Grade', brackets: [{ id: '79', label: 'Yr 7–9', gradeMin: 7, gradeMax: 9 }, { id: '1012', label: 'Yr 10–12', gradeMin: 10, gradeMax: 12 }], genderPolicy: 'strict', serviceDayOfWeek: 5 },
   roles: { enabled: { director: true, grade: true, quad: true, leader: false } },
-  modules: { connectionAudit: true, lifegroups: true, pushNotifications: false, exportGuides: 'elvanto' },
+  modules: { connectionAudit: true, lifegroups: true, exportGuides: 'elvanto' },
   import: { dateOrder: 'DMY', leaderTag: 'leader' },
 };
 

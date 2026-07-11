@@ -1,10 +1,7 @@
 import { InMemoryBaseRepository } from './in-memory.base.repository';
 import type { IPersistenceAdapter } from '../persistence/persistence';
-import { generateId } from '../../utils/id';
 
 import type { User } from '../../core/entities/user';
-import type { PushSubscription } from '../../core/entities/push-subscription';
-import type { Notification, NotificationRecipient, NotificationWithRecipient } from '../../core/entities/notification';
 import type { Student } from '../../core/entities/student';
 import type { Leader } from '../../core/entities/leader';
 import type { Connection } from '../../core/entities/connection';
@@ -35,8 +32,6 @@ import type {
   ISettingsRepository,
   IAuditRepository,
   IConnectionAuditRepository,
-  IPushSubscriptionRepository,
-  INotificationRepository,
 } from '../interfaces/entity-repositories';
 
 // ---------------------------------------------------------------------------
@@ -433,111 +428,3 @@ export class InMemoryConnectionAuditRepository
   }
 }
 
-// ---------------------------------------------------------------------------
-// Push Subscriptions
-// ---------------------------------------------------------------------------
-export class InMemoryPushSubscriptionRepository implements IPushSubscriptionRepository {
-  private subs: PushSubscription[] = [];
-
-  async init(): Promise<void> {}
-
-  async findByUserId(userId: string): Promise<PushSubscription[]> {
-    return this.subs.filter((s) => s.userId === userId).map((s) => ({ ...s }));
-  }
-
-  async findByUserIds(userIds: string[]): Promise<PushSubscription[]> {
-    const set = new Set(userIds);
-    return this.subs.filter((s) => set.has(s.userId)).map((s) => ({ ...s }));
-  }
-
-  async upsert(sub: PushSubscription): Promise<PushSubscription> {
-    const idx = this.subs.findIndex(
-      (s) => s.userId === sub.userId && s.endpoint === sub.endpoint,
-    );
-    if (idx >= 0) {
-      this.subs[idx] = { ...sub };
-    } else {
-      this.subs.push({ ...sub });
-    }
-    return { ...sub };
-  }
-
-  async deleteByEndpoint(userId: string, endpoint: string): Promise<void> {
-    this.subs = this.subs.filter(
-      (s) => !(s.userId === userId && s.endpoint === endpoint),
-    );
-  }
-
-  async deleteByUserId(userId: string): Promise<void> {
-    this.subs = this.subs.filter((s) => s.userId !== userId);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Notifications
-// ---------------------------------------------------------------------------
-export class InMemoryNotificationRepository implements INotificationRepository {
-  private notifications: Notification[] = [];
-  private recipients: NotificationRecipient[] = [];
-
-  async init(): Promise<void> {}
-
-  async save(notification: Notification): Promise<Notification> {
-    const idx = this.notifications.findIndex((n) => n.id === notification.id);
-    if (idx >= 0) {
-      this.notifications[idx] = { ...notification };
-    } else {
-      this.notifications.push({ ...notification });
-    }
-    return { ...notification };
-  }
-
-  async saveRecipients(notificationId: string, recipientIds: string[]): Promise<void> {
-    for (const recipientId of recipientIds) {
-      const exists = this.recipients.some(
-        (r) => r.notificationId === notificationId && r.recipientId === recipientId,
-      );
-      if (!exists) {
-        this.recipients.push({ id: generateId(), notificationId, recipientId, dismissedAt: null });
-      }
-    }
-  }
-
-  async findById(id: string): Promise<Notification | null> {
-    return this.notifications.find((n) => n.id === id) ?? null;
-  }
-
-  async findSentByUser(userId: string): Promise<Notification[]> {
-    const now = new Date().toISOString();
-    return this.notifications
-      .filter((n) => n.senderId === userId && n.deletedAt === null && n.expiresAt > now)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 50)
-      .map((n) => ({ ...n }));
-  }
-
-  async findReceivedByUser(userId: string): Promise<NotificationWithRecipient[]> {
-    const now = new Date().toISOString();
-    return this.recipients
-      .filter((r) => r.recipientId === userId && r.dismissedAt === null)
-      .flatMap((r) => {
-        const n = this.notifications.find((n) => n.id === r.notificationId);
-        if (!n || n.deletedAt !== null || n.expiresAt <= now) return [];
-        return [{ ...n, dismissedAt: r.dismissedAt }];
-      })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 50);
-  }
-
-  async softDelete(id: string, deletedAt: string): Promise<void> {
-    const n = this.notifications.find((n) => n.id === id);
-    if (n) n.deletedAt = deletedAt;
-  }
-
-  async dismissForUser(notificationId: string, userId: string, dismissedAt: string): Promise<void> {
-    const r = this.recipients.find(
-      (r) => r.notificationId === notificationId && r.recipientId === userId,
-    );
-    if (r) r.dismissedAt = dismissedAt;
-  }
-}
