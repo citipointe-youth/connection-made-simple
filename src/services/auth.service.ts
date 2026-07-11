@@ -100,8 +100,11 @@ export interface AuthService {
   // mustChangePassword) — resolveToken() trusts the token's embedded actor and
   // never re-reads the DB, so without this the old token keeps enforcing the
   // stale claim for the rest of its 12h TTL. Returns null if the user no
-  // longer exists/is inactive.
-  issueTokenFor(userId: string): Promise<string | null>;
+  // longer exists/is inactive. `actorOverrides` layers additional fields onto
+  // the freshly-derived actor before signing (used by the admin account-
+  // preview feature to force mustChangePassword:false on a minted token
+  // without touching the target account's real DB state).
+  issueTokenFor(userId: string, actorOverrides?: Partial<Actor>): Promise<string | null>;
 }
 
 export function makeAuthService(users: IUserRepository): AuthService {
@@ -144,10 +147,11 @@ export function makeAuthService(users: IUserRepository): AuthService {
       // Stateless tokens — logout is handled client-side by discarding the token
     },
 
-    async issueTokenFor(userId: string) {
+    async issueTokenFor(userId: string, actorOverrides?: Partial<Actor>) {
       const user = await users.findById(userId);
       if (!user || user.status !== 'active') return null;
-      return signSession(toActor(user), Date.now() + TOKEN_TTL_MS);
+      const actor = actorOverrides ? { ...toActor(user), ...actorOverrides } : toActor(user);
+      return signSession(actor, Date.now() + TOKEN_TTL_MS);
     },
   };
 }

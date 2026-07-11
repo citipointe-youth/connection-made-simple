@@ -54,4 +54,15 @@ describe('Auth Service — mustChangePassword in the session', () => {
     await users.save({ ...existing!, status: 'inactive' });
     expect(await auth.issueTokenFor('u-1')).toBeNull();
   });
+
+  it('issueTokenFor applies actorOverrides on top of the DB state', async () => {
+    const { users, auth } = await seedUser(true); // mustChangePassword: true in the DB
+    const token = await auth.issueTokenFor('u-1', { mustChangePassword: false });
+    expect(token).not.toBeNull();
+    const actor = await auth.resolveToken(token!);
+    expect(actor?.mustChangePassword).toBe(false);
+    // The override is token-only — it must not have touched the DB record.
+    const stored = await users.findById('u-1');
+    expect(stored?.mustChangePassword).toBe(true);
+  });
 });
