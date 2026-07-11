@@ -14,62 +14,62 @@ export async function seedDemoData(repos: Repositories): Promise<void> {
 
   const users: User[] = [
     {
-      id: generateId(), displayName: 'Admin', email: 'admin@youth.ministry',
+      id: generateId(), displayName: 'Admin', email: 'admin',
       role: 'admin', grade: null, quad: null,
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Director', email: 'director@youth.ministry',
+      id: generateId(), displayName: 'Director', email: 'director',
       role: 'director', grade: null, quad: null,
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Girls Yr 7–9 Quad', email: 'g79@youth.ministry',
+      id: generateId(), displayName: 'Girls Yr 7–9 Quad', email: 'g79',
       role: 'quad', grade: null, quad: 'g79',
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Boys Yr 7–9 Quad', email: 'b79@youth.ministry',
+      id: generateId(), displayName: 'Boys Yr 7–9 Quad', email: 'b79',
       role: 'quad', grade: null, quad: 'b79',
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Girls Yr 10–12 Quad', email: 'g1012@youth.ministry',
+      id: generateId(), displayName: 'Girls Yr 10–12 Quad', email: 'g1012',
       role: 'quad', grade: null, quad: 'g1012',
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Boys Yr 10–12 Quad', email: 'b1012@youth.ministry',
+      id: generateId(), displayName: 'Boys Yr 10–12 Quad', email: 'b1012',
       role: 'quad', grade: null, quad: 'b1012',
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Grade 7', email: 'grade7@youth.ministry',
+      id: generateId(), displayName: 'Grade 7', email: 'grade7',
       role: 'grade', grade: 7, quad: null,
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Grade 8', email: 'grade8@youth.ministry',
+      id: generateId(), displayName: 'Grade 8', email: 'grade8',
       role: 'grade', grade: 8, quad: null,
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Grade 9', email: 'grade9@youth.ministry',
+      id: generateId(), displayName: 'Grade 9', email: 'grade9',
       role: 'grade', grade: 9, quad: null,
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Grade 10', email: 'grade10@youth.ministry',
+      id: generateId(), displayName: 'Grade 10', email: 'grade10',
       role: 'grade', grade: 10, quad: null,
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Grade 11', email: 'grade11@youth.ministry',
+      id: generateId(), displayName: 'Grade 11', email: 'grade11',
       role: 'grade', grade: 11, quad: null,
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
     {
-      id: generateId(), displayName: 'Grade 12', email: 'grade12@youth.ministry',
+      id: generateId(), displayName: 'Grade 12', email: 'grade12',
       role: 'grade', grade: 12, quad: null,
       status: 'active', passwordHash: pw, createdAt: now, updatedAt: now,
     },
