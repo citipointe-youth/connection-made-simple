@@ -166,7 +166,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .li-body{flex:1;min-width:0}
 .li-title{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .li-sub{font-size:12px;color:var(--ink-mid);margin-top:2px}
-.li-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.li-right{display:flex;align-items:center;gap:4px;flex-shrink:0}
 
 /* Chips */
 .chip{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5;white-space:nowrap}
@@ -337,6 +337,8 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 
 /* Lock banner */
 .lock-banner{background:var(--warn-light);border:1.5px solid var(--warn);color:#92400e;padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.preview-banner{background:var(--warn);color:#1a1200;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:700;margin-bottom:8px}
+.preview-banner .btn{background:rgba(0,0,0,.15);color:#1a1200;border:none;padding:4px 10px;font-size:11px}
 
 /* ── SCALE-READY CONNECTION CARDS ── */
 .connect-grid{display:grid;grid-template-columns:1fr;gap:12px}
@@ -699,6 +701,17 @@ const Cache = (() => {
 // ============================================================
 const S = { user: null, page: 'home', settings: {} };
 
+// Preview session stash (Admin -> Accounts "Preview" feature). Non-null while the
+// admin is viewing the app as a grade/quad account; holds the admin's own
+// {token,user} so exitPreview() can restore it without a fresh login. Persisted to
+// localStorage so a mid-preview page refresh doesn't strand the admin with no way
+// back except logging out and back in.
+let _previewStash = null;
+try {
+  const _rawPreviewStash = localStorage.getItem('yap_preview_stash');
+  if (_rawPreviewStash) _previewStash = JSON.parse(_rawPreviewStash);
+} catch (e) {}
+
 // ── Ministry config: theme + label scaffolding ──
 // applyTheme() pushes branding.* onto the :root custom properties + the
 // theme-color meta tag, and caches the ministryConfig in localStorage so a
@@ -1025,6 +1038,12 @@ function _hdrBrandHtml() {
 
 // Build the persistent shell (header + empty main + bottom nav) once per login.
 // Subsequent navigations only update <main id="page-main">.
+function _previewBannerHtml(u) {
+  return `<div class="preview-banner">
+    <span>${icS('id')} Previewing: <strong>${esc(u.displayName)}</strong></span>
+    <button class="btn btn-sm" onclick="exitPreview()">Exit Preview</button>
+  </div>`;
+}
 function _initShell() {
   const u = S.user;
   if (!u) return;
@@ -1034,6 +1053,7 @@ function _initShell() {
   const mlinks = bn.map(it => `<a data-nav-page="${it.id}" onclick="go('${it.id}')">${icN(it.ic)}<span>${it.mbl||it.label}</span></a>`).join('');
   document.getElementById('app').innerHTML = `
     <div class="hdr">
+      ${_previewStash ? _previewBannerHtml(u) : ''}
       <div class="hdr-top">
         <div class="hdr-brand" id="hdr-brand"><span id="hdr-brand-ic">${_hdrBrandHtml()}</span><h1>${esc(appName())}</h1></div>
         <div class="hdr-meta">
@@ -1613,6 +1633,8 @@ async function doLogout() {
   _msLeader = null; _trTab = 'svc';
   _arFilter = { grade: null, gender: null };
   _bdayFilter = { grade: null, gender: null };
+  _previewStash = null;
+  try { localStorage.removeItem('yap_preview_stash'); } catch (e) {}
   render();
 }
 
@@ -4595,6 +4617,7 @@ async function renderAdminView(settings, users, history) {
           <div class="li-right">
             <button class="btn btn-ghost btn-sm" onclick="showEditUser('${u.id}')" title="Edit account" aria-label="Edit ${esc(u.displayName)}">${icS('edit')}</button>
             <button class="btn btn-ghost btn-sm" onclick="showSetPassword('${u.id}')" title="Reset password" aria-label="Reset password for ${esc(u.displayName)}">${icS('key')}</button>
+            ${(u.role==='grade'||u.role==='quad') && u.status==='active' ? `<button class="btn btn-ghost btn-sm" onclick="enterPreview('${u.id}')" title="Preview as ${esc(u.displayName)}" aria-label="Preview as ${esc(u.displayName)}">${icS('id')}</button>` : ''}
             <button class="btn btn-ghost btn-sm" ${isProtectedAdmin?'disabled':''} onclick="toggleUserStatus('${u.id}','${u.status}')" title="${lockTitle}" aria-label="${lockTitle}">${u.status==='active'?icS('lock'):icS('unlock')}</button>
             <button class="btn btn-ghost btn-sm" style="color:var(--danger)" ${isProtectedAdmin?'disabled':''} onclick="confirmDelUser('${u.id}')" title="${delTitle}" aria-label="${delTitle}">${icS('trash')}</button>
           </div>
@@ -5958,6 +5981,31 @@ async function doDelUser(id) {
   } catch (e) { toast(e.message); }
 }
 
+// ── Admin account preview ("Preview" button, Admin -> Accounts) ──
+async function enterPreview(id) {
+  try {
+    const res = await API.post(`/accounts/users/${id}/preview`, {});
+    _previewStash = { token: API.token, user: S.user };
+    try { localStorage.setItem('yap_preview_stash', JSON.stringify(_previewStash)); } catch (e) {}
+    API.setToken(res.token);
+    S.user = res.user;
+    Cache.clear();
+    _shellReady = false;
+    go('home');
+  } catch (e) { toast(e.message); }
+}
+
+function exitPreview() {
+  if (!_previewStash) return;
+  API.setToken(_previewStash.token);
+  S.user = _previewStash.user;
+  _previewStash = null;
+  try { localStorage.removeItem('yap_preview_stash'); } catch (e) {}
+  Cache.clear();
+  _shellReady = false;
+  go('home');
+}
+
 // ============================================================
 // BOOT
 // ============================================================
@@ -7157,7 +7205,12 @@ window.CA=CA;
 async function boot() {
   const token = localStorage.getItem('yap_token');
   if (token) {
-    try { const user = await API.get('/auth/me'); S.user = user; } catch { API.setToken(null); }
+    try {
+      const user = await API.get('/auth/me');
+      // Mid-preview, mustChangePassword must stay forced false — /auth/me reads the
+      // raw DB record, which doesn't know this is a preview session (see enterPreview()).
+      S.user = _previewStash ? { ...user, mustChangePassword: false } : user;
+    } catch { API.setToken(null); }
   }
   restoreConnectFilters();
   restoreArFilter();
