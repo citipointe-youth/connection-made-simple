@@ -1468,13 +1468,6 @@ function brandMark(px, color){
     // guards against a stored image whose aspect ratio isn't perfectly square.
     return `<img src="${esc(image)}" alt="" style="width:${px}px;height:${px}px;border-radius:${Math.round(px*0.22)}px;object-fit:cover;flex-shrink:0" aria-hidden="true">`;
   }
-  const custom = branding && branding.logoSvg;
-  if (custom) {
-    // Server-sanitised (settings.service.ts strips <script>/foreignObject/event
-    // handlers on save) — still wrapped at a fixed size here, not re-escaped,
-    // since it's markup by design (same trust boundary as the built-in mark).
-    return `<span style="display:inline-flex;width:${px}px;height:${px}px;flex-shrink:0" aria-hidden="true">${custom}</span>`;
-  }
   return `<svg width="${px}" height="${px}" viewBox="0 0 100 100" fill="${color||'currentColor'}" aria-hidden="true" style="flex-shrink:0">`
     + `<rect x="40" y="20" width="20" height="20" rx="2"/>`
     + `<path d="M16 42 L33 42 L44 64 L56 64 L67 42 L84 42 L62 84 L38 84 Z"/></svg>`;
@@ -4891,17 +4884,16 @@ function _setupResetBranding() {
   _setupRerender();
 }
 
-// Logo mode switch (Default mark / Paste SVG / Upload image) — only one of
-// logoSvg/logoImage is ever set in the draft, so switching modes nulls the
-// other out (brandMark() prefers logoImage, but keeping both consistent
-// avoids a stale hidden value resurfacing if the mode is switched back).
+// Logo mode switch (Default mark / Upload image). Raw-SVG-paste branding was
+// removed (2026-07-12) — a denylist sanitiser couldn't safely neutralise
+// admin-supplied markup rendered via innerHTML on the public, pre-auth login
+// screen. Upload-and-crop (baked to a raster data URI) is the only custom-logo
+// path now.
 function _setupSetLogoMode(mode) {
   if (!_setupDraft) _setupDraft = {};
   if (!_setupDraft.branding) _setupDraft.branding = {};
   _logoModeOverride = mode;
-  if (mode === 'default') { _setupDraft.branding.logoSvg = null; _setupDraft.branding.logoImage = null; }
-  else if (mode === 'svg') { _setupDraft.branding.logoImage = null; }
-  else if (mode === 'image') { _setupDraft.branding.logoSvg = null; }
+  if (mode === 'default') { _setupDraft.branding.logoImage = null; }
   _setupRerender();
 }
 
@@ -5074,7 +5066,6 @@ function _cropConfirm() {
   if (!_setupDraft) _setupDraft = {};
   if (!_setupDraft.branding) _setupDraft.branding = {};
   _setupDraft.branding.logoImage = dataUrl;
-  _setupDraft.branding.logoSvg = null;
   _crop = null;
   closeModal();
   _setupRerender();
@@ -5118,7 +5109,7 @@ const PRESET_SERVICE_MIN_ATTENDANCE_CLIENT = { 'large-graded-au': 100, simple: 1
 // prior preset) leak into a later large-graded-au pick instead of reverting.
 const MINISTRY_CONFIG_DEFAULTS_CLIENT = {
   version: 1, preset: 'large-graded-au',
-  branding: { ministryName: 'Youth Society Brisbane', appName: 'YS Connection', shortName: 'Connection', accent: '#1a1af2', accentDark: '#1111c9', accentLight: '#ececff', navy: '#0a0a2e', logoSvg: null, logoImage: null },
+  branding: { ministryName: 'Youth Society Brisbane', appName: 'YS Connection', shortName: 'Connection', accent: '#1a1af2', accentDark: '#1111c9', accentLight: '#ececff', navy: '#0a0a2e', logoImage: null },
   labels: { smallGroup: 'Lifegroup', smallGroupPlural: 'Lifegroups', service: 'Youth', serviceNight: 'Friday Nights', studentTeam: 'Student Team', connection: 'Connection', groupNameStrip: ['Brisbane - YS - '] },
   structure: { cohortModel: 'grades-quads', gradeMin: 7, gradeMax: 12, gradeLabel: 'Grade', brackets: [{ id: '79', label: 'Yr 7–9', gradeMin: 7, gradeMax: 9 }, { id: '1012', label: 'Yr 10–12', gradeMin: 10, gradeMax: 12 }], genderPolicy: 'strict', serviceDayOfWeek: 5 },
   roles: { enabled: { director: true, grade: true, quad: true, leader: false } },
@@ -5247,14 +5238,12 @@ function _youthSetupBody(settings, users) {
   const lv = (k) => lb[k] != null ? lb[k] : dlb[k];
   const mv = (k) => md[k] != null ? md[k] : dmd[k];
   const iv = (k) => im[k] != null ? im[k] : dim[k];
-  // At most one of logoImage/logoSvg is ever set (enforced by _setupSetLogoMode
-  // nulling the other on switch) — image wins if somehow both are, matching
-  // brandMark()'s own precedence. Falls back to _logoModeOverride (set the
-  // instant a mode button is clicked) so picking "Paste SVG"/"Upload image"
-  // before any content exists doesn't snap the picker back to "Default mark"
-  // on the next re-render — bv() alone can't tell "svg chosen, box still empty"
-  // apart from "never touched", since both look like null/null.
-  const logoMode = bv('logoImage') ? 'image' : (bv('logoSvg') ? 'svg' : (_logoModeOverride || 'default'));
+  // Falls back to _logoModeOverride (set the instant a mode button is clicked)
+  // so picking "Upload image" before any content exists doesn't snap the
+  // picker back to "Default mark" on the next re-render — bv() alone can't
+  // tell "image chosen, nothing cropped yet" apart from "never touched",
+  // since both look like null.
+  const logoMode = bv('logoImage') ? 'image' : (_logoModeOverride || 'default');
 
   let b = `<div class="card" style="margin-bottom:10px">
     <div class="sh" style="margin-top:0">Pre-set Configurations</div>
@@ -5305,15 +5294,13 @@ function _youthSetupBody(settings, users) {
         `<div class="fg" style="flex:1;min-width:120px"><label class="fl">${lab}</label>
           <input type="color" value="${esc(bv(k))}" style="width:100%;height:38px;padding:2px;border-radius:8px;border:1px solid var(--line)" onchange="_setupSet('branding.${k}', this.value)"></div>`).join('')}
     </div>
-    <div class="fg"><label class="fl">Logo ${helpTip('Choose how your logo appears: the app\'s default mark, your own logo pasted in as code, or a photo you upload and crop.')}</label>
+    <div class="fg"><label class="fl">Logo ${helpTip('Choose how your logo appears: the app\'s default mark, or a photo you upload and crop.')}</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${[['default','Default mark'],['svg','Paste SVG'],['image','Upload image']].map(([v,l]) =>
+        ${[['default','Default mark'],['image','Upload image']].map(([v,l]) =>
           `<label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);cursor:pointer;background:${logoMode===v?'var(--accent-light)':'transparent'}">
             <input type="radio" name="logoMode" value="${v}" ${logoMode===v?'checked':''} onchange="_setupSetLogoMode('${v}')"> <span style="font-size:13px">${l}</span>
           </label>`).join('')}
       </div></div>
-    ${logoMode==='svg' ? `<div class="fg"><label class="fl">Logo SVG ${helpTip('Optional. Paste raw <svg>…</svg> markup for your logo; leave blank for the default mark.')}</label>
-      <textarea class="fi" rows="3" placeholder="<svg …>…</svg>" onchange="_setupSet('branding.logoSvg', this.value.trim() || null)">${esc(bv('logoSvg') || '')}</textarea></div>` : ''}
     ${logoMode==='image' ? `<div class="fg"><label class="fl">Upload image ${helpTip('Choose a PNG or JPEG photo, then drag to reposition and use the slider to zoom into a square crop.')}</label>
       <input type="file" class="fi" accept="image/png,image/jpeg" onchange="_setupLogoFileChosen(this)">
       ${bv('logoImage') ? `<div style="margin-top:8px;display:flex;align-items:center;gap:10px">
@@ -5453,6 +5440,17 @@ function _showCohortLayoutPreview(targetCohort, plan) {
   if (plan.toCreate.length) h += `<div class="sh">Accounts to create (${plan.toCreate.length})</div>${rows(plan.toCreate.map(t => ({ displayName: t.displayName, username: t.username })))}`;
   if (plan.toDeactivate.length) h += `<div class="sh" style="margin-top:8px">Accounts to deactivate (${plan.toDeactivate.length})</div>${rows(plan.toDeactivate)}`;
   if (!plan.toCreate.length && !plan.toDeactivate.length) h += `<div class="alert al-ok">Accounts already match this layout — nothing to do.</div>`;
+  // Matched-by-username accounts whose actual grades/gender/quad have drifted from
+  // what that username implies — this action never edits them (same "never
+  // silently edit an account" rule as create/deactivate), so just flag it.
+  if (plan.mismatched && plan.mismatched.length) {
+    h += `<div class="alert al-warn" style="margin-top:8px">
+      <strong>${plan.mismatched.length} existing account${plan.mismatched.length===1?'':'s'} may need a manual check</strong> —
+      their username matches this layout, but their actual grades/gender/quad don't. They won't be
+      changed by this action.
+      ${plan.mismatched.map(m => `<div class="li-sub">${esc(m.displayName)} <span style="color:var(--ink-faint)">(${esc(m.username)}) — ${esc(m.reason)}</span></div>`).join('')}
+    </div>`;
+  }
   h += `<p style="font-size:13px;margin:14px 0 6px">Type <strong>APPLY</strong> to confirm:</p>
     <input class="fi" id="col-confirm" autocomplete="off" autocapitalize="characters"
       oninput="document.getElementById('col-go').disabled = this.value.trim().toUpperCase() !== 'APPLY'">

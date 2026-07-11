@@ -65,4 +65,16 @@ describe('Auth Service — mustChangePassword in the session', () => {
     const stored = await users.findById('u-1');
     expect(stored?.mustChangePassword).toBe(true);
   });
+
+  it('issueTokenFor honours a custom ttlMs instead of the default 12h (used by account preview for a short-lived token)', async () => {
+    const { auth } = await seedUser(false);
+    // A token minted with an already-elapsed TTL must resolve as expired
+    // immediately — proving ttlMs actually governs expiry, not the default.
+    const shortLived = await auth.issueTokenFor('u-1', undefined, -1);
+    expect(shortLived).not.toBeNull();
+    expect(await auth.resolveToken(shortLived!)).toBeNull();
+
+    const longLived = await auth.issueTokenFor('u-1', undefined, 60_000);
+    expect(await auth.resolveToken(longLived!)).not.toBeNull();
+  });
 });

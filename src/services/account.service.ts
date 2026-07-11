@@ -282,7 +282,10 @@ export function makeAccountService(users: IUserRepository, settings: ISettingsRe
         structure.gradeMin,
         structure.gradeMax,
         structure.gradeLabel,
-        all.map((u) => ({ id: u.id, role: u.role, email: u.email, displayName: u.displayName, status: u.status })),
+        all.map((u) => ({
+          id: u.id, role: u.role, email: u.email, displayName: u.displayName, status: u.status,
+          grades: u.grades ?? (u.grade != null ? [u.grade] : []), gender: u.gender, quad: u.quad,
+        })),
       );
     },
 
@@ -296,7 +299,10 @@ export function makeAccountService(users: IUserRepository, settings: ISettingsRe
         structure.gradeMin,
         structure.gradeMax,
         structure.gradeLabel,
-        all.map((u) => ({ id: u.id, role: u.role, email: u.email, displayName: u.displayName, status: u.status })),
+        all.map((u) => ({
+          id: u.id, role: u.role, email: u.email, displayName: u.displayName, status: u.status,
+          grades: u.grades ?? (u.grade != null ? [u.grade] : []), gender: u.gender, quad: u.quad,
+        })),
       );
 
       const now = new Date().toISOString();

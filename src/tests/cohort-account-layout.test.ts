@@ -92,4 +92,50 @@ describe('planCohortAccountLayout', () => {
     expect(plan.toDeactivate.map((d) => d.username).sort()).toEqual(['grade78b', 'grade78g']);
     expect(plan.toCreate).toHaveLength(16); // 12 grade + 4 quad, none pre-existing
   });
+
+  it('mismatched is empty when the account data does not include grades/gender/quad (not checked)', () => {
+    const existing = [{ id: 'u1', role: 'grade', email: 'grade78g', displayName: 'Custom Name', status: 'active' }];
+    const plan = planCohortAccountLayout('none', 7, 12, 'Grade', existing);
+    expect(plan.mismatched).toHaveLength(0);
+  });
+
+  it('flags a username-matched grade account whose actual grades/gender diverge from the target, without touching toCreate/toDeactivate', () => {
+    const existing = [
+      { id: 'u1', role: 'grade', email: 'grade78g', displayName: 'Grades 7–8 Girls', status: 'active', grades: [9, 10], gender: 'male' },
+    ];
+    const plan = planCohortAccountLayout('none', 7, 12, 'Grade', existing);
+    expect(plan.toCreate.some((t) => t.username === 'grade78g')).toBe(false);
+    expect(plan.toDeactivate).toHaveLength(0);
+    expect(plan.mismatched).toHaveLength(1);
+    expect(plan.mismatched[0]).toMatchObject({ id: 'u1', username: 'grade78g' });
+    expect(plan.mismatched[0]?.reason).toContain('expected grades [7,8], found [9,10]');
+    expect(plan.mismatched[0]?.reason).toContain('expected gender "female", found "male"');
+  });
+
+  it('flags a username-matched quad account whose actual quad diverges from the target', () => {
+    const existing = [{ id: 'u1', role: 'quad', email: 'g79', displayName: 'Girls Yr 7-9', status: 'active', quad: 'b1012' }];
+    const plan = planCohortAccountLayout('grades-quads', 7, 12, 'Grade', existing);
+    expect(plan.mismatched).toEqual([{ id: 'u1', username: 'g79', displayName: 'Girls Yr 7-9', reason: 'expected quad "g79", found "b1012"' }]);
+  });
+
+  it('flags a role mismatch (username matches a grade target but the account is a quad, or vice versa)', () => {
+    const existing = [{ id: 'u1', role: 'quad', email: 'grade78g', displayName: 'Oddly-named quad', status: 'active' }];
+    const plan = planCohortAccountLayout('none', 7, 12, 'Grade', existing);
+    expect(plan.mismatched).toEqual([{ id: 'u1', username: 'grade78g', displayName: 'Oddly-named quad', reason: 'expected role "grade", found "quad"' }]);
+  });
+
+  it('a correctly-matching account is never flagged', () => {
+    const existing = [
+      { id: 'u1', role: 'grade', email: 'grade78g', displayName: 'Grades 7–8 Girls', status: 'active', grades: [7, 8], gender: 'female' },
+      { id: 'u2', role: 'quad', email: 'g79', displayName: 'Girls Yr 7-9', status: 'active', quad: 'g79' },
+    ];
+    expect(planCohortAccountLayout('none', 7, 12, 'Grade', [existing[0]!]).mismatched).toHaveLength(0);
+    expect(planCohortAccountLayout('grades-quads', 7, 12, 'Grade', [existing[1]!]).mismatched).toHaveLength(0);
+  });
+
+  it('an inactive mismatched account is not flagged (not currently in use)', () => {
+    const existing = [{ id: 'u1', role: 'grade', email: 'grade78g', displayName: 'Stale', status: 'inactive', grades: [9, 10], gender: 'male' }];
+    const plan = planCohortAccountLayout('none', 7, 12, 'Grade', existing);
+    expect(plan.mismatched).toHaveLength(0);
+  });
 });

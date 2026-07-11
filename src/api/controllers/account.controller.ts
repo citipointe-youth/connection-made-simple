@@ -1,6 +1,6 @@
 import type { HttpRequest } from '../http/types';
 import type { AccountService } from '../../services/account.service';
-import type { AuthService } from '../../services/auth.service';
+import { PREVIEW_TOKEN_TTL_MS, type AuthService } from '../../services/auth.service';
 import { UnauthorizedError } from '../../core/errors/app-error';
 
 export function makeAccountController(deps: { account: AccountService; auth: AuthService }) {
@@ -48,7 +48,11 @@ export function makeAccountController(deps: { account: AccountService; auth: Aut
     async preview(req: HttpRequest) {
       if (!req.ctx) throw new UnauthorizedError();
       const user = await deps.account.previewAccount(req.ctx, req.params['id']!);
-      const token = await deps.auth.issueTokenFor(user.id, { mustChangePassword: false });
+      // Short TTL (1h, not the normal 12h) — a preview session mints a real,
+      // fully-privileged token for the target account that sits in the admin's
+      // browser alongside their own; bounding its life shrinks that exposure
+      // window without needing server-side revocation infrastructure.
+      const token = await deps.auth.issueTokenFor(user.id, { mustChangePassword: false }, PREVIEW_TOKEN_TTL_MS);
       return { token, user: { ...user, mustChangePassword: false } };
     },
 

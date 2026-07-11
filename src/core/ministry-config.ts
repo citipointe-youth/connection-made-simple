@@ -34,12 +34,13 @@ export const MinistryConfigSchema = z.object({
       accentDark: hexColour.default('#1111c9'),
       accentLight: hexColour.default('#ececff'),
       navy: hexColour.default('#0a0a2e'),
-      logoSvg: z.string().max(20_000).nullable().default(null),
       // A cropped-to-square data URI (image/png or image/jpeg) baked client-side
-      // by the Youth Setup crop tool — the alternative to pasting logoSvg. At
-      // most one of logoSvg/logoImage is ever set (brandMark() prefers
-      // logoImage). 500_000 chars (~375KB decoded) comfortably fits a 512x512
-      // JPEG at quality 0.85.
+      // by the Youth Setup crop tool. 500_000 chars (~375KB decoded) comfortably
+      // fits a 512x512 JPEG at quality 0.85. Raw-SVG-paste branding was removed
+      // (2026-07-12) — a hand-rolled tag/attribute denylist (sanitiseLogoSvg,
+      // since deleted) couldn't safely neutralise admin-supplied markup rendered
+      // via innerHTML on the public, pre-auth login screen (e.g. an unquoted
+      // `onload=` attribute survived the denylist entirely). Raster upload only.
       logoImage: z.string().max(500_000).nullable().default(null),
     })
     .default({}),
@@ -186,12 +187,4 @@ function deepMerge<T>(base: T, patch: unknown): T {
 export function mergeMinistryConfig(base: MinistryConfig, patch: unknown): MinistryConfig {
   const merged = deepMerge(base, patch);
   return MinistryConfigSchema.parse(merged);
-}
-
-// Admin-supplied logo SVG is rendered via innerHTML in the SPA (brandMark()) —
-// this is a blunt denylist, not a real HTML/SVG parser, but it's cheap
-// defence-in-depth for what is otherwise admin-only, audit-logged input.
-const DANGEROUS_SVG_RE = /<script[\s\S]*?<\/script>|<foreignObject[\s\S]*?<\/foreignObject>|\son\w+\s*=\s*(["']).*?\1/gi;
-export function sanitiseLogoSvg(svg: string): string {
-  return svg.replace(DANGEROUS_SVG_RE, '');
 }

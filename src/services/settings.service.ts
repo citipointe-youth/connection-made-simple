@@ -5,7 +5,7 @@ import type { AppSettings } from '../core/entities/settings';
 import type { Actor } from '../core/entities/user';
 import type { UserRole } from '../core/types/enums';
 import { generateId } from '../utils/id';
-import { mergeMinistryConfig, sanitiseLogoSvg } from '../core/ministry-config';
+import { mergeMinistryConfig } from '../core/ministry-config';
 import { invalidateOverviewCache } from './overview.service';
 import { invalidateTrendsCache } from './trends.service';
 import { invalidateLgStatsCache } from './lifegroup-stats.service';
@@ -45,17 +45,12 @@ export function makeSettingsService(
       assertCan(actor, 'admin:manage');
       const patch = SettingsPatchSchema.parse(input);
 
-      let ministryConfigPatch = patch.ministryConfig as Record<string, unknown> | undefined;
+      const ministryConfigPatch = patch.ministryConfig as Record<string, unknown> | undefined;
       if (ministryConfigPatch) {
         const branding = ministryConfigPatch['branding'] as Record<string, unknown> | undefined;
-        if (branding && typeof branding['logoSvg'] === 'string') {
-          ministryConfigPatch = {
-            ...ministryConfigPatch,
-            branding: { ...branding, logoSvg: sanitiseLogoSvg(branding['logoSvg']) },
-          };
-        }
         // logoImage is a client-baked data URI (crop tool output) — no server-side
         // re-encoding, just a shape check. The Zod schema's .max() already caps size.
+        // (Raw-SVG-paste branding was removed 2026-07-12 — see ministry-config.ts.)
         const logoImage = branding ? branding['logoImage'] : undefined;
         if (logoImage !== undefined && logoImage !== null && !(typeof logoImage === 'string' && logoImage.startsWith('data:image/'))) {
           throw new BadRequestError('branding.logoImage must be null or a data:image/... URI');

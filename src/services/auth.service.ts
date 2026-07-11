@@ -27,6 +27,13 @@ export function deriveActorGender(user: User): 'male' | 'female' | null {
 }
 
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+// Admin account-preview tokens (see the `preview` param on issueTokenFor below)
+// get a much shorter TTL than a normal login. A preview is meant to be a quick
+// admin QA check, and every preview mints a full, real session token for the
+// target account that sits in the admin's browser localStorage alongside their
+// own — bounding its lifetime to an hour meaningfully shrinks that exposure
+// window without needing server-side token revocation (tokens stay stateless).
+export const PREVIEW_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const INSECURE_FALLBACK = 'cms-dev-secret-change-in-production';
 const SESSION_SECRET = process.env['SESSION_SECRET'] ?? INSECURE_FALLBACK;
 
@@ -103,8 +110,10 @@ export interface AuthService {
   // longer exists/is inactive. `actorOverrides` layers additional fields onto
   // the freshly-derived actor before signing (used by the admin account-
   // preview feature to force mustChangePassword:false on a minted token
-  // without touching the target account's real DB state).
-  issueTokenFor(userId: string, actorOverrides?: Partial<Actor>): Promise<string | null>;
+  // without touching the target account's real DB state). `ttlMs` overrides
+  // the default 12h TTL (used by preview to mint a short-lived token — see
+  // PREVIEW_TOKEN_TTL_MS above).
+  issueTokenFor(userId: string, actorOverrides?: Partial<Actor>, ttlMs?: number): Promise<string | null>;
 }
 
 export function makeAuthService(users: IUserRepository): AuthService {
@@ -147,11 +156,11 @@ export function makeAuthService(users: IUserRepository): AuthService {
       // Stateless tokens — logout is handled client-side by discarding the token
     },
 
-    async issueTokenFor(userId: string, actorOverrides?: Partial<Actor>) {
+    async issueTokenFor(userId: string, actorOverrides?: Partial<Actor>, ttlMs?: number) {
       const user = await users.findById(userId);
       if (!user || user.status !== 'active') return null;
       const actor = actorOverrides ? { ...toActor(user), ...actorOverrides } : toActor(user);
-      return signSession(actor, Date.now() + TOKEN_TTL_MS);
+      return signSession(actor, Date.now() + (ttlMs ?? TOKEN_TTL_MS));
     },
   };
 }

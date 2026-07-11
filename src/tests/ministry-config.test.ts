@@ -4,7 +4,6 @@ import {
   MINISTRY_CONFIG_DEFAULTS,
   PRESET_CONFIGS,
   mergeMinistryConfig,
-  sanitiseLogoSvg,
 } from '../core/ministry-config';
 
 describe('MinistryConfigSchema', () => {
@@ -16,7 +15,6 @@ describe('MinistryConfigSchema', () => {
     expect(MINISTRY_CONFIG_DEFAULTS.branding.ministryName).toBe('Youth Society Brisbane');
     expect(MINISTRY_CONFIG_DEFAULTS.branding.appName).toBe('YS Connection');
     expect(MINISTRY_CONFIG_DEFAULTS.branding.accent).toBe('#1a1af2');
-    expect(MINISTRY_CONFIG_DEFAULTS.branding.logoSvg).toBe(null);
     expect(MINISTRY_CONFIG_DEFAULTS.branding.logoImage).toBe(null);
     expect(MINISTRY_CONFIG_DEFAULTS.modules.connectionAudit).toBe(true);
     expect(MINISTRY_CONFIG_DEFAULTS.structure.cohortModel).toBe('grades-quads');
@@ -60,16 +58,11 @@ describe('mergeMinistryConfig', () => {
   });
 });
 
-describe('sanitiseLogoSvg', () => {
-  it('strips script tags and event handler attributes', () => {
-    const dirty = '<svg><script>alert(1)</script><rect onclick="alert(2)" width="1"/></svg>';
-    const clean = sanitiseLogoSvg(dirty);
-    expect(clean).not.toContain('<script');
-    expect(clean).not.toContain('onclick');
-  });
-
-  it('leaves a clean SVG untouched', () => {
-    const clean = '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>';
-    expect(sanitiseLogoSvg(clean)).toBe(clean);
+describe('branding.logoSvg (removed 2026-07-12)', () => {
+  it('a logoSvg key in a patch is silently dropped, not stored', () => {
+    const merged = mergeMinistryConfig(MINISTRY_CONFIG_DEFAULTS, {
+      branding: { logoSvg: '<svg onload=alert(1)>' },
+    });
+    expect((merged.branding as Record<string, unknown>)['logoSvg']).toBeUndefined();
   });
 });

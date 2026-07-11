@@ -1653,6 +1653,9 @@ same-user "at-camp preview") are in
   the token — the frontend renders off `S.user.mustChangePassword` directly, separately from
   whatever's embedded in the token, so both had to be overridden or previewing a
   never-logged-in account would immediately show *that* account's forced-password screen.
+  **⚠ Updated 2026-07-12 (independent review follow-up, same day)** — the minted token now uses
+  a short 1h TTL (`PREVIEW_TOKEN_TTL_MS`), not the normal 12h; see "Independent review
+  follow-up" below.
 - **Frontend**: `enterPreview(id)`/`exitPreview()` (public/index.html) swap `API`'s token +
   `S.user`, `Cache.clear()`, and rebuild the persistent shell (`_initShell()`) — nav, role
   badge, and screen visibility all come for free since it's swapping in a real actor, not
@@ -1691,6 +1694,61 @@ condition swapped to `isProtectedAdmin()`, error text now interpolates the accou
 `displayName` instead of hardcoding "Admin"), and the Edit Account modal (Username input now
 `disabled` for the protected account instead of Display Name).
 
+### Independent review follow-up: SVG-logo XSS closed, preview token TTL shortened, cohort-layout drift detection (2026-07-12)
+
+An independent Six-Thinking-Hats review of the preceding few days' generalisation/Youth Setup/
+account-preview work (user-requested, not a bug report) surfaced one live issue and two
+lower-severity gaps. Fixed the same session, choosing the lightest fix that closes each gap now
+rather than the heavier "proper" version of each — see the review's Green Hat for what was
+deliberately not built.
+
+- **Removed raw-SVG-paste branding entirely — this was a live XSS gap, not a theoretical one.**
+  `sanitiseLogoSvg()`'s denylist regex (`\son\w+\s*=\s*(["']).*?\1`) required a QUOTED attribute
+  value to strip an event handler — an unquoted payload like `<svg onload=alert(1)>` passed
+  straight through untouched. `brandMark()` then rendered `branding.logoSvg` via raw `innerHTML`,
+  and it renders on the **public, pre-auth login screen** (branding themes the login page before
+  `/settings` even resolves — see "Theming" under Generalisation phases 1–5 above). Net effect:
+  a careless or compromised admin pasting SVG from an untrusted source could persist an XSS
+  hitting every visitor before they log in. Decided to drop the feature rather than harden the
+  sanitiser (a real SVG sanitiser is more machinery than a rarely-used paste-in-code option
+  earns; the raster upload-and-crop path already covers the real use case). `branding.logoSvg`
+  is gone from `MinistryConfigSchema` entirely — Zod silently strips an unknown key on the next
+  `mergeMinistryConfig`, so even a raw API PATCH can't resurrect it (verified live against a
+  running server: PATCHing `{branding:{logoSvg:"..."}}}` round-trips with no `logoSvg` key at
+  all). `sanitiseLogoSvg`/`DANGEROUS_SVG_RE` deleted from `ministry-config.ts`; Setup → Branding's
+  Logo picker is now Default mark / Upload image only. SW cache `ysc-v40` → **`ysc-v41`**.
+- **Admin account-preview tokens now expire in 1h, not the normal 12h**
+  (`PREVIEW_TOKEN_TTL_MS`, `auth.service.ts`). A preview mints a real, fully-privileged session
+  token for the target account that sits in the admin's browser `localStorage` *alongside* their
+  own stashed token — shortening its life meaningfully bounds that extra exposure window without
+  needing server-side token revocation (tokens stay stateless everywhere else in this app too).
+  `issueTokenFor()` gained an optional third `ttlMs` param for this only; every other call site
+  is unaffected and still defaults to 12h. `exitPreview()` itself needed no change — it was
+  already a pure client-side token swap with no server round-trip, so it still works instantly
+  even after the preview token has expired.
+- **"Apply account layout" now flags (never auto-fixes) accounts that have drifted from what
+  their username implies.** The plan only ever matched existing vs. target accounts by
+  USERNAME — an account whose actual `grades`/`gender`/`quad`/`role` no longer matched what its
+  username implies was silently treated as "already correct" and never resurfaced, even though
+  the feature reads to an admin as a reconciliation tool. `planCohortAccountLayout()`
+  (`cohort-account-layout.ts`) now also returns a `mismatched` list (id/username/displayName/
+  reason) for username-matched accounts whose fields disagree with their target spec —
+  informational only, per this feature's existing "never silently edit a matched account" rule.
+  `ExistingAccountLite` gained optional `grades`/`gender`/`quad` fields, only compared when a
+  caller actually supplies them (so existing unit tests that construct bare `{id,role,email,
+  displayName,status}` objects are unaffected); `account.service.ts`'s two callers
+  (`planCohortLayout`/`applyCohortLayout`) now pass them through from the real user record.
+  Surfaced as a non-blocking warning in the "Apply account layout" preview modal
+  (`_showCohortLayoutPreview`), listing each mismatched account and why. The client-side
+  enablement mirror (`planCohortAccountLayoutClient`) is untouched — a mismatch doesn't change
+  whether the button reads "already aligned", only what the preview modal shows once clicked.
+- Tests: `ministry-config.test.ts`/`settings.service.test.ts` updated (assert a `logoSvg` patch
+  is dropped, not sanitised — the old sanitiser-specific cases are gone with the feature);
+  `auth.service.test.ts` gained `ttlMs` coverage; `account.controller.test.ts` asserts the
+  preview endpoint passes `PREVIEW_TOKEN_TTL_MS`; `cohort-account-layout.test.ts` gained 6 cases
+  for `mismatched` (role/grades/gender/quad drift, inactive accounts ignored, a clean match never
+  flagged). 341 tests total (was 335), typecheck clean.
+
 ## Security notes
 
 - **XSS:** all user-supplied strings (names, usernames, notification title/message,
@@ -1701,7 +1759,17 @@ condition swapped to `isProtectedAdmin()`, error text now interpolates the accou
   user-data interpolations in `esc()`.** Residual gap: a few `onclick` handlers pass names
   as JS-string args with only `'`-escaping — don't widen that surface.
 - **Session token** is stored in `localStorage` (`yap_token`). Accepted risk, mitigated by
-  the escaping + CSP above; switch to an httpOnly cookie if that ever regresses.
+  the escaping + CSP above; switch to an httpOnly cookie if that ever regresses. Admin account
+  preview (2026-07-12) stashes a SECOND live token alongside it during a preview session — its
+  TTL is deliberately short (`PREVIEW_TOKEN_TTL_MS`, 1h) specifically to bound that extra window;
+  see "Independent review follow-up" above.
+- **Admin-supplied branding markup**: the one raw-`innerHTML` custom-branding path
+  (`branding.logoSvg`, rendered unescaped by design so admins could paste `<svg>` markup) was
+  **removed entirely 2026-07-12** after an independent review found its denylist sanitiser didn't
+  catch unquoted event-handler attributes (`<svg onload=alert(1)>`) — see "Independent review
+  follow-up" above. `branding.logoImage` (a raster data URI, no markup) is the only custom-logo
+  path now. If a future change ever reintroduces raw markup rendered via `innerHTML`, use a real
+  sanitiser (e.g. a proper SVG-profile DOMPurify build), not a hand-rolled regex denylist.
 - **CORS:** in production, `CORS_ORIGINS` defaults to the prod domain (never `*`); override
   via env. **`SESSION_SECRET` must be set in production** or tokens can be forged.
 - **Never commit Supabase CLI local state.** `supabase/.temp/` is gitignored (2026-07-03) — it

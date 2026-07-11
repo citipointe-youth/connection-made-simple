@@ -77,12 +77,12 @@ describe('SettingsService', () => {
     expect(updated.ministryConfig).toEqual(MINISTRY_CONFIG_DEFAULTS);
   });
 
-  it('sanitises a logoSvg patch', async () => {
+  it('drops a logoSvg key in a patch instead of storing it (feature removed 2026-07-12)', async () => {
     const { service } = await makeService();
     const updated = await service.update(ADMIN, {
-      ministryConfig: { branding: { logoSvg: '<svg><script>alert(1)</script></svg>' } },
+      ministryConfig: { branding: { logoSvg: '<svg onload=alert(1)>' } },
     });
-    expect(updated.ministryConfig.branding.logoSvg).not.toContain('<script');
+    expect((updated.ministryConfig.branding as Record<string, unknown>)['logoSvg']).toBeUndefined();
   });
 
   it('accepts a logoImage data URI patch and stores it verbatim (no server-side re-encoding)', async () => {

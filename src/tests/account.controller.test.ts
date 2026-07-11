@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { makeAccountController } from '../api/controllers/account.controller';
+import { PREVIEW_TOKEN_TTL_MS } from '../services/auth.service';
 import { UnauthorizedError } from '../core/errors/app-error';
 import type { Actor, SafeUser } from '../core/entities/user';
 import type { HttpRequest } from '../api/http/types';
@@ -19,14 +20,14 @@ const targetUser: SafeUser = {
 };
 
 function makeStubbed() {
-  const calls: { previewAccountId?: string; issueTokenForArgs?: [string, unknown] } = {};
+  const calls: { previewAccountId?: string; issueTokenForArgs?: [string, unknown, unknown] } = {};
   const deps = {
     account: {
       previewAccount: async (_actor: Actor, id: string) => { calls.previewAccountId = id; return targetUser; },
     },
     auth: {
-      issueTokenFor: async (userId: string, overrides: unknown) => {
-        calls.issueTokenForArgs = [userId, overrides];
+      issueTokenFor: async (userId: string, overrides: unknown, ttlMs: unknown) => {
+        calls.issueTokenForArgs = [userId, overrides, ttlMs];
         return 'fake-preview-token';
       },
     },
@@ -40,11 +41,13 @@ describe('account controller — preview', () => {
     await expect(ctrl.preview(req('u-grade', null))).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
-  it('delegates to account.previewAccount with the target id, then mints a token forcing mustChangePassword:false', async () => {
+  it('delegates to account.previewAccount with the target id, then mints a short-lived token forcing mustChangePassword:false', async () => {
     const { ctrl, calls } = makeStubbed();
     await ctrl.preview(req('u-grade'));
     expect(calls.previewAccountId).toBe('u-grade');
-    expect(calls.issueTokenForArgs).toEqual(['u-grade', { mustChangePassword: false }]);
+    expect(calls.issueTokenForArgs).toEqual(['u-grade', { mustChangePassword: false }, PREVIEW_TOKEN_TTL_MS]);
+    // Preview tokens must use a materially shorter TTL than a normal 12h login.
+    expect(PREVIEW_TOKEN_TTL_MS).toBeLessThan(12 * 60 * 60 * 1000);
   });
 
   it('returns the token and a user object with mustChangePassword forced false, even though the DB record has it true', async () => {

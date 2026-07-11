@@ -18,12 +18,34 @@ export interface ExistingAccountLite {
   email: string;
   displayName: string;
   status: string;
+  // Optional: when supplied, lets planCohortAccountLayout also detect a
+  // username-matched account whose actual grades/gender/quad have drifted
+  // from what that username's target spec expects (see `mismatched` below).
+  // Omit (or leave undefined) to skip that check for a given account —
+  // existing callers/tests that don't have this data keep working unchanged.
+  grades?: number[] | null;
+  gender?: string | null;
+  quad?: string | null;
+}
+
+export interface CohortLayoutMismatch {
+  id: string;
+  username: string;
+  displayName: string;
+  reason: string;
 }
 
 export interface CohortLayoutPlan {
   targetCohort: CohortModel;
   toCreate: TargetAccountSpec[];
   toDeactivate: { id: string; username: string; displayName: string }[];
+  // Active accounts whose username matches a target exactly — so `toCreate`/
+  // `toDeactivate` leave them untouched, per this plan's "never edit a
+  // matched account" rule — but whose actual role/grades/gender/quad have
+  // drifted from what that username's target spec expects (e.g. a hand-edited
+  // account, or leftover fields from before a Structure change). Informational
+  // only: surfaced as a warning in Youth Setup, never auto-fixed.
+  mismatched: CohortLayoutMismatch[];
 }
 
 // "Grade N" | "Grades N–M" — mirrors the SPA's gradeBadgeLabel()/gradesLabel()
@@ -106,6 +128,36 @@ export function buildTargetAccounts(
   return out;
 }
 
+function sameGradeSet(a: number[] | null | undefined, b: number[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  const as = [...a].sort((x, y) => x - y);
+  const bs = [...b].sort((x, y) => x - y);
+  return as.every((v, i) => v === bs[i]);
+}
+
+// Compares a username-matched existing account against the target spec that
+// username maps to. Only compares a field when the caller actually supplied
+// it (undefined = "not checked, don't flag") — see ExistingAccountLite. A
+// role mismatch alone is reported without also comparing grades/gender/quad,
+// since those comparisons wouldn't mean anything across different roles.
+function findMismatchReason(existingAcct: ExistingAccountLite, target: TargetAccountSpec): string | null {
+  if (existingAcct.role !== target.role) {
+    return `expected role "${target.role}", found "${existingAcct.role}"`;
+  }
+  const reasons: string[] = [];
+  if (target.role === 'grade') {
+    if (existingAcct.grades !== undefined && !sameGradeSet(existingAcct.grades, target.grades)) {
+      reasons.push(`expected grades [${target.grades.join(',')}], found [${(existingAcct.grades || []).join(',')}]`);
+    }
+    if (existingAcct.gender !== undefined && existingAcct.gender !== target.gender) {
+      reasons.push(`expected gender "${target.gender}", found "${existingAcct.gender ?? 'none'}"`);
+    }
+  } else if (existingAcct.quad !== undefined && existingAcct.quad !== target.quad) {
+    reasons.push(`expected quad "${target.quad}", found "${existingAcct.quad ?? 'none'}"`);
+  }
+  return reasons.length ? reasons.join('; ') : null;
+}
+
 // Diff the target account set against what already exists. Accounts are
 // matched by username (case-insensitive) only — an existing account with a
 // matching username is left completely alone (never edited/reactivated),
@@ -113,7 +165,10 @@ export function buildTargetAccounts(
 // username ISN'T part of the target set is flagged for deactivation, never
 // deletion, matching the rest of this app's "never delete accounts
 // automatically" convention (see the orphaned-accounts note in
-// _youthSetupBody, public/index.html).
+// _youthSetupBody, public/index.html). `mismatched` is a separate,
+// informational-only list of matched accounts whose role/grades/gender/quad
+// have drifted from what their username implies — never auto-fixed, same
+// "never silently edit" rule as everything else here.
 export function planCohortAccountLayout(
   targetCohort: CohortModel,
   gradeMin: number,
@@ -124,11 +179,21 @@ export function planCohortAccountLayout(
   const targets = buildTargetAccounts(targetCohort, gradeMin, gradeMax, gradeWord);
   const existingUsernames = new Set(existing.map((u) => u.email.toLowerCase()));
   const targetUsernames = new Set(targets.map((t) => t.username.toLowerCase()));
+  const targetsByUsername = new Map(targets.map((t) => [t.username.toLowerCase(), t]));
 
   const toCreate = targets.filter((t) => !existingUsernames.has(t.username.toLowerCase()));
   const toDeactivate = existing
     .filter((u) => (u.role === 'grade' || u.role === 'quad') && u.status === 'active' && !targetUsernames.has(u.email.toLowerCase()))
     .map((u) => ({ id: u.id, username: u.email, displayName: u.displayName }));
 
-  return { targetCohort, toCreate, toDeactivate };
+  const mismatched: CohortLayoutMismatch[] = [];
+  for (const u of existing) {
+    if ((u.role !== 'grade' && u.role !== 'quad') || u.status !== 'active') continue;
+    const target = targetsByUsername.get(u.email.toLowerCase());
+    if (!target) continue;
+    const reason = findMismatchReason(u, target);
+    if (reason) mismatched.push({ id: u.id, username: u.email, displayName: u.displayName, reason });
+  }
+
+  return { targetCohort, toCreate, toDeactivate, mismatched };
 }

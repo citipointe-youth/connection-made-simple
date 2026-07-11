@@ -221,6 +221,12 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
   - **Stuck in preview with no way back**: `exitPreview()` restores the admin's stashed
     token/user — if the admin's original 12h token had already expired by the time they exit,
     the next API call 401s and falls back to the login screen (known limitation, not a bug).
+  - **Preview session dies after ~1h even though the button/banner are still showing**: expected
+    (2026-07-12, independent review follow-up) — the preview token now uses a short
+    `PREVIEW_TOKEN_TTL_MS` (1h), not the normal 12h. Symptom is a 401 on the next API call; "Exit
+    Preview" still works fine regardless (it's a pure client-side token swap, no server call). If
+    a preview needs to last longer than that reliably, that's a product question (raise the TTL
+    constant in `auth.service.ts`), not a bug.
   - **Preview icon looks wrong / no confirm popup before previewing**: the button/banner use
     the `eye` IC key (grep `icS('eye')`); `confirmEnterPreview(id)` shows the "Do you want to
     preview the X login?" modal and only calls `enterPreview(id)` on confirm — if either
@@ -319,6 +325,21 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
 - **A Simple-ministry grade/quad login can see students outside its own grade/gender**: this
   would be a REGRESSION of the bug 8 follow-up fix (2026-07-12) — see the RBAC entry directly
   below before assuming it's expected "flat ministry" behavior. It isn't, as of that date.
+- **Branding → Logo only offers "Default mark" / "Upload image", no "Paste SVG" option**:
+  expected (2026-07-12, independent review follow-up) — raw-SVG-paste branding was removed
+  entirely, not hidden. Its sanitiser (`sanitiseLogoSvg`) had a real XSS bypass (didn't strip
+  unquoted event-handler attributes) and the markup rendered unescaped on the public, pre-auth
+  login screen. Don't re-add a "Paste SVG" mode without a real sanitiser (proper SVG-profile
+  DOMPurify, not a regex denylist) — see CLAUDE.md's Security notes.
+- **"Apply account layout" preview shows an amber "N accounts may need a manual check" warning**:
+  not a bug — that's the `mismatched` list (2026-07-12 follow-up): a username matched a target in
+  the plan, but the account's actual `grades`/`gender`/`quad`/`role` disagree with what that
+  username implies. The action never edits a matched account (by design), so this is purely
+  informational — the admin needs to fix the flagged account manually (Edit Account) if the
+  drift is real. Logic is `findMismatchReason()` in `cohort-account-layout.ts`; if it's firing
+  when it shouldn't (or staying silent when it should fire), check `account.service.ts`'s
+  `planCohortLayout`/`applyCohortLayout` are still passing `grades`/`gender`/`quad` through in
+  the `all.map(...)` call — the check is silently skipped for any field a caller doesn't supply.
 
 ### RBAC / scoping (backend)
 
