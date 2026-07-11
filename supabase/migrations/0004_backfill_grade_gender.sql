@@ -5,7 +5,8 @@
 -- Accounts edit form's "Gender scope" dropdown showing "Select gender…"
 -- instead of the account's actual scope, and (more importantly) breaks the
 -- "was this account's name still the auto-generated default" check the
--- grade-change auto-rename now relies on (see account-defaults.ts).
+-- grade-change auto-rename now relies on (see suggestEmail()/
+-- _acctSuggestedGradeEmail() in public/index.html).
 --
 -- Backfill only — never overwrites a gender an admin has already set
 -- in the Accounts screen (`where gender is null`), and only touches the
