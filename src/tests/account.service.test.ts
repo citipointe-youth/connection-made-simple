@@ -3,7 +3,7 @@ import { makeAccountService } from '../services/account.service';
 import { InMemoryUserRepository, InMemorySettingsRepository } from '../repositories/in-memory';
 import { hashPassword } from '../utils/crypto';
 import type { Actor } from '../core/entities/user';
-import { BadRequestError, UnauthorizedError } from '../core/errors/app-error';
+import { BadRequestError, UnauthorizedError, NotFoundError, ForbiddenError } from '../core/errors/app-error';
 
 function actorFor(id: string, role: string): Actor {
   return { id, role: role as any, displayName: 'Test', grade: null as any, quad: null as any };
@@ -239,5 +239,78 @@ describe('Account Service — cohort account layout (bug 8)', () => {
     const { svc } = await buildService();
     const grade = actorFor('g', 'grade');
     await expect(svc.planCohortLayout(grade, 'none')).rejects.toBeInstanceOf(Error);
+  });
+});
+
+describe('Account Service — previewAccount()', () => {
+  async function buildPreviewFixtures() {
+    const users = new InMemoryUserRepository();
+    await users.init();
+    const now = new Date().toISOString();
+    const mk = (over: Partial<Parameters<typeof users.save>[0]>) => users.save({
+      id: over.id!, displayName: over.displayName!, email: over.email!, role: over.role!,
+      grade: over.grade ?? null, quad: over.quad ?? null, status: over.status ?? 'active',
+      passwordHash: 'x', mustChangePassword: over.mustChangePassword ?? false,
+      createdAt: now, updatedAt: now,
+    });
+    const gradeUser = await mk({ id: 'u-grade', displayName: 'Grade 9', email: 'grade9g', role: 'grade', grade: 9 });
+    const quadUser = await mk({ id: 'u-quad', displayName: 'Girls Yr 7-9', email: 'g79', role: 'quad', quad: 'g79' });
+    const inactiveGrade = await mk({ id: 'u-inactive', displayName: 'Grade 10', email: 'grade10g', role: 'grade', grade: 10, status: 'inactive' });
+    const directorUser = await mk({ id: 'u-director', displayName: 'Director', email: 'director', role: 'director' });
+    const leaderUser = await mk({ id: 'u-leader', displayName: 'Leader', email: 'leader1', role: 'leader' });
+    const settings = new InMemorySettingsRepository();
+    await settings.init();
+    const svc = makeAccountService(users, settings);
+    return { svc, gradeUser, quadUser, inactiveGrade, directorUser, leaderUser };
+  }
+
+  it('rejects a non-admin actor', async () => {
+    const { svc, gradeUser } = await buildPreviewFixtures();
+    await expect(
+      svc.previewAccount(actorFor('u-other-grade', 'grade'), gradeUser.id),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('404s for a missing account id', async () => {
+    const { svc } = await buildPreviewFixtures();
+    await expect(
+      svc.previewAccount(actorFor('u-admin', 'admin'), 'no-such-id'),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('rejects an inactive account', async () => {
+    const { svc, inactiveGrade } = await buildPreviewFixtures();
+    await expect(
+      svc.previewAccount(actorFor('u-admin', 'admin'), inactiveGrade.id),
+    ).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it('rejects a director account', async () => {
+    const { svc, directorUser } = await buildPreviewFixtures();
+    await expect(
+      svc.previewAccount(actorFor('u-admin', 'admin'), directorUser.id),
+    ).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it('rejects a leader account', async () => {
+    const { svc, leaderUser } = await buildPreviewFixtures();
+    await expect(
+      svc.previewAccount(actorFor('u-admin', 'admin'), leaderUser.id),
+    ).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it('returns a SafeUser (no passwordHash) for an active grade account', async () => {
+    const { svc, gradeUser } = await buildPreviewFixtures();
+    const result = await svc.previewAccount(actorFor('u-admin', 'admin'), gradeUser.id);
+    expect(result.id).toBe(gradeUser.id);
+    expect(result.role).toBe('grade');
+    expect((result as any).passwordHash).toBeUndefined();
+  });
+
+  it('returns a SafeUser for an active quad account', async () => {
+    const { svc, quadUser } = await buildPreviewFixtures();
+    const result = await svc.previewAccount(actorFor('u-admin', 'admin'), quadUser.id);
+    expect(result.id).toBe(quadUser.id);
+    expect(result.role).toBe('quad');
   });
 });

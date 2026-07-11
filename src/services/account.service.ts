@@ -71,6 +71,10 @@ export interface AccountService {
   // another-account flow and is untouched by this.
   changeOwnPassword(actor: Actor, currentPassword: string, newPassword: string): Promise<void>;
   toggleStatus(actor: Actor, id: string): Promise<SafeUser>;
+  // Admin-only: validates `id` is an active grade/quad account and returns it, for the
+  // account-preview feature (Admin -> Accounts "Preview"). Does NOT mint a token itself —
+  // the controller separately calls AuthService.issueTokenFor for that.
+  previewAccount(actor: Actor, id: string): Promise<SafeUser>;
   remove(actor: Actor, id: string): Promise<void>;
   // Bug 8 (admin bug list, 2026-07-11): "Apply account layout" — a separate,
   // explicit, typed-confirm action in Youth Setup (not tied to Save) that
@@ -227,6 +231,19 @@ export function makeAccountService(users: IUserRepository, settings: ISettingsRe
         updatedAt: new Date().toISOString(),
       });
       return toSafe(updated);
+    },
+
+    async previewAccount(actor, id) {
+      assertCan(actor, 'admin:manage');
+      const existing = await users.findById(id);
+      if (!existing) throw new NotFoundError('Account not found');
+      if (existing.status !== 'active') {
+        throw new BadRequestError('Only active accounts can be previewed');
+      }
+      if (existing.role !== 'grade' && existing.role !== 'quad') {
+        throw new BadRequestError('Only grade/quad accounts can be previewed');
+      }
+      return toSafe(existing);
     },
 
     async remove(actor, id) {
