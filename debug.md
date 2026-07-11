@@ -199,19 +199,38 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
   encoding an already-stringified string twice. **Always use `this.sql.json(value)`** (grep it in
   `supabase.settings.ts` / `supabase.users.ts` / `supabase.connection-audit.ts`). Regression test:
   `ministry-config-encoding.test.ts`.
-- **A Setup field (Branding/Terminology/Modules/Structure/Roles) doesn't save**: every input in
-  `renderMinistrySetup()` (public/index.html) writes to `_setupDraft` via `_setupSet` /
-  `_setupSetNum` / `_setupSetList` (arrays), and `saveMinistrySetup()` PATCHes the whole draft to
-  `/settings`. The backend accepts/validates it in `settings.service.ts` (`mergeMinistryConfig` →
-  full `MinistryConfigSchema`). If a value is rejected, the whole save is (clear error toast) —
-  check the field against the schema in `src/core/ministry-config.ts`. Client defaults live in
-  `MINISTRY_CONFIG_DEFAULTS_CLIENT` — keep in sync with the server `MINISTRY_CONFIG_DEFAULTS`.
+- **A Setup field (Branding/Terminology/Modules & Import/Structure & Roles) doesn't save**: every
+  input in `_youthSetupBody()` (public/index.html — was called `renderMinistrySetup` in older
+  notes, renamed since) writes to `_setupDraft` via `_setupSet` / `_setupSetNum` / `_setupSetList`
+  (arrays), and `saveMinistrySetup()` (behind a confirm modal, `confirmSaveMinistrySetup()`,
+  since 2026-07-11) PATCHes the whole draft to `/settings`. The backend accepts/validates it in
+  `settings.service.ts` (`mergeMinistryConfig` → full `MinistryConfigSchema`). If a value is
+  rejected, the whole save is (clear error toast) — check the field against the schema in
+  `src/core/ministry-config.ts`. Client defaults live in `MINISTRY_CONFIG_DEFAULTS_CLIENT` — keep
+  in sync with the server `MINISTRY_CONFIG_DEFAULTS`.
 - **"Deploy to another church" guide looks wrong / empty**: `_deployGuideText(cfg, svcMin)`
   (public/index.html) is a pure string builder off the current draft; Copy/Download go through
   `copyDeployGuide` / `downloadDeployGuide` → `_downloadText` (Blob + `a.download`, same pattern
   as the CSV/xlsx exports).
 - **A branding/terminology change didn't appear everywhere**: expected — the header/nav are built
   once at login (`_initShell`) and only rebuild on re-login; stats cache ~60s. Not a bug.
+- **A quad/grade/director/leader login can't sign in / its account looks deactivated after a Setup
+  save, and nobody manually touched Accounts** (2026-07-11): expected if that role's toggle in
+  Structure & Roles was just switched OFF and saved — `settings.service.ts`'s `update()` diffs
+  `roles.enabled` before/after the merge and bulk-deactivates every currently-active account of a
+  role that flips `true→false`. Turning the role back on does **not** reactivate them (deliberate —
+  see the comment above the loop); an admin must flip each one back on individually in Accounts.
+  The Accounts screen also hides that role's whole section while its toggle is off, even if
+  inactive accounts of that role still exist (`renderAdminView`'s `rolesEnabled[role] === false`
+  check) — if an admin can't find a role's accounts to reactivate them, the toggle needs to be
+  switched back on first before they become visible again.
+- **"Set Password & Continue" leads to a blank page** (fixed 2026-07-11, don't reintroduce): see
+  the "Forced password change" gotcha in CLAUDE.md's Security notes — `changeOwnPassword` must
+  keep returning a fresh token (`{ ok, token }`) and both frontend call sites
+  (`submitMustChangePassword`, `submitChangeOwnPassword`) must keep swapping to it via
+  `API.setToken()`. If this regresses, the symptom is the old one: the page after password-set
+  looks broken/stretched and every subsequent request 403s `MUST_CHANGE_PASSWORD` until the user
+  manually signs out and back in.
 
 ### RBAC / scoping (backend)
 

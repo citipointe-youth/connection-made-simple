@@ -64,7 +64,7 @@ Seed data only runs when `PERSISTENCE=memory`. Production uses `PERSISTENCE=supa
 | Settings | `GET/PATCH /settings` |
 | Admin | `POST /admin/reset` (clears students+leaders+connections+attendance **and connection_audits** — see below), `POST /admin/clear-service-group` (clears service/lifegroup data, **keeps** students+connections+leaders, resets student aggregates), `GET /admin/audit` (log kept; unreachable from the SPA since the Audit tab was removed) |
 | Connection audits | `POST/GET /audits`, `GET/DELETE /audits/:year`, `POST /audits/finalize-live` (builds this year's snapshot from live tables, no CSV upload — used by the New Year Refresh wizard), `GET /audits/export-all` / `POST /audits/import-all` (admin-only full-table backup/restore — see "New Year Refresh wizard" below; registered before `/audits/:year` since Express matches route registration order) |
-| Accounts | `GET/POST /accounts/users`, `PATCH /accounts/users/:id`, `POST /accounts/users/password` (admin resets another account), `POST /accounts/me/password` (self-service, requires current password — distinct endpoint, no admin:manage needed) |
+| Accounts | `GET/POST /accounts/users`, `PATCH /accounts/users/:id`, `POST /accounts/users/password` (admin resets another account), `POST /accounts/me/password` (self-service, requires current password — distinct endpoint, no admin:manage needed; returns `{ ok, token }` — a freshly-issued session token, since `mustChangePassword` is baked into the token at login and this is the one write that needs the caller's own token refreshed — see "Forced password change" gotcha below) |
 
 **Clearing import history ≠ deleting data.** The Import screen's "Clear All" and per-row
 trash only remove `import_records` log rows. `service_sessions.import_id` /
@@ -1518,3 +1518,11 @@ covered by the existing multi-grade `grade` account feature (§5.1a, phase
   password). This exists because `002_seed_admin.sql` / `005_seed_users.sql` and this file used
   to document a shared default password in plaintext next to real account usernames, in a *public*
   repo — see `017_must_change_password.sql`.
+  **Gotcha (fixed 2026-07-11):** because the flag is baked into the token at login and
+  `resolveToken()` trusts it with no DB re-check, clearing the DB flag alone left the
+  caller's existing token still enforcing the gate for the rest of its 12h TTL (blank
+  page after "Set Password & Continue" — needed a manual sign-out/back-in to get a
+  fresh token). Fixed by `AuthService.issueTokenFor(userId)` minting a new token from
+  current DB state; `POST /accounts/me/password` returns it and both frontend call
+  sites swap to it via `API.setToken()`. If a similar per-token claim is ever added,
+  it needs this same refresh-on-change treatment or it'll reproduce this bug.
