@@ -1749,6 +1749,36 @@ deliberately not built.
   for `mismatched` (role/grades/gender/quad drift, inactive accounts ignored, a clean match never
   flagged). 341 tests total (was 335), typecheck clean.
 
+### Home "Birthdays this week" re-scoped off the leader identity (2026-07-13)
+
+The Follow Up card's "Birthdays this week" list was sourced entirely from
+`GET /connections/leader/:id/followup`'s `birthdays` field — which, like the rest of that
+endpoint, is scoped to whichever leader identity the user self-identified as
+(`getMyLeaderId()`), i.e. only THAT leader's own connected students. That's the right scope
+for the "Not seen at Friday/Lifegroup" lists (the point of self-identifying), but wrong for
+birthdays, which should reflect the login's own grade/quad, not one leader's connection
+subset.
+
+- `grade`/`quad` roles: Home now computes "birthdays this week" client-side from its own
+  already role-scoped `/students` fetch (`_scopedWeeklyBirthdays()`, public/index.html) —
+  restricted to "connectable" students (`_hasAttended`, attended this or previous term, same
+  rule Home's connection counts use) — instead of `data.birthdays`. `_isBirthdayInWeek()` is a
+  frontend port of `followup.service.ts`'s `isBirthdayInWeek` — **keep them in sync**.
+- `admin`/`director` roles: the Birthdays-this-week card is suppressed entirely (not just
+  scoped wider) — ministry-wide "this week" wasn't a useful view there per the bug report.
+- Dedicated junior-`leader` role (a real individual leader's own login, not grade/quad staff)
+  is **unchanged** — their own connected students already ARE their scope, so it still reads
+  `data.birthdays` from the followup endpoint.
+- The card is still gated behind picking a leader identity on Home (unchanged UX) — only the
+  *source* of the birthdays list changed once shown, via a module-level `_homeBirthdaysCtx`
+  (`undefined` = leader-scoped `data.birthdays`, `null` = suppress, array = grade/quad-scoped)
+  set once per Home render and read by `renderHomeFollowup()`, which is itself re-invoked with
+  no args from the "Not you?"/pick-a-leader `onclick` handlers.
+- Backend `followup.service.ts` is untouched — `leaderFollowup`'s own `birthdays` field is
+  still leader-scoped and still used for the `leader` role; grade/quad/admin/director just stop
+  reading it.
+- `public/sw.js` cache bumped `ysc-v41` → `ysc-v42` (SPA JS changed).
+
 ## Security notes
 
 - **XSS:** all user-supplied strings (names, usernames, notification title/message,

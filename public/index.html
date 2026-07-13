@@ -1827,6 +1827,49 @@ async function renderHome() {
   if (_hp.some(p => Cache.get(p) === null)) _revalidateHome();
 }
 let _homeRevalidating = false;
+// Birthdays-this-week source for the Home Follow Up card. Set once per Home
+// render (by _renderHomeInner / renderLeaderHome) and read by
+// renderHomeFollowup(), which itself is re-invoked with no args from the
+// "Not you?"/pick-a-leader onclick handlers — module state lets those keep
+// working without threading a param through inline HTML.
+//   undefined = use the leader-scoped `data.birthdays` from the followup API
+//               (role='leader' — their own connections ARE their scope)
+//   null      = suppress the card entirely (admin/director — see bug list)
+//   array     = grade/quad-scoped list computed from Home's own already
+//               role-scoped `/students` fetch, independent of which
+//               individual leader identity is self-selected via `mine`
+let _homeBirthdaysCtx;
+// Port of backend followup.service.ts's isBirthdayInWeek — keep in sync.
+// True if the student's birthday (month+day, year ignored) lands in the
+// Mon–Sun week containing `today`.
+function _isBirthdayInWeek(dob, today) {
+  if (!dob) return false;
+  const parts = String(dob).slice(0, 10).split('-');
+  if (parts.length !== 3) return false;
+  const bMonth = Number(parts[1]), bDay = Number(parts[2]);
+  if (!bMonth || !bDay) return false;
+  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const mondayOffset = (base.getDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(base);
+  monday.setDate(base.getDate() - mondayOffset);
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(monday);
+    day.setDate(monday.getDate() + i);
+    if (day.getMonth() + 1 === bMonth && day.getDate() === bDay) return true;
+  }
+  return false;
+}
+// Grade/quad-scoped "birthdays this week", built from Home's own /students
+// fetch (already role-scoped server-side to own grade+gender / own quad) —
+// restricted to "connectable" students (attended this or previous term),
+// same eligibility rule Home's connection counts use.
+function _scopedWeeklyBirthdays(students) {
+  const today = new Date();
+  return students
+    .filter(s => _hasAttended(s) && _isBirthdayInWeek(s.dateOfBirth, today))
+    .map(s => ({ id: s.id, firstName: s.firstName, fullName: `${s.firstName} ${s.lastName}`.trim(), mobile: s.mobile, parentPhone: s.parentPhone }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+}
 function _revalidateHome() {
   if (_homeRevalidating) return;
   _homeRevalidating = true;
@@ -1857,6 +1900,10 @@ async function _renderHomeInner(stale) {
   } catch {}
   if (S.page !== _pg) return; // navigated away while awaiting — don't overwrite the new page
   sc = sc || [];
+  // Bug list item 1: birthdays-this-week must be grade/quad-scoped, not tied
+  // to whichever leader identity is self-selected in Follow Up, and must not
+  // show at all for director/admin. See _homeBirthdaysCtx's doc comment.
+  _homeBirthdaysCtx = (u.role === 'grade' || u.role === 'quad') ? _scopedWeeklyBirthdays(sc) : null;
   const _connSet = new Set((conns || []).map(a => a.studentId));
   const _lgQuad = q => (lgStats && lgStats.byQuad || []).find(x => x.quad === q);
   const _lgGrade = g => (lgStats && lgStats.byGrade || []).find(x => x.grade === g);
@@ -2093,6 +2140,10 @@ async function renderLeaderHome() {
   }
   body += '<div id="home-followup"></div>';
   setApp(shell(body));
+  // A dedicated junior-leader login IS a single leader — its own connected
+  // students already ARE its scope, so birthdays stays on the leader-scoped
+  // `data.birthdays` from the followup API (undefined = that default).
+  _homeBirthdaysCtx = undefined;
   renderHomeFollowup();
 }
 
@@ -2130,7 +2181,13 @@ async function renderHomeFollowup() {
   const svcTitle = 'Not Seen Last ' + _serviceDayName() + (data.latestSvcDate ? ` (${_fridayLabel(data.latestSvcDate)})` : '');
   const grpTitle = 'Not At A ' + L('smallGroup') + ' Last Week' + (data.latestGrpDate ? ` (ending ${_fridayLabel(data.latestGrpDate)})` : '');
   let h = `<div class="sh" style="display:flex;align-items:center;justify-content:space-between;font-size:13px"><span>Follow Up · ${esc(data.leader.fullName)} ${helpTip("These are students who've attended a service or lifegroup recently, but weren't here last service.")}</span>${changeBtn}</div>`;
-  h += _followupListHtml('Birthdays this week', data.birthdays, 'No birthdays this week');
+  // _homeBirthdaysCtx: null suppresses the card (admin/director); an array is
+  // the grade/quad-scoped list; undefined falls back to the leader-scoped
+  // `data.birthdays` (role='leader'). See its doc comment near _revalidateHome.
+  if (_homeBirthdaysCtx !== null) {
+    const birthdays = _homeBirthdaysCtx !== undefined ? _homeBirthdaysCtx : data.birthdays;
+    h += _followupListHtml('Birthdays this week', birthdays, 'No birthdays this week');
+  }
   h += _followupListHtml(svcTitle, data.notSeenService, data.latestSvcDate ? 'Everyone was seen' : 'No service data yet', 'svc');
   h += _followupListHtml(grpTitle, data.notSeenGroup, data.latestGrpDate ? 'Everyone was seen' : 'No lifegroup data yet', 'grp');
   h += _smsTemplateBoxHtml(data.leader.id, data.leader.smsTemplate, 'fu-sms-tpl');
