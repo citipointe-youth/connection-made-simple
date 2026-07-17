@@ -4,6 +4,7 @@ import type { IPersistenceAdapter } from '../persistence/persistence';
 import type { User } from '../../core/entities/user';
 import type { Student } from '../../core/entities/student';
 import type { Leader } from '../../core/entities/leader';
+import type { PrayerRequest } from '../../core/entities/prayer';
 import type { Connection } from '../../core/entities/connection';
 import type {
   ServiceSession,
@@ -22,6 +23,7 @@ import type {
   IUserRepository,
   IStudentRepository,
   ILeaderRepository,
+  IPrayerRepository,
   IConnectionRepository,
   IServiceSessionRepository,
   IServiceAttendanceRepository,
@@ -122,6 +124,22 @@ export class InMemoryLeaderRepository
   async saveMany(leaders: Leader[]): Promise<void> {
     for (const l of leaders) this.store.set(l.id, this.clone(l));
     await this.writeToPersistence();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Prayers
+// ---------------------------------------------------------------------------
+export class InMemoryPrayerRepository
+  extends InMemoryBaseRepository<PrayerRequest>
+  implements IPrayerRepository
+{
+  constructor(persistence?: IPersistenceAdapter<PrayerRequest>) { super(persistence); }
+
+  async findByStudent(studentId: string): Promise<PrayerRequest[]> {
+    return Array.from(this.store.values())
+      .filter((p) => p.studentId === studentId)
+      .map((p) => this.clone(p));
   }
 }
 

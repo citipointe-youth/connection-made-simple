@@ -2,6 +2,7 @@ import type { IRepository } from './base.repository';
 import type { User } from '../../core/entities/user';
 import type { Student } from '../../core/entities/student';
 import type { Leader } from '../../core/entities/leader';
+import type { PrayerRequest } from '../../core/entities/prayer';
 import type { Connection } from '../../core/entities/connection';
 import type {
   ServiceSession,
@@ -32,6 +33,11 @@ export interface ILeaderRepository extends IRepository<Leader> {
   findByGrade(grade: number): Promise<Leader[]>;
   findActive(): Promise<Leader[]>;
   saveMany(leaders: Leader[]): Promise<void>;
+  deleteAll(): Promise<void>;
+}
+
+export interface IPrayerRepository extends IRepository<PrayerRequest> {
+  findByStudent(studentId: string): Promise<PrayerRequest[]>;
   deleteAll(): Promise<void>;
 }
 
