@@ -170,6 +170,22 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
   `_prayerUseGeneral()` — replaced the old "Not about a specific student — mark as general" link
   2026-07-18. `window._prayerPickStudentId` stays tri-state (`undefined` = nothing chosen yet,
   blocks submit; a student id; `null` = general) — don't collapse that back to a boolean.
+- **A grade/quad account sees a general prayer it shouldn't (or can't see one it should)**:
+  `access-control.ts`'s `canAccessGeneralPrayer()` (grep it) — checks the viewer's grade+gender
+  against `createdByGrades`/`createdByGender`, captured at creation time by
+  `generalPrayerCreatorScope()`. admin/director/leader viewers always pass; a grade/quad viewer
+  needs a grade overlap + gender match. If a general prayer is wrongly wide-open, check whether
+  it predates migration `0007` (existing rows have `created_by_grades`/`created_by_gender` both
+  `NULL`, which reads as "no boundary" on purpose — not a bug, a deliberate backward-compat
+  default for prayers created before this scoping shipped).
+- **A junior `leader` account gets "Access denied to this student" adding/viewing a prayer for
+  their OWN connected student**: this was a real bug (fixed 2026-07-18) — `canAccessStudent()`
+  always returns `false` for role `leader` (not one of `canAccessGrade`'s switch cases).
+  `prayer.service.ts` now special-cases `actor.role === 'leader'` the same way
+  `student.service.ts`/`atrisk.service.ts`/`connection.service.ts` already did, resolving via
+  the optional `connRepo` param (`findByStudentAndLeader`/`findByLeader`) instead of
+  `canAccessStudent`. If this regresses, check `container.ts` still passes `connections` as
+  `makePrayerService`'s 4th arg.
 
 ### Mobile viewport / iOS Safari quirks
 

@@ -1859,6 +1859,53 @@ reproduced locally (no iOS device in this environment) — tuned from the report
 re-verify against a fresh screenshot if it recurs rather than assuming this fully covers it.
 SW cache `ysc-v45` → `ysc-v46`. See debug.md's "Mobile viewport / iOS Safari quirks" entry.
 
+### General-prayer scoping + a real junior-leader access bug fixed (2026-07-18, same day)
+
+A follow-up question ("which account types see a general prayer created by each account
+type?") surfaced that general (no-student) prayers were completely unscoped — visible to
+every account with `prayer:read`, i.e. everyone, regardless of who created it. User asked for
+real scoping and found a second, more serious bug in the process.
+
+- **General prayers now inherit a grade+gender domain from their creator.**
+  `access-control.ts`'s `generalPrayerCreatorScope(actor, structure)` computes it at creation
+  time (`grade` role → own grade(s)+gender; `quad` role → bracket grades ([7,8,9]/[10,11,12])
+  + quad gender; `admin`/`director`/`leader` → `{grades:null, gender:null}`, meaning no
+  boundary). `canAccessGeneralPrayer(viewer, createdByGrades, createdByGender, structure)` is
+  the read-side check: `admin`/`director`/`leader` viewers always see everything; a `grade`/
+  `quad` viewer needs a grade overlap AND (if both sides have one) a gender match with the
+  creator's stored scope. Net effect: a grade account's general prayer stays within its own
+  grade+gender; a quad's is visible to every grade within its bracket+gender (and to other
+  quads/grades that happen to overlap); admin/director-created ones stay ministry-wide, same
+  as before. New nullable columns `created_by_grades` (jsonb)/`created_by_gender` (text) on
+  `prayer_requests` (migration `0007`, additive) — existing rows are `NULL`/`NULL`, which
+  reads as "no boundary" (backward-compatible: prayers created before this shipped stay
+  visible to everyone, not retroactively hidden). Enforced on **both** `list()` (read) and
+  `update`/`setStatus`/`remove` (write) — not just visibility, so a grade/quad actor can't act
+  on a general prayer outside their own domain even by guessing/enumerating its id.
+- **Real bug found and fixed: a junior `leader` could never see or create a prayer for even
+  their own connected student.** `canAccessStudent()` → `canAccessGrade()`'s switch statement
+  only handles `admin`/`director`/`grade`/`quad` — role `leader` falls to `default: return
+  false`, unconditionally, for every grade. Every other service that scopes the `leader` role
+  (`student.service.ts`, `atrisk.service.ts`, `connection.service.ts`) special-cases
+  `actor.role === 'leader'` and resolves their own connected students via `connRepo` instead
+  of `canAccessStudent` — `prayer.service.ts` never got that treatment, so any student-linked
+  prayer create/read/edit by a `leader` actor threw `ForbiddenError`, even for their own
+  connections. This was untested (`prayer.access-control.test.ts` only asserted the coarse
+  `can()` RBAC grant, never the actual scoping) and undocumented until this fix. `makePrayerService`
+  now takes an optional 4th `connRepo: IConnectionRepository` param (wired in `container.ts`);
+  a `leader` actor's student-linked reads/writes now resolve via
+  `connRepo.findByStudentAndLeader`/`findByLeader` instead of `canAccessStudent`.
+- **Deliberately left open**: a `leader`-created general prayer stays visible to everyone
+  (same as admin/director) — a junior leader is bound to one `Leader` record, not a grade/
+  gender cohort, so there's no boundary to derive. Not asked for either direction; flagging in
+  case a future request wants leader-created general prayers scoped some other way (e.g. to
+  just that leader's own connected students' grades/genders).
+- Tests: `prayer.access-control.test.ts` gained `generalPrayerCreatorScope`/
+  `canAccessGeneralPrayer` coverage; `prayer.service.test.ts`'s old "visible to everyone" test
+  (asserting the now-wrong unscoped behavior) was replaced with the full scoping matrix
+  (grade/quad/admin-director creators × grade/quad/admin-director viewers) plus two new tests
+  for the junior-leader fix. 357 → 366 tests.
+
 ## Security notes
 
 - **XSS:** all user-supplied strings (names, usernames, notification title/message,
