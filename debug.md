@@ -186,6 +186,19 @@ Role decides RBAC scope; screen usually narrows straight to a symptom-router ent
   the optional `connRepo` param (`findByStudentAndLeader`/`findByLeader`) instead of
   `canAccessStudent`. If this regresses, check `container.ts` still passes `connections` as
   `makePrayerService`'s 4th arg.
+- **Every `/prayers` call fails with a generic toast ("Request failed"/"Could not save"), and
+  it looks like nothing reaches the server at all**: check `vercel.json`'s `routes[]` regex
+  FIRST, before touching any app code. This was a real incident (2026-07-18) —
+  `GET /prayers` was returning `200 text/html` (the SPA shell) instead of hitting
+  `/api/index.ts`, because `prayers` was in `sw.js`'s `API_RE` and in Express's `router.ts`
+  but never added to `vercel.json`. Confirm with `curl -sI <url>/prayers` — if
+  `content-type` is `text/html` instead of `application/json`, or status is `200` instead of
+  `401` when unauthenticated, that's this bug, not a code bug. Same root cause class as the
+  `/manifest.json` incident (2026-07-11, "Generalisation went LIVE" section above) — **any
+  new top-level API resource added anywhere in this app needs three edits, not two**:
+  `router.ts`, `sw.js`'s `API_RE`, AND `vercel.json`'s `routes[]` regex. `curl` the new route
+  directly post-deploy (expect JSON + the right auth status code) — don't just check
+  already-covered routes and assume it generalises.
 
 ### Mobile viewport / iOS Safari quirks
 

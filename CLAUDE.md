@@ -1906,6 +1906,39 @@ real scoping and found a second, more serious bug in the process.
   (grade/quad/admin-director creators × grade/quad/admin-director viewers) plus two new tests
   for the junior-leader fix. 357 → 366 tests.
 
+### Incident: every /prayers request has been silently misrouted since the feature shipped (2026-07-18)
+
+The admin tried to add a prayer and got a generic failure toast. Vercel runtime logs showed
+**zero** `/prayers` requests ever reaching the function (`get_runtime_logs` grouped by
+`requestPath` over the last 2h listed every other route the admin's session hit, never
+`/prayers`) — the request wasn't crashing server-side, it was never arriving.
+
+- **Root cause**: `vercel.json`'s `routes[]` has its own explicit allowlist regex
+  (`^/(auth|students|leaders|...)`) separate from Express's `router.ts` and `sw.js`'s
+  `API_RE` — routing at Vercel's edge happens *before* the request ever reaches
+  `/api/index.ts`. This morning's Prayers feature work added `prayers` to the Express router
+  and to `sw.js`'s `API_RE` (both correct, both tested) but never to `vercel.json` — the exact
+  same class of bug as the 2026-07-11 `/manifest.json` incident documented earlier in this
+  file ("a new top-level route served by the function on Vercel must be added to
+  `vercel.json` routes[], not just the Express router"), which apparently didn't stick as a
+  checklist item. Any unmatched path falls through `{"handle":"filesystem"}` to the catch-all
+  `{"src":"/(.*)","dest":"/index.html"}` — so `GET /prayers` was returning the raw SPA HTML
+  shell with a **200**, not an error. `API.post('/prayers', ...)` then called `res.json()` on
+  HTML (not JSON), threw, and surfaced as a generic toast — nothing about the failure pointed
+  at "wrong route" from the client side alone.
+- **Fix**: added `prayers` to `vercel.json`'s regex. Verified directly with `curl` (not just
+  typecheck/tests, which can't catch this class of bug at all — it's pure infra routing):
+  `GET /prayers` now returns `401 {"code":"UNAUTHORIZED",...}`, matching every other
+  protected route, instead of `200 text/html`.
+- **Process gap this exposes**: my own post-deploy health checks for every prayers-related
+  deploy today checked `/`, `/auth/me`, `/settings`, `/manifest.json` — never `/prayers`
+  itself, so this shipped silently through 5+ deploys before a real user hit it.
+  **Lesson for next time a new top-level API resource is added anywhere in this app: verify
+  the exact new route with `curl` post-deploy (check for JSON + the expected auth status
+  code, not just "some 2xx/4xx came back"), not just adjacent/already-covered routes.**
+  Consider adding an automated check (e.g. a smoke-test script hitting every `SECTION_OF`/
+  route-table entry) rather than relying on someone remembering this by hand a third time.
+
 ## Security notes
 
 - **XSS:** all user-supplied strings (names, usernames, notification title/message,
