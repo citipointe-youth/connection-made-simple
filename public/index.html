@@ -180,7 +180,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .prow .pl2{font-size:10.5px;color:var(--ink-faint);line-height:1.2;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .prow .pgo{flex-shrink:0;width:26px;height:26px;border-radius:8px;border:1px solid rgba(16,185,129,.35);background:var(--success-light);color:var(--success);display:grid;place-items:center}
 .prow .pans{flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:800;color:#15803d;background:var(--success-light);border-radius:20px;padding:3px 8px;text-transform:uppercase;letter-spacing:.03em;border:none;cursor:pointer;font-family:inherit}
-.pfab{position:fixed;right:16px;bottom:76px;z-index:90;background:var(--accent);color:#fff;font-weight:800;font-size:13px;padding:11px 16px;border-radius:24px;box-shadow:0 8px 20px rgba(26,26,242,.4);display:flex;align-items:center;gap:6px;border:none;cursor:pointer}
+.pfab{position:fixed;right:16px;bottom:114px;z-index:90;background:var(--accent);color:#fff;font-weight:800;font-size:13px;padding:11px 16px;border-radius:24px;box-shadow:0 8px 20px rgba(26,26,242,.4);display:flex;align-items:center;gap:6px;border:none;cursor:pointer}
 
 /* Chips */
 .chip{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5;white-space:nowrap}
@@ -2207,7 +2207,7 @@ async function renderHomeFollowup() {
   if (!data) { host.innerHTML = ''; return; }
 
   // A junior-leader login is bound to its own leader record — no "Not you?".
-  const changeBtn = (S.user && S.user.role === 'leader') ? '' : `<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="setMyLeaderId(null);renderHomeFollowup()">Not you?</button>`;
+  const changeBtn = (S.user && S.user.role === 'leader') ? '' : `<button class="btn btn-secondary btn-sm" onclick="setMyLeaderId(null);renderHomeFollowup()">Not you?</button>`;
   // Each "not seen" list reflects the most recent session/week — label it with the
   // service day that ends that week so the leader knows which week they're chasing up.
   // serviceDayOfWeek (§5, phase 6b) drives both the word and _fridayLabel()'s date math.
@@ -3146,7 +3146,8 @@ async function renderMyStudents() {
   if (_msLeader && !visLeaders.some(l => l.id === _msLeader)) _msLeader = null;
 
   const opts = visLeaders.map(l => `<option value="${l.id}" ${_msLeader === l.id ? 'selected' : ''}>${esc(l.fullName)} (Gr ${l.grades?.join(', ') || 'All'} · ${l.gender || 'any gender'})</option>`).join('');
-  body += `<div class="fg"><label class="fl">I am…</label><select class="fs" onchange="_msLeader=this.value;setMyLeaderId(this.value||null);renderMyStudents()"><option value="">— Choose a leader —</option>${opts}</select></div>`;
+  const msNotYouBtn = _msLeader ? `<button class="btn btn-secondary btn-sm" onclick="_msLeader=null;setMyLeaderId(null);renderMyStudents()">Not you?</button>` : '';
+  body += `<div class="fg"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><label class="fl" style="margin-bottom:0">I am…</label>${msNotYouBtn}</div><select class="fs" onchange="_msLeader=this.value;setMyLeaderId(this.value||null);renderMyStudents()"><option value="">— Choose a leader —</option>${opts}</select></div>`;
 
   if (_msLeader) {
     let summary;
@@ -3441,15 +3442,15 @@ function openPrayerModal(studentId, prayerId) {
   } else if (isGeneral) {
     forHtml = `<div style="padding:9px 12px;border:1.5px solid var(--paper-dark);border-radius:var(--radius-sm);font-size:14px;font-weight:600;background:var(--paper);color:var(--ink-mid)">General — no specific student</div>`;
   } else {
-    forHtml = `<div id="pr-for-picker">
+    forHtml = `<div style="display:flex;background:var(--paper);border:1.5px solid var(--paper-dark);border-radius:10px;padding:3px;margin-bottom:8px">
+        <button type="button" id="pr-for-tab-student" onclick="_prayerUsePicker()" style="flex:1;padding:7px 0;border-radius:7px;border:none;cursor:pointer;font-size:12.5px;font-weight:700;background:var(--accent);color:#fff">Student</button>
+        <button type="button" id="pr-for-tab-general" onclick="_prayerUseGeneral()" style="flex:1;padding:7px 0;border-radius:7px;border:none;cursor:pointer;font-size:12.5px;font-weight:700;background:transparent;color:var(--ink-mid)">General</button>
+      </div>
+      <div id="pr-for-picker">
         <input class="fi" id="pr-student-q" placeholder="Search student by name…" oninput="_prayerFilterStudents()" autocomplete="off">
         <div id="pr-student-results" style="margin-top:6px"></div>
-        <button type="button" onclick="_prayerUseGeneral()" style="background:none;border:none;color:var(--accent);font-size:12.5px;font-weight:700;padding:8px 0 0;cursor:pointer">Not about a specific student — mark as general</button>
       </div>
-      <div id="pr-for-general" style="display:none;padding:9px 12px;border:1.5px solid var(--paper-dark);border-radius:var(--radius-sm);font-size:14px;font-weight:600;background:var(--paper);align-items:center;justify-content:space-between;gap:8px">
-        <span style="color:var(--ink-mid)">General — no specific student</span>
-        <button type="button" onclick="_prayerUsePicker()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">Change</button>
-      </div>`;
+      <div id="pr-for-general" style="display:none;padding:9px 12px;border:1.5px solid var(--paper-dark);border-radius:var(--radius-sm);font-size:14px;font-weight:600;background:var(--paper);color:var(--ink-mid)">General — no specific student</div>`;
   }
 
   const deleteBtn = editing
@@ -3493,21 +3494,29 @@ function _prayerPickStudent(id) {
   const el = document.getElementById('pr-student-results');
   if (el) el.innerHTML = '';
 }
-// "Not about a specific student" toggle — only reachable when the student picker
-// (not a locked chip) is showing, i.e. adding a brand new, not-yet-assigned prayer.
+// Student/General tab toggle — only reachable when the student picker (not a
+// locked chip) is showing, i.e. adding a brand new, not-yet-assigned prayer.
 function _prayerUseGeneral() {
   window._prayerPickStudentId = null;
   const picker = document.getElementById('pr-for-picker');
   const gen = document.getElementById('pr-for-general');
+  const tabS = document.getElementById('pr-for-tab-student');
+  const tabG = document.getElementById('pr-for-tab-general');
   if (picker) picker.style.display = 'none';
-  if (gen) gen.style.display = 'flex';
+  if (gen) gen.style.display = 'block';
+  if (tabS) { tabS.style.background = 'transparent'; tabS.style.color = 'var(--ink-mid)'; }
+  if (tabG) { tabG.style.background = 'var(--accent)'; tabG.style.color = '#fff'; }
 }
 function _prayerUsePicker() {
   window._prayerPickStudentId = undefined;
   const picker = document.getElementById('pr-for-picker');
   const gen = document.getElementById('pr-for-general');
+  const tabS = document.getElementById('pr-for-tab-student');
+  const tabG = document.getElementById('pr-for-tab-general');
   if (gen) gen.style.display = 'none';
   if (picker) picker.style.display = 'block';
+  if (tabS) { tabS.style.background = 'var(--accent)'; tabS.style.color = '#fff'; }
+  if (tabG) { tabG.style.background = 'transparent'; tabG.style.color = 'var(--ink-mid)'; }
   const q = document.getElementById('pr-student-q');
   if (q) { q.value = ''; q.focus(); }
 }
