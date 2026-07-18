@@ -1,8 +1,9 @@
 /**
  * One-off backfill: re-save every student through the encryption-aware Supabase
- * repo so mobile/parentPhone become ciphertext. Idempotent (already-encrypted
- * values decrypt then re-encrypt to the same plaintext), resumable (safe to
- * re-run after any interruption), order-independent (keyed by id).
+ * repo so mobile/parentPhone become ciphertext. Safe to re-run after any
+ * interruption (already-encrypted values decrypt then re-encrypt to the same
+ * plaintext under a fresh IV — the plaintext is stable across runs, though the
+ * ciphertext bytes are not), resumable, order-independent (keyed by id).
  *
  * Run (bash):
  *   PERSISTENCE=supabase DATABASE_URL='<pooler url>' \
@@ -24,6 +25,9 @@ async function main(): Promise<void> {
   }
   if (!process.env['FIELD_ENCRYPTION_KEY']) {
     throw new Error('FIELD_ENCRYPTION_KEY is required.');
+  }
+  if (!process.env['DATABASE_URL']) {
+    throw new Error('DATABASE_URL is required (the pooler connection string for the target Supabase project).');
   }
   const { repos } = await buildContainer();
 

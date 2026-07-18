@@ -1974,7 +1974,22 @@ editor) reveals only ciphertext, while every service/export still sees plaintext
   against prod (idempotent/resumable) → verify no non-null value lacks the `v1.` prefix →
   `VACUUM FULL students;` to physically purge leftover plaintext row versions from disk.
 - **Manual prod SQL can no longer read/write these two columns** — values are opaque ciphertext
-  after the backfill runs. Edits must go through the app.
+  after the backfill runs. Edits must go through the app. **Never hand-copy or hand-edit a
+  ciphertext value between rows** — the AAD binds each value to its own `students:<column>:<id>`,
+  so a copied value fails GCM auth-tag verification on read. Because every list/search read maps
+  the *entire* row set through `toStudent()` in one pass, **one row with an undecryptable value
+  (wrong key, corruption, a hand-copied ciphertext) fails the whole query** — not just that
+  student — taking down Home/`/overview`/`/trends`/`/students`/`/connections` together. This is
+  the intended fail-closed property (a wrong/missing key must not silently show garbled phone
+  numbers), but it means `FIELD_ENCRYPTION_KEY` is a hard runtime dependency of nearly every read
+  endpoint once any row is encrypted — **it must be set in Vercel prod env before or with any
+  deploy that ships this code**, not after.
+- **Key rotation runbook (not yet needed, but documented for when it is):** set
+  `FIELD_ENCRYPTION_KEY_PREV`/`FIELD_ENCRYPTION_KEY_PREV_ID` to the retiring key/id, promote a new
+  key to `FIELD_ENCRYPTION_KEY`/`FIELD_ENCRYPTION_KEY_ID`, re-run
+  `scripts/backfill-field-encryption.ts` (re-encrypts every row under the new active key, tolerated
+  mid-rotation by the dual-key decrypt), then remove the `_PREV` vars once verified. Never rotate by
+  hand-editing rows.
 
 ## Security notes
 

@@ -13,6 +13,11 @@ const NODE_ENV = getEnv('NODE_ENV', 'development');
 const PROD_DEFAULT_ORIGIN = 'https://ys-connection.vercel.app';
 const corsDefault = NODE_ENV === 'production' ? (process.env['APP_ORIGIN'] ?? PROD_DEFAULT_ORIGIN) : '*';
 
+// FIELD_ENCRYPTION_KEY (base64, 32 bytes) / FIELD_ENCRYPTION_KEY_ID / FIELD_ENCRYPTION_KEY_PREV /
+// FIELD_ENCRYPTION_KEY_PREV_ID are read directly from process.env by src/utils/field-crypto.ts
+// (same pattern as SESSION_SECRET) — not re-exported here. Required whenever PERSISTENCE=supabase;
+// encrypts/decrypts students.mobile/students.parent_phone. See
+// docs/superpowers/specs/2026-07-18-phone-field-encryption-design.md.
 export const env = {
   PORT: parseInt(getEnv('PORT', '4300'), 10),
   NODE_ENV,
