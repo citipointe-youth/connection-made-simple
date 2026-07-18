@@ -116,7 +116,7 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 
 /* Bottom nav */
 .bot-nav{display:flex;background:var(--paper-card);border-top:1px solid var(--line);padding:6px 0 calc(6px + var(--safe-b));position:fixed;left:0;right:0;bottom:0;z-index:100;box-shadow:0 -2px 8px rgba(18,35,59,.06)}
-.bot-nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.01em;padding:4px 2px;cursor:pointer;transition:color .15s}
+.bot-nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-weight:700;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.01em;padding:4px 2px;cursor:pointer;transition:color .15s}
 .bot-nav a.on{color:var(--accent)}
 .bot-nav a .ic-n{transition:color .15s}
 @media(min-width:768px){.bot-nav{display:none}}
@@ -1452,6 +1452,8 @@ const IC = {
   genderF:  '<circle cx="12" cy="8" r="5"/><line x1="12" y1="13" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/>',
   genderM:  '<circle cx="10" cy="14" r="6"/><line x1="14.5" y1="9.5" x2="20" y2="4"/><polyline points="14 4 20 4 20 10"/>',
   eye:      '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  pray:     '<path d="M7 21c0-3 1-5 3-6.5M17 21c0-3-1-5-3-6.5M8.5 14.5 7 9c-.4-1.4.3-2.6 1.4-2.9.9-.2 1.7.3 2 1.2L12 11l1.6-3.7c.3-.9 1.1-1.4 2-1.2C16.7 6.4 17.4 7.6 17 9l-1.5 5.5"/>',
+  plus:     '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
 };
 function icN(k){ return `<svg class="ic-n" viewBox="0 0 24 24">${IC[k]||''}</svg>`; }
 function icS(k){ return `<svg class="ic-s" viewBox="0 0 24 24">${IC[k]||''}</svg>`; }
@@ -1483,16 +1485,18 @@ function navItems() {
   // My Connections | Health | Birthdays. No Connect Setup / Trends / Import.
   if (u.role === 'leader') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
-    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:8px">Connections</span></span>' },
+    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:7.5px">Connections</span></span>' },
     { id:'at-risk',    ic:'heart',    label:'Health',            mbl:'Health' },
+    { id:'prayers',    ic:'pray',     label:'Prayers',           mbl:'Prayers' },
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
   ];
   // Grade: Home | Health | My Students | Connect Setup  (Trends + Birthdays in quick actions)
   if (u.role === 'grade') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
     { id:'at-risk',    ic:'heart',    label:'Health',            mbl:'Health' },
-    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:8px">Connections</span></span>' },
-    { id:'leaders',    ic:'arrr',     label:'Connect Setup',     mbl:'<span class="ni-lbl"><span>Connect</span><span style="opacity:.75;font-size:8px">Setup</span></span>' },
+    { id:'prayers',    ic:'pray',     label:'Prayers',           mbl:'Prayers' },
+    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:7.5px">Connections</span></span>' },
+    { id:'leaders',    ic:'arrr',     label:'Setup',              mbl:'Setup' },
     // quick actions:
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays' },
@@ -1501,21 +1505,23 @@ function navItems() {
   if (u.role === 'quad') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
     { id:'at-risk',    ic:'heart',    label:'Health',            mbl:'Health' },
+    { id:'prayers',    ic:'pray',     label:'Prayers',           mbl:'Prayers' },
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
-    { id:'leaders',    ic:'arrr',     label:'Connect Setup',     mbl:'<span class="ni-lbl"><span>Connect</span><span style="opacity:.75;font-size:8px">Setup</span></span>' },
+    { id:'leaders',    ic:'arrr',     label:'Setup',              mbl:'Setup' },
     // quick actions:
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
-    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:8px">Connections</span></span>' },
+    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:7.5px">Connections</span></span>' },
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays', wide:true },
   ];
   // Admin: Home | Health | Trends | Connect Setup + quick actions
   if (u.role === 'admin') return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
     { id:'at-risk',    ic:'heart',    label:'Health',            mbl:'Health' },
+    { id:'prayers',    ic:'pray',     label:'Prayers',           mbl:'Prayers' },
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
-    { id:'leaders',    ic:'arrr',     label:'Connect Setup',     mbl:'<span class="ni-lbl"><span>Connect</span><span style="opacity:.75;font-size:8px">Setup</span></span>' },
+    { id:'leaders',    ic:'arrr',     label:'Setup',              mbl:'Setup' },
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
-    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:8px">Connections</span></span>' },
+    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:7.5px">Connections</span></span>' },
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
     { id:'admin',      ic:'settings', label:'Admin Settings',     mbl:'Settings' },
     ...(caOn ? [caItem] : []), /*CA-HOOK*/
@@ -1525,17 +1531,18 @@ function navItems() {
   return [
     { id:'home',       ic:'home',     label:'Home',              mbl:'Home' },
     { id:'at-risk',    ic:'heart',    label:'Health',            mbl:'Health' },
+    { id:'prayers',    ic:'pray',     label:'Prayers',           mbl:'Prayers' },
     { id:'trends',     ic:'chart',    label:'Trends',            mbl:'Trends' },
-    { id:'leaders',    ic:'arrr',     label:'Connect Setup',     mbl:'<span class="ni-lbl"><span>Connect</span><span style="opacity:.75;font-size:8px">Setup</span></span>' },
+    { id:'leaders',    ic:'arrr',     label:'Setup',              mbl:'Setup' },
     { id:'students',   ic:'id',       label:'Student Search',    mbl:'Student Search' },
-    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:8px">Connections</span></span>' },
+    { id:'my-students',ic:'users',    label:'My Connections',    mbl:'<span class="ni-lbl"><span>My</span><span style="opacity:.75;font-size:7.5px">Connections</span></span>' },
     { id:'import',     ic:'upload',   label:'Import',            mbl:'Import' },
     ...(caOn ? [caItem] : []), /*CA-HOOK*/
     { id:'birthdays',  ic:'cake',     label:'Upcoming Birthdays',mbl:'Birthdays', wide:true },
   ];
 }
-function bottomNavItems() { return navItems().slice(0, 4); }
-function quickActionItems() { return navItems().slice(4); }
+function bottomNavItems() { return navItems().slice(0, 5); }
+function quickActionItems() { return navItems().slice(5); }
 
 // shell() is kept for compatibility — the persistent shell is set up by _initShell().
 // All setApp(shell(x)) calls now just update <main id="page-main"> with x.
