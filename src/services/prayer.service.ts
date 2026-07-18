@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
-import { assertCan, canAccessStudent, type StructureScope } from './access-control';
+import { assertCan, canAccessStudent, canAccessGeneralPrayer, generalPrayerCreatorScope,
+  type StructureScope } from './access-control';
 import { MINISTRY_CONFIG_DEFAULTS } from '../core/ministry-config';
-import type { IPrayerRepository, IStudentRepository, ISettingsRepository } from '../repositories/interfaces/entity-repositories';
+import type { IPrayerRepository, IStudentRepository, ISettingsRepository,
+  IConnectionRepository } from '../repositories/interfaces/entity-repositories';
 import type { PrayerRequest, PrayerWithStudent } from '../core/entities/prayer';
 import type { Student } from '../core/entities/student';
 import type { Actor } from '../core/entities/user';
@@ -43,10 +45,20 @@ export function makePrayerService(
   repo: IPrayerRepository,
   studentRepo: IStudentRepository,
   settingsRepo?: ISettingsRepository,
+  connRepo?: IConnectionRepository,
 ): PrayerService {
   async function structureScope(): Promise<StructureScope> {
     if (!settingsRepo) return MINISTRY_CONFIG_DEFAULTS.structure;
     return (await settingsRepo.getSettings()).ministryConfig.structure;
+  }
+
+  // A junior leader (§5.2) has no grade/gender of their own — canAccessStudent
+  // always returns false for role 'leader' (it isn't one of canAccessGrade's
+  // cases), so scope them the same way every other service does: via their own
+  // connections, not grade/gender.
+  async function canLeaderAccessStudent(actor: Actor, studentId: string): Promise<boolean> {
+    if (!connRepo || !actor.leaderId) return false;
+    return (await connRepo.findByStudentAndLeader(studentId, actor.leaderId)) != null;
   }
 
   // Load the student a prayer is for and assert the actor may access them. A
@@ -56,16 +68,27 @@ export function makePrayerService(
     if (studentId == null) return null;
     const s = await studentRepo.findById(studentId);
     if (!s) throw new NotFoundError('Student not found');
-    if (!canAccessStudent(actor, s.grade, s.gender, structure)) {
-      throw new ForbiddenError('Access denied to this student');
-    }
+    const allowed = actor.role === 'leader'
+      ? await canLeaderAccessStudent(actor, studentId)
+      : canAccessStudent(actor, s.grade, s.gender, structure);
+    if (!allowed) throw new ForbiddenError('Access denied to this student');
     return s;
   }
 
   async function loadInScope(actor: Actor, id: string, structure: StructureScope): Promise<PrayerRequest> {
     const p = await repo.findById(id);
     if (!p) throw new NotFoundError('Prayer not found');
-    await studentInScope(actor, p.studentId, structure); // throws Forbidden if out of scope
+    if (p.studentId == null) {
+      // General prayer: same visibility rule as list() applies to edit/delete/
+      // mark-answered too, not just reads — otherwise a grade/quad actor could
+      // act on a general prayer outside their own domain that they can't even
+      // see, by guessing/enumerating its id.
+      if (!canAccessGeneralPrayer(actor, p.createdByGrades, p.createdByGender, structure)) {
+        throw new ForbiddenError('Access denied to this prayer');
+      }
+    } else {
+      await studentInScope(actor, p.studentId, structure); // throws Forbidden if out of scope
+    }
     return p;
   }
 
@@ -76,16 +99,27 @@ export function makePrayerService(
         repo.findAll(), studentRepo.findAll(), structureScope(),
       ]);
       const byId = new Map(students.map((s) => [s.id, s]));
+      // Junior leader: resolve their own connected-student set once instead of
+      // per-row (canAccessStudent can't scope role 'leader' at all — see
+      // canLeaderAccessStudent above).
+      const myStudentIds = (actor.role === 'leader' && connRepo && actor.leaderId)
+        ? new Set((await connRepo.findByLeader(actor.leaderId)).map((c) => c.studentId))
+        : null;
       const out: PrayerWithStudent[] = [];
       for (const p of all) {
         if (p.studentId == null) {
-          // General/whole-group prayer — no student to scope through, visible to all.
+          // General/whole-group prayer — scoped by the creator's own grade+gender
+          // domain (a leader always passes, same as before — see canAccessGeneralPrayer).
+          if (!canAccessGeneralPrayer(actor, p.createdByGrades, p.createdByGender, structure)) continue;
           out.push({ ...p, student: null });
           continue;
         }
         const s = byId.get(p.studentId);
         if (!s) continue; // orphan (student deleted) — not the same as an intentional general prayer
-        if (!canAccessStudent(actor, s.grade, s.gender, structure)) continue;
+        const allowed = actor.role === 'leader'
+          ? (myStudentIds?.has(p.studentId) ?? false)
+          : canAccessStudent(actor, s.grade, s.gender, structure);
+        if (!allowed) continue;
         out.push({ ...p, student: summary(s) });
       }
       out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -106,6 +140,9 @@ export function makePrayerService(
       const studentId = data.studentId ?? null;
       const structure = await structureScope();
       await studentInScope(actor, studentId, structure);
+      // Captured for every prayer (cheap), but only read back for a general one
+      // (studentId null) — a student-linked prayer scopes through the student.
+      const creatorScope = generalPrayerCreatorScope(actor, structure);
       const now = new Date().toISOString();
       const prayer: PrayerRequest = {
         id: generateId(),
@@ -115,6 +152,8 @@ export function makePrayerService(
         answerNote: null,
         createdByLabel: data.createdByLabel ?? actor.displayName ?? '',
         createdByRole: actor.role,
+        createdByGrades: creatorScope.grades,
+        createdByGender: creatorScope.gender,
         createdAt: now,
         updatedAt: now,
         answeredAt: null,
@@ -166,7 +205,9 @@ export function makePrayerService(
     },
 
     async importCsv(actor, rows) {
-      assertCan(actor, 'prayer:import');
+      assertCan(actor, 'prayer:import'); // admin-only, so this is always the wide-open ministry scope
+      const structure = await structureScope();
+      const creatorScope = generalPrayerCreatorScope(actor, structure);
       const parsed = parsePrayerRows(z.array(z.record(z.unknown())).parse(rows));
       const [students, existing] = await Promise.all([studentRepo.findAll(), repo.findAll()]);
       const plan = planPrayerImport(parsed, students, existing);
@@ -180,6 +221,8 @@ export function makePrayerService(
           answerNote: a.answerNote,
           createdByLabel: a.createdByLabel,
           createdByRole: actor.role,
+          createdByGrades: creatorScope.grades,
+          createdByGender: creatorScope.gender,
           createdAt: now,
           updatedAt: now,
           answeredAt: a.status === 'answered' ? now : null,

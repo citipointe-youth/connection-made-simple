@@ -234,3 +234,53 @@ export function canAccessGender(actor: Actor, gender: string, structure?: Struct
 export function canAccessStudent(actor: Actor, grade: number | null, gender: string, structure?: StructureScope): boolean {
   return canAccessGrade(actor, grade, structure) && canAccessGender(actor, gender, structure);
 }
+
+/**
+ * The grade+gender "domain" a general (no-student) prayer inherits from its
+ * creator, captured at creation time (prayer.service.ts's `create()`) since we
+ * don't keep a live reference to the creating user. `grades: null` + `gender:
+ * null` together mean "no boundary" (admin/director, or a junior leader — see
+ * below) — a general prayer created by one of those is visible to everyone.
+ */
+export function generalPrayerCreatorScope(
+  actor: Actor,
+  structure?: StructureScope,
+): { grades: number[] | null; gender: 'male' | 'female' | null } {
+  if (actor.role === 'grade') {
+    const grades = actorGrades(actor);
+    return { grades: grades.length ? grades : null, gender: genderScopeOf(actor, structure) };
+  }
+  if (actor.role === 'quad') {
+    const grades = quadGradesOf(actor.quad);
+    return { grades: grades.length ? grades : null, gender: genderScopeOf(actor, structure) };
+  }
+  // admin/director have no grade/gender boundary of their own (ministry-wide).
+  // A junior `leader` is bound to one Leader record, not a grade/gender cohort —
+  // there's no meaningful boundary to derive, so it's left wide open too (same
+  // as before this scoping existed; unchanged on purpose, not asked for).
+  return { grades: null, gender: null };
+}
+
+/**
+ * Can `actor` see a general (no-student) prayer created by someone with the
+ * given creator scope (from `generalPrayerCreatorScope`)? admin/director/leader
+ * viewers always can. A grade/quad viewer can see it only if their own
+ * grade+gender domain overlaps the creator's — e.g. a quad's general prayer is
+ * visible to the grade logins within that quad's bracket+gender (and to other
+ * quads/grades that happen to share both), but not to a different gender or a
+ * non-overlapping grade bracket.
+ */
+export function canAccessGeneralPrayer(
+  actor: Actor,
+  createdByGrades: number[] | null,
+  createdByGender: 'male' | 'female' | null,
+  structure?: StructureScope,
+): boolean {
+  if (actor.role === 'admin' || actor.role === 'director' || actor.role === 'leader') return true;
+  if (createdByGrades == null && createdByGender == null) return true;
+  const viewerGrades = actor.role === 'quad' ? quadGradesOf(actor.quad) : actorGrades(actor);
+  if (!(createdByGrades ?? []).some((g) => viewerGrades.includes(g))) return false;
+  const viewerGender = genderScopeOf(actor, structure);
+  if (createdByGender != null && viewerGender != null && createdByGender !== viewerGender) return false;
+  return true;
+}

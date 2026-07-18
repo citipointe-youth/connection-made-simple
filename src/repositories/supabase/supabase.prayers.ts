@@ -13,6 +13,9 @@ function toPrayer(row: Record<string, unknown>): PrayerRequest {
     answerNote: (row['answer_note'] as string | null) ?? null,
     createdByLabel: (row['created_by_label'] as string | null) ?? '',
     createdByRole: row['created_by_role'] as UserRole,
+    // jsonb column; postgres.js returns it already parsed (array) or null.
+    createdByGrades: (row['created_by_grades'] as number[] | null) ?? null,
+    createdByGender: (row['created_by_gender'] as 'male' | 'female' | null) ?? null,
     createdAt: toIso(row['created_at']),
     updatedAt: toIso(row['updated_at']),
     answeredAt: row['answered_at'] ? toIso(row['answered_at']) : null,
@@ -40,17 +43,25 @@ export class SupabasePrayerRepository implements IPrayerRepository {
   }
 
   async save(p: PrayerRequest): Promise<PrayerRequest> {
+    // created_by_grades is a nullable jsonb column — write via sql.json(), never
+    // `${JSON.stringify(arr)}::jsonb` (double-encodes; see supabase.users.ts's
+    // `grades` column for the same gotcha, and the 2026-07-11 config-lockout bug).
+    const gradesParam = p.createdByGrades == null
+      ? null
+      : this.sql.json(p.createdByGrades as unknown as Parameters<typeof this.sql.json>[0]);
     const rows = await this.sql`
-      insert into prayer_requests (id, student_id, text, status, answer_note, created_by_label, created_by_role, created_at, updated_at, answered_at)
-      values (${p.id}, ${p.studentId}, ${p.text}, ${p.status}, ${p.answerNote ?? null}, ${p.createdByLabel}, ${p.createdByRole}, ${p.createdAt}, ${p.updatedAt}, ${p.answeredAt ?? null})
+      insert into prayer_requests (id, student_id, text, status, answer_note, created_by_label, created_by_role, created_by_grades, created_by_gender, created_at, updated_at, answered_at)
+      values (${p.id}, ${p.studentId}, ${p.text}, ${p.status}, ${p.answerNote ?? null}, ${p.createdByLabel}, ${p.createdByRole}, ${gradesParam}, ${p.createdByGender ?? null}, ${p.createdAt}, ${p.updatedAt}, ${p.answeredAt ?? null})
       on conflict (id) do update set
-        text            = excluded.text,
-        status          = excluded.status,
-        answer_note     = excluded.answer_note,
-        created_by_label= excluded.created_by_label,
-        created_by_role = excluded.created_by_role,
-        updated_at      = excluded.updated_at,
-        answered_at     = excluded.answered_at
+        text              = excluded.text,
+        status            = excluded.status,
+        answer_note       = excluded.answer_note,
+        created_by_label  = excluded.created_by_label,
+        created_by_role   = excluded.created_by_role,
+        created_by_grades = excluded.created_by_grades,
+        created_by_gender = excluded.created_by_gender,
+        updated_at        = excluded.updated_at,
+        answered_at       = excluded.answered_at
       returning *
     `;
     return toPrayer(rows[0]!);

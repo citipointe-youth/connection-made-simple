@@ -13,6 +13,7 @@ const student = (id: string, first: string, grade: number, gender: string): Stud
 const prayer = (id: string, sid: string | null, text: string): PrayerRequest => ({
   id, studentId: sid, text, status: 'open', answerNote: null,
   createdByLabel: 'Sarah', createdByRole: 'grade',
+  createdByGrades: null, createdByGender: null,
   createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z', answeredAt: null,
 });
 

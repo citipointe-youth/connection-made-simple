@@ -201,7 +201,7 @@ export async function buildContainer(): Promise<Container> {
   const auth = makeAuthService(users);
   const student = makeStudentService(students, settings, connections);
   const leader = makeLeaderService(leaders);
-  const prayer = makePrayerService(prayers, students, settings);
+  const prayer = makePrayerService(prayers, students, settings, connections);
   const connection = makeConnectionService(connections, students, leaders, settings);
   const followup = makeFollowupService(
     connections, students, leaders,

@@ -5,6 +5,7 @@ import type { PrayerRequest } from '../core/entities/prayer';
 const mk = (id: string, studentId: string): PrayerRequest => ({
   id, studentId, text: 't', status: 'open', answerNote: null,
   createdByLabel: 'Sarah', createdByRole: 'grade',
+  createdByGrades: null, createdByGender: null,
   createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z', answeredAt: null,
 });
 
