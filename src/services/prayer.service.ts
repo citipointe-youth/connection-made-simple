@@ -11,7 +11,7 @@ import { buildPrayerCsvRows, parsePrayerRows, planPrayerImport,
   type PrayerCsvRow, type PrayerImportReport } from './prayer-allocations';
 
 const CreateSchema = z.object({
-  studentId: z.string().min(1),
+  studentId: z.string().min(1).nullable().optional(),
   text: z.string().min(1).max(1000),
   createdByLabel: z.string().max(120).optional(),
 });
@@ -49,8 +49,11 @@ export function makePrayerService(
     return (await settingsRepo.getSettings()).ministryConfig.structure;
   }
 
-  // Load the student a prayer is for and assert the actor may access them.
-  async function studentInScope(actor: Actor, studentId: string, structure: StructureScope): Promise<Student> {
+  // Load the student a prayer is for and assert the actor may access them. A
+  // null studentId (a general/whole-group prayer) has no scope to resolve —
+  // it's visible to anyone with prayer:read, so this is a no-op for it.
+  async function studentInScope(actor: Actor, studentId: string | null, structure: StructureScope): Promise<Student | null> {
+    if (studentId == null) return null;
     const s = await studentRepo.findById(studentId);
     if (!s) throw new NotFoundError('Student not found');
     if (!canAccessStudent(actor, s.grade, s.gender, structure)) {
@@ -75,8 +78,13 @@ export function makePrayerService(
       const byId = new Map(students.map((s) => [s.id, s]));
       const out: PrayerWithStudent[] = [];
       for (const p of all) {
+        if (p.studentId == null) {
+          // General/whole-group prayer — no student to scope through, visible to all.
+          out.push({ ...p, student: null });
+          continue;
+        }
         const s = byId.get(p.studentId);
-        if (!s) continue;
+        if (!s) continue; // orphan (student deleted) — not the same as an intentional general prayer
         if (!canAccessStudent(actor, s.grade, s.gender, structure)) continue;
         out.push({ ...p, student: summary(s) });
       }
@@ -95,12 +103,13 @@ export function makePrayerService(
     async create(actor, input) {
       assertCan(actor, 'prayer:write');
       const data = CreateSchema.parse(input);
+      const studentId = data.studentId ?? null;
       const structure = await structureScope();
-      await studentInScope(actor, data.studentId, structure);
+      await studentInScope(actor, studentId, structure);
       const now = new Date().toISOString();
       const prayer: PrayerRequest = {
         id: generateId(),
-        studentId: data.studentId,
+        studentId,
         text: data.text,
         status: 'open',
         answerNote: null,

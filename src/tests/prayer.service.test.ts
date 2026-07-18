@@ -36,8 +36,8 @@ describe('PrayerService scoping + CRUD', () => {
     await s.create(ADMIN, { studentId: 'jake', text: 'boy' });
     await s.create(ADMIN, { studentId: 'mia', text: 'senior' });
     const list = await s.list(G9F);
-    expect(list.map((p) => p.student.id)).toEqual(['ava']);
-    expect(list[0]!.student.firstName).toBe('ava');
+    expect(list.map((p) => p.student?.id)).toEqual(['ava']);
+    expect(list[0]!.student!.firstName).toBe('ava');
   });
 
   it('grade login is forbidden from creating a prayer out of scope', async () => {
@@ -76,5 +76,30 @@ describe('PrayerService scoping + CRUD', () => {
     await expect(s.update(G9F, p.id, { text: '' })).rejects.toThrow();
     await s.remove(G9F, p.id);
     await expect(s.listByStudent(G9F, 'ava')).resolves.toEqual([]);
+  });
+
+  it('a general prayer (no student) is creatable by any role and visible to everyone', async () => {
+    const { s } = await svc([student('ava', 9, 'female')]);
+    const created = await s.create(G9F, { text: 'Pray for the whole youth group' });
+    expect(created.studentId).toBeNull();
+
+    const asGrade = await s.list(G9F);
+    const asAdmin = await s.list(ADMIN);
+    const asOtherGrade = await s.list(actor('grade', { grade: 12, gender: 'male' }));
+    for (const list of [asGrade, asAdmin, asOtherGrade]) {
+      expect(list.map((p) => p.id)).toContain(created.id);
+      expect(list.find((p) => p.id === created.id)!.student).toBeNull();
+    }
+  });
+
+  it('a general prayer can be edited, marked answered, and deleted without scope checks', async () => {
+    const { s } = await svc([]);
+    const p = await s.create(ADMIN, { text: 'general' });
+    const upd = await s.update(G9F, p.id, { text: 'updated general' });
+    expect(upd.text).toBe('updated general');
+    const ans = await s.setStatus(G9F, p.id, { status: 'answered' });
+    expect(ans.status).toBe('answered');
+    await s.remove(G9F, p.id);
+    await expect(s.list(ADMIN)).resolves.toEqual([]);
   });
 });

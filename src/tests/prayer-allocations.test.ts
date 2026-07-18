@@ -10,7 +10,7 @@ const student = (id: string, first: string, grade: number, gender: string): Stud
   prevSvcAttended: 0, prevSvcTotal: 0, prevGrpAttended: 0, prevGrpTotal: 0,
   atRiskStatus: null, dataSource: null, createdAt: '', updatedAt: '',
 });
-const prayer = (id: string, sid: string, text: string): PrayerRequest => ({
+const prayer = (id: string, sid: string | null, text: string): PrayerRequest => ({
   id, studentId: sid, text, status: 'open', answerNote: null,
   createdByLabel: 'Sarah', createdByRole: 'grade',
   createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z', answeredAt: null,
@@ -38,5 +38,22 @@ describe('prayer CSV round-trip', () => {
     expect(plan.report.added).toBe(1);
     expect(plan.report.skippedDuplicates).toBe(1);
     expect(plan.report.unmatched.map((u) => u.name)).toEqual(['Ghost X']);
+  });
+
+  it('exports a general (no-student) prayer with blank name fields', () => {
+    const rows = buildPrayerCsvRows([prayer('p1', null, 'pray for the group')], []);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ firstName: '', lastName: '', grade: null, gender: '', prayer: 'pray for the group' });
+  });
+
+  it('a blank-name row round-trips into a general prayer, not an unmatched student', () => {
+    const parsed = parsePrayerRows([
+      { 'first name': '', 'last name': '', prayer: 'pray for the group', status: 'open' },
+    ]);
+    const plan = planPrayerImport(parsed, [student('s1', 'Ava', 9, 'female')], []);
+    expect(plan.toAdd).toHaveLength(1);
+    expect(plan.toAdd[0]!.studentId).toBeNull();
+    expect(plan.report.unmatched).toHaveLength(0);
+    expect(plan.report.added).toBe(1);
   });
 });

@@ -27,7 +27,7 @@ export interface ParsedPrayerRow {
 }
 
 export interface PrayerToAdd {
-  studentId: string;
+  studentId: string | null;
   text: string;
   status: PrayerStatus;
   answerNote: string | null;
@@ -68,6 +68,16 @@ export function buildPrayerCsvRows(prayers: PrayerRequest[], students: Student[]
   const byId = new Map(students.map((s) => [s.id, s]));
   const rows: PrayerCsvRow[] = [];
   for (const p of prayers) {
+    if (p.studentId == null) {
+      // General/whole-group prayer — no student to name-match on re-import;
+      // blank name fields round-trip back to a general prayer (see planPrayerImport).
+      rows.push({
+        firstName: '', lastName: '', grade: null, gender: '',
+        prayer: p.text, status: p.status, answerNote: p.answerNote ?? '',
+        addedBy: p.createdByLabel, date: (p.createdAt || '').slice(0, 10),
+      });
+      continue;
+    }
     const s = byId.get(p.studentId);
     if (!s) continue; // orphan (student deleted) — nothing to name-match on re-import
     rows.push({
@@ -124,10 +134,20 @@ export function planPrayerImport(
     const k = norm(s.firstName, s.lastName);
     (byName.get(k) ?? byName.set(k, []).get(k)!).push(s);
   }
-  const existingKeys = new Set(existing.map((p) => `${p.studentId} ${p.text.toLowerCase().trim()}`));
+  const existingKeys = new Set(existing.map((p) => `${p.studentId ?? 'null'} ${p.text.toLowerCase().trim()}`));
   const report: PrayerImportReport = { rowsInFile: parsed.length, added: 0, skippedDuplicates: 0, unmatched: [], ambiguous: [] };
   const toAdd: PrayerToAdd[] = [];
   for (const r of parsed) {
+    // No name at all -> a general/whole-group prayer (round-trips from
+    // buildPrayerCsvRows' blank-name export), not an unmatched student.
+    if (!r.firstName && !r.lastName) {
+      const key = `null ${r.text.toLowerCase().trim()}`;
+      if (existingKeys.has(key)) { report.skippedDuplicates++; continue; }
+      existingKeys.add(key);
+      toAdd.push({ studentId: null, text: r.text, status: r.status, answerNote: r.answerNote || null, createdByLabel: r.addedBy });
+      report.added++;
+      continue;
+    }
     const matches = byName.get(norm(r.firstName, r.lastName)) ?? [];
     const displayName = `${r.firstName} ${r.lastName}`.trim();
     if (matches.length === 0) { report.unmatched.push({ row: r.rowNum, name: displayName }); continue; }

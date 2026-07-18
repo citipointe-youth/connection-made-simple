@@ -5,7 +5,10 @@ export type PrayerStatus = 'open' | 'answered' | 'archived';
 
 export interface PrayerRequest {
   id: ID;
-  studentId: ID;
+  // null = not tied to a specific student (e.g. someone outside the app, or a
+  // whole-group request) — visible to every actor with prayer:read, since there's
+  // no student scope to resolve it through.
+  studentId: ID | null;
   text: string;
   status: PrayerStatus;
   answerNote: string | null;
@@ -17,5 +20,5 @@ export interface PrayerRequest {
 }
 
 export interface PrayerWithStudent extends PrayerRequest {
-  student: { id: ID; firstName: string; lastName: string; grade: number | null; gender: string };
+  student: { id: ID; firstName: string; lastName: string; grade: number | null; gender: string } | null;
 }

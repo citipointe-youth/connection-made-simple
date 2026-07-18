@@ -7,7 +7,7 @@ import type { UserRole } from '../../core/types/enums';
 function toPrayer(row: Record<string, unknown>): PrayerRequest {
   return {
     id: row['id'] as string,
-    studentId: row['student_id'] as string,
+    studentId: (row['student_id'] as string | null) ?? null,
     text: row['text'] as string,
     status: (row['status'] as PrayerStatus) ?? 'open',
     answerNote: (row['answer_note'] as string | null) ?? null,
