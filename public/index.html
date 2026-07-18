@@ -168,6 +168,20 @@ input,select,textarea{font-family:inherit;font-size:inherit}
 .li-sub{font-size:12px;color:var(--ink-mid);margin-top:2px}
 .li-right{display:flex;align-items:center;gap:4px;flex-shrink:0}
 
+/* Prayers — dense single list, not gapped cards, so a whole cohort fits on one screen */
+.plist{background:var(--paper-card);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow);overflow:hidden;margin-bottom:12px}
+.prow{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.prow:last-child{border-bottom:none}
+.prow .pdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--accent)}
+.prow.answered .pdot{background:var(--success)}
+.prow .pmain{flex:1;min-width:0}
+.prow .pl1{font-size:13px;color:var(--ink-mid);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .pl1 b{font-weight:800;color:var(--ink)}
+.prow .pl2{font-size:10.5px;color:var(--ink-faint);line-height:1.2;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .pgo{flex-shrink:0;width:26px;height:26px;border-radius:8px;border:1px solid rgba(16,185,129,.35);background:var(--success-light);color:var(--success);display:grid;place-items:center}
+.prow .pans{flex-shrink:0;font-size:9.5px;font-weight:800;color:#15803d;background:var(--success-light);border-radius:20px;padding:3px 8px;text-transform:uppercase;letter-spacing:.03em}
+.pfab{position:fixed;right:16px;bottom:76px;z-index:90;background:var(--accent);color:#fff;font-weight:800;font-size:13px;padding:11px 16px;border-radius:24px;box-shadow:0 8px 20px rgba(26,26,242,.4);display:flex;align-items:center;gap:6px;border:none;cursor:pointer}
+
 /* Chips */
 .chip{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;line-height:1.5;white-space:nowrap}
 .c-accent{background:var(--accent-light);color:var(--accent-dark)}
@@ -1078,7 +1092,7 @@ function _prefetch() {
   // pooler the real problem is that a page's fan-out multiplies serverless instances ->
   // pooler client connections (the EMAXCONN / 200 ceiling). Collapsing login's prefetch
   // to a single request is the core of the 2026-07-05 incident fix (see CLAUDE.md).
-  API.batch(['/overview', '/students', '/leaders', '/connections', '/at-risk', '/trends', '/lifegroups/stats', '/import/history']);
+  API.batch(['/overview', '/students', '/leaders', '/connections', '/at-risk', '/trends', '/lifegroups/stats', '/import/history', '/prayers']);
 }
 
 // ============================================================
@@ -1335,6 +1349,16 @@ function fmtDM(d) {
   const dt = new Date(d);
   return dt.getUTCDate()+'/'+(dt.getUTCMonth()+1);
 }
+// Compact relative time for the Prayers list ("today", "3d", "2w").
+function _relTime(iso) {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  const days = Math.floor(ms / 86400000);
+  if (days <= 0) return 'today';
+  if (days < 7) return days + 'd';
+  if (days < 30) return Math.floor(days / 7) + 'w';
+  return Math.floor(days / 30) + 'mo';
+}
 
 // Quad helpers (gender + year bracket) — mirror backend quadGenderOf/quadGradesOf
 function quadGrades(q) { return (q === 'g79' || q === 'b79') ? [7, 8, 9] : (q === 'g1012' || q === 'b1012') ? [10, 11, 12] : []; }
@@ -1589,7 +1613,7 @@ async function render() {
   const p = S.page;
   // Junior leaders can only reach their own slim set of pages (§5.2) — bounce any
   // other route home (defence-in-depth; the server also scopes/403s their data).
-  if (S.user.role === 'leader' && !['home','my-students','at-risk','birthdays'].includes(p)) { go('home'); return; }
+  if (S.user.role === 'leader' && !['home','my-students','at-risk','prayers','birthdays'].includes(p)) { go('home'); return; }
   if (p && p.indexOf('ca-') === 0 && window.CA) { await CA.render(p); return; } /*CA-HOOK*/
   if (p==='home') await renderHome();
   else if (p==='leaders') await renderConnect();
@@ -1598,6 +1622,7 @@ async function render() {
   else if (p==='quad-view') go('leaders'); // merged into leaders
   else if (p==='my-quad') go('leaders');   // merged into leaders
   else if (p==='at-risk') await renderAtRisk();
+  else if (p==='prayers') await renderPrayers();
   else if (p==='students') await renderStudents();
   else if (p==='trends') await renderTrends();
   else if (p==='import') await renderImport();
@@ -3273,6 +3298,82 @@ async function renderAtRisk() {
     const el = document.getElementById('ar-name-filter');
     if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch {} }
   });
+}
+
+// ============================================================
+// PRAYERS
+// ============================================================
+const PRAYER_PATHS = ['/prayers'];
+// Cache of the last-rendered list, so the edit modal (Task 9) can look a prayer
+// up by id without a refetch — kept in sync at the top of _prayersHtml.
+let _prayerCache = [];
+let _prayersRevalidating = false;
+function _revalidatePrayers() {
+  if (_prayersRevalidating) return;
+  _prayersRevalidating = true;
+  API.batch(PRAYER_PATHS)
+    .then(() => { if (S.page === 'prayers') return renderPrayers(); })
+    .catch(() => {})
+    .finally(() => { _prayersRevalidating = false; });
+}
+async function renderPrayers() {
+  const _pg = S.page;
+  const allFresh = PRAYER_PATHS.every(p => Cache.get(p) !== null);
+  const haveStale = PRAYER_PATHS.every(p => Cache.getStale(p) !== null);
+  let list = [];
+  if (allFresh || haveStale) {
+    list = Cache.getStale('/prayers') || [];
+    if (!allFresh) _revalidatePrayers();
+  } else {
+    setApp(shell(''));
+    try { list = await API.get('/prayers'); } catch {}
+    if (S.page !== _pg) return;
+  }
+  setApp(shell(_prayersHtml(list)));
+}
+function _prayerRow(p) {
+  const answered = p.status === 'answered';
+  const who = `${p.student.firstName} ${p.student.lastName || ''}`.trim();
+  const yr = p.student.grade != null ? `Yr${p.student.grade}` : '';
+  const meta = [yr, p.createdByLabel, _relTime(p.createdAt)].filter(Boolean).join(' · ');
+  const right = answered
+    ? `<span class="pans">${icS('check')} Ans</span>`
+    : `<button class="pgo" onclick="event.stopPropagation();_markPrayerAnswered('${p.id}')" aria-label="Mark answered">${icS('check')}</button>`;
+  return `<div class="prow ${answered ? 'answered' : ''}" onclick="openPrayerModal(null,'${p.id}')">
+    <span class="pdot"></span>
+    <div class="pmain"><div class="pl1"><b>${esc(who)}</b> &mdash; ${esc(p.text)}</div><div class="pl2">${esc(meta)}</div></div>
+    ${right}
+  </div>`;
+}
+function _prayerSection(title, items) {
+  if (!items.length) return '';
+  return `<div class="sh">${esc(title)} <span style="color:var(--ink-faint)">${items.length}</span></div>
+    <div class="plist">${items.map(_prayerRow).join('')}</div>`;
+}
+function _prayersHtml(list) {
+  _prayerCache = list || [];
+  const open = _prayerCache.filter(p => p.status === 'open');
+  const answered = _prayerCache.filter(p => p.status === 'answered');
+  const archived = _prayerCache.filter(p => p.status === 'archived');
+  const body = _prayerCache.length
+    ? _prayerSection('Open', open) + _prayerSection('Answered', answered) +
+      (archived.length ? `<div class="drop" id="draw-arch">
+        <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 0;border-top:1px solid var(--paper-dark)" onclick="_drop('draw-arch')">
+          <span class="drop-chev">${icS('chevd')}</span>
+          <div style="flex:1;font-size:13px;font-weight:700">Archived</div>
+          <span style="font-size:12px;color:var(--ink-mid)">${archived.length}</span>
+        </div>
+        <div class="drop-body"><div class="plist">${archived.map(_prayerRow).join('')}</div></div>
+      </div>` : '')
+    : `<div class="empty">${icEmpty('pray')}<div class="empty-title">No prayer requests yet</div><div class="empty-sub">Tap "Add Prayer" to add one against a student.</div></div>`;
+  return `<div class="ph"><div class="ph-title">Prayers</div><div class="ph-sub">Shared across everyone you lead</div></div>
+    ${body}
+    <button class="pfab" onclick="openPrayerModal()">${icS('plus')} Add Prayer</button>`;
+}
+async function _markPrayerAnswered(id) {
+  await API.patch('/prayers/' + id + '/status', { status: 'answered' });
+  Cache.del('/prayers');
+  renderPrayers();
 }
 
 // Sections: Rising / Mixed (one stream up, one down) / Declining / Stopped (neither this term).
