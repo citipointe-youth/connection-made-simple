@@ -38,6 +38,11 @@ export interface ILeaderRepository extends IRepository<Leader> {
 
 export interface IPrayerRepository extends IRepository<PrayerRequest> {
   findByStudent(studentId: string): Promise<PrayerRequest[]>;
+  // M1 (2026-07-19): cascade-delete a student's prayers when the student
+  // itself is deleted, so they don't persist forever invisibly (list() skips
+  // an orphan) and undeletably (edit/delete throws NotFound for one). No-op
+  // if the student has no prayers.
+  deleteByStudent(studentId: string): Promise<void>;
   deleteAll(): Promise<void>;
 }
 

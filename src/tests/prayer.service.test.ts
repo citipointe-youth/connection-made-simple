@@ -69,6 +69,32 @@ describe('PrayerService scoping + CRUD', () => {
     expect(reopened.answeredAt).toBeNull();
   });
 
+  it('M2 (2026-07-19): archiving an answered prayer preserves answeredAt instead of wiping it', async () => {
+    const { s } = await svc([student('ava', 9, 'female')]);
+    const p = await s.create(ADMIN, { studentId: 'ava', text: 'x' });
+    const ans = await s.setStatus(ADMIN, p.id, { status: 'answered', answerNote: 'praise' });
+    expect(ans.answeredAt).not.toBeNull();
+    const archived = await s.setStatus(ADMIN, p.id, { status: 'archived' });
+    expect(archived.status).toBe('archived');
+    expect(archived.answeredAt).toBe(ans.answeredAt);
+  });
+
+  it('M2: archiving a never-answered (open) prayer does not fabricate an answeredAt', async () => {
+    const { s } = await svc([student('ava', 9, 'female')]);
+    const p = await s.create(ADMIN, { studentId: 'ava', text: 'x' });
+    const archived = await s.setStatus(ADMIN, p.id, { status: 'archived' });
+    expect(archived.status).toBe('archived');
+    expect(archived.answeredAt).toBeNull();
+  });
+
+  it('M2: answered -> open is a real un-answer and still clears answeredAt', async () => {
+    const { s } = await svc([student('ava', 9, 'female')]);
+    const p = await s.create(ADMIN, { studentId: 'ava', text: 'x' });
+    await s.setStatus(ADMIN, p.id, { status: 'answered' });
+    const reopened = await s.setStatus(ADMIN, p.id, { status: 'open' });
+    expect(reopened.answeredAt).toBeNull();
+  });
+
   it('grade login cannot read/edit an out-of-scope prayer by id', async () => {
     const { s } = await svc([student('mia', 10, 'female')]);
     const p = await s.create(ADMIN, { studentId: 'mia', text: 'senior' });
@@ -170,5 +196,101 @@ describe('PrayerService scoping + CRUD', () => {
     const p = await s.create(LEADER, { text: 'general from a leader' });
     expect((await s.list(LEADER)).map((x) => x.id)).toContain(p.id);
     expect((await s.list(G9F)).map((x) => x.id)).toContain(p.id); // leader-created = wide open
+  });
+
+  it('H2 (2026-07-19): a leader viewer does NOT see a grade-scoped general prayer, only unscoped ones', async () => {
+    const { s } = await svc([]);
+    const LEADER = actor('leader', { leaderId: 'leader-1' });
+    const gradeGeneral = await s.create(G9F, { text: 'grade9 girls general' });
+    const adminGeneral = await s.create(ADMIN, { text: 'ministry-wide general' });
+    const leaderList = (await s.list(LEADER)).map((x) => x.id);
+    expect(leaderList).not.toContain(gradeGeneral.id);
+    expect(leaderList).toContain(adminGeneral.id);
+  });
+
+  it("H1/M3 (2026-07-19): importCsv preserves an imported general prayer's original creator scope + timestamps when the CSV carries those columns", async () => {
+    const { s, prayers } = await svc([]);
+    const fileRow = {
+      'first name': '', 'last name': '', prayer: 'pray for grade 9 girls', status: 'answered',
+      'answer note': 'praise report', 'added by': 'Sarah',
+      'created by grades': '9', 'created by gender': 'female',
+      'created at': '2026-01-15T03:22:10.123Z', 'answered at': '2026-02-01T10:00:00.000Z',
+    };
+    const report = await s.importCsv(ADMIN, [fileRow]);
+    expect(report.added).toBe(1);
+    const all = await prayers.findAll();
+    expect(all).toHaveLength(1);
+    const p = all[0]!;
+    expect(p.createdByGrades).toEqual([9]);
+    expect(p.createdByGender).toBe('female');
+    expect(p.createdAt).toBe('2026-01-15T03:22:10.123Z');
+    expect(p.answeredAt).toBe('2026-02-01T10:00:00.000Z');
+  });
+
+  it("H1/M3: importCsv falls back to the importer's own (admin) scope + now() timestamps when the CSV lacks fidelity columns (old export)", async () => {
+    const { s, prayers } = await svc([]);
+    const fileRow = { 'first name': '', 'last name': '', prayer: 'pray for the group', status: 'open' };
+    const before = Date.now();
+    await s.importCsv(ADMIN, [fileRow]);
+    const all = await prayers.findAll();
+    expect(all).toHaveLength(1);
+    expect(all[0]!.createdByGrades).toBeNull();
+    expect(all[0]!.createdByGender).toBeNull();
+    expect(new Date(all[0]!.createdAt).getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it('regression (2026-07-18): create() with createdByLabel OMITTED defaults to the actor\'s own displayName, not a self-identified-leader label', async () => {
+    const { s } = await svc([student('ava', 9, 'female')]);
+    // The frontend used to send createdByLabel: <self-identified leader name>
+    // (a per-device "I am..." picker value, unrelated to the authenticated
+    // account). That was dropped 2026-07-18 so the server default below —
+    // the actual signed-in account's displayName — is now the ONLY source of
+    // this field when the caller omits it. Assert the default explicitly,
+    // not just that createdByLabel is truthy.
+    const p = await s.create(G9F, { studentId: 'ava', text: 'no label supplied' });
+    expect(p.createdByLabel).toBe(G9F.displayName);
+    expect(p.createdByLabel).toBe('T');
+  });
+
+  it('update/setStatus/remove on an out-of-scope prayer all throw ForbiddenError (id-enumeration guard)', async () => {
+    const { s } = await svc([student('mia', 10, 'female')]);
+    const p = await s.create(ADMIN, { studentId: 'mia', text: 'senior' });
+    await expect(s.setStatus(G9F, p.id, { status: 'answered' })).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(s.remove(G9F, p.id)).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('update/setStatus/remove on an unknown prayer id all throw NotFoundError', async () => {
+    const { s } = await svc([]);
+    await expect(s.update(ADMIN, 'no-such-id', { text: 'x' })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(s.setStatus(ADMIN, 'no-such-id', { status: 'answered' })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(s.remove(ADMIN, 'no-such-id')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('a junior leader loses access to a connected student\'s prayer once the connection is removed', async () => {
+    const { s, connRepo } = await svc([student('ava', 9, 'female')]);
+    const LEADER = actor('leader', { leaderId: 'leader-1' });
+    await connRepo.save({ id: 'c1', studentId: 'ava', leaderId: 'leader-1', assignedByRole: 'admin', createdAt: '2026-07-18T00:00:00.000Z' });
+
+    const p = await s.create(LEADER, { studentId: 'ava', text: 'ava prayer' });
+    // Still connected: the leader can read and act on it.
+    await expect(s.update(LEADER, p.id, { text: 'still mine' })).resolves.toMatchObject({ text: 'still mine' });
+    await expect(s.listByStudent(LEADER, 'ava')).resolves.toHaveLength(1);
+
+    await connRepo.deleteByStudentAndLeader('ava', 'leader-1');
+
+    await expect(s.update(LEADER, p.id, { text: 'z' })).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(s.setStatus(LEADER, p.id, { status: 'answered' })).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(s.listByStudent(LEADER, 'ava')).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('listByStudent returns a student\'s prayers for an in-scope actor, and throws ForbiddenError for an out-of-scope actor', async () => {
+    const { s } = await svc([student('ava', 9, 'female')]);
+    await s.create(ADMIN, { studentId: 'ava', text: 'p1' });
+    await s.create(ADMIN, { studentId: 'ava', text: 'p2' });
+
+    const inScope = await s.listByStudent(G9F, 'ava');
+    expect(inScope).toHaveLength(2);
+
+    await expect(s.listByStudent(G8M, 'ava')).rejects.toBeInstanceOf(ForbiddenError);
   });
 });

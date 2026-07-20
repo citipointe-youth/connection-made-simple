@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { makeStudentService } from '../services/student.service';
-import { InMemoryStudentRepository } from '../repositories/in-memory';
+import { InMemoryStudentRepository, InMemoryPrayerRepository } from '../repositories/in-memory';
 import type { Actor } from '../core/entities/user';
+import type { PrayerRequest } from '../core/entities/prayer';
 import { ForbiddenError, NotFoundError } from '../core/errors/app-error';
 
 function actor(role: string, opts: { grade?: number; quad?: string; gender?: 'male' | 'female' } = {}): Actor {
@@ -105,5 +106,42 @@ describe('Student Service — crossGrade (Connect Setup Add Students picker)', (
     const withCrossGrade = await svc.list(actor('quad', { quad: 'g79' }), { crossGrade: true });
     // Carol (Yr 10 girl) now included; Bob (male) still excluded regardless of grade.
     expect(withCrossGrade.map((s) => s.firstName).sort()).toEqual(['Alice', 'Carol']);
+  });
+});
+
+describe('Student Service — cascade delete of prayers on student removal (M1, 2026-07-19)', () => {
+  const mkPrayer = (id: string, studentId: string | null): PrayerRequest => ({
+    id, studentId, text: 't', status: 'open', answerNote: null,
+    createdByLabel: 'Sarah', createdByRole: 'admin',
+    createdByGrades: null, createdByGender: null,
+    createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z', answeredAt: null,
+  });
+
+  it("deleting a student removes their student-linked prayers; general (null-student) prayers are untouched", async () => {
+    const repo = new InMemoryStudentRepository();
+    await repo.init();
+    const prayerRepo = new InMemoryPrayerRepository();
+    await prayerRepo.init();
+    const svc = makeStudentService(repo, undefined, undefined, prayerRepo);
+
+    const s1 = await svc.create(ADMIN, { firstName: 'Alice', lastName: 'Smith', gender: 'female', grade: 9 });
+    const s2 = await svc.create(ADMIN, { firstName: 'Bob', lastName: 'Jones', gender: 'male', grade: 9 });
+    await prayerRepo.save(mkPrayer('p1', s1.id));
+    await prayerRepo.save(mkPrayer('p2', s1.id));
+    await prayerRepo.save(mkPrayer('p3', s2.id));
+    await prayerRepo.save(mkPrayer('p4', null)); // general prayer, no student
+
+    await svc.remove(ADMIN, s1.id);
+
+    const remaining = await prayerRepo.findAll();
+    expect(remaining.map((p) => p.id).sort()).toEqual(['p3', 'p4']);
+  });
+
+  it('remove() without a prayerRepo wired (optional arg) still deletes the student and does not throw', async () => {
+    const repo = new InMemoryStudentRepository();
+    await repo.init();
+    const svc = makeStudentService(repo); // no prayerRepo — mirrors existing test constructors
+    const s1 = await svc.create(ADMIN, { firstName: 'Alice', lastName: 'Smith', gender: 'female', grade: 9 });
+    await expect(svc.remove(ADMIN, s1.id)).resolves.toBeUndefined();
   });
 });

@@ -14,7 +14,7 @@ export function makePrayerController(deps: { prayer: PrayerService }) {
     },
     async listByStudent(req: HttpRequest) {
       if (!req.ctx) throw new UnauthorizedError();
-      return deps.prayer.listByStudent(req.ctx, req.params['id']!);
+      return deps.prayer.listByStudent(req.ctx, req.params['studentId']!);
     },
     async update(req: HttpRequest) {
       if (!req.ctx) throw new UnauthorizedError();

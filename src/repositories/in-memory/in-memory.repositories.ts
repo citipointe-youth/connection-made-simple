@@ -139,7 +139,19 @@ export class InMemoryPrayerRepository
   async findByStudent(studentId: string): Promise<PrayerRequest[]> {
     return Array.from(this.store.values())
       .filter((p) => p.studentId === studentId)
+      // L1 (2026-07-19): match SupabasePrayerRepository's `order by created_at
+      // desc` so behavior is identical across persistence modes — in-memory
+      // used to return unsorted.
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((p) => this.clone(p));
+  }
+
+  async deleteByStudent(studentId: string): Promise<void> {
+    const idsToDelete = Array.from(this.store.values())
+      .filter((p) => p.studentId === studentId)
+      .map((p) => p.id);
+    for (const id of idsToDelete) this.store.delete(id);
+    await this.writeToPersistence();
   }
 }
 

@@ -8,6 +8,7 @@ function toPrayer(row: Record<string, unknown>): PrayerRequest {
   return {
     id: row['id'] as string,
     studentId: (row['student_id'] as string | null) ?? null,
+    // Prayer text is stored plaintext at rest — see CLAUDE.md, Security notes
     text: row['text'] as string,
     status: (row['status'] as PrayerStatus) ?? 'open',
     answerNote: (row['answer_note'] as string | null) ?? null,
@@ -70,6 +71,14 @@ export class SupabasePrayerRepository implements IPrayerRepository {
   async delete(id: string): Promise<boolean> {
     const rows = await this.sql`delete from prayer_requests where id = ${id} returning id`;
     return rows.length > 0;
+  }
+
+  // M1 (2026-07-19): cascade-delete a student's prayers when the student
+  // itself is removed — called from student.service.ts's remove(). General
+  // (null student_id) prayers are untouched by construction (the WHERE clause
+  // never matches them).
+  async deleteByStudent(studentId: string): Promise<void> {
+    await this.sql`delete from prayer_requests where student_id = ${studentId}`;
   }
 
   async deleteAll(): Promise<void> {

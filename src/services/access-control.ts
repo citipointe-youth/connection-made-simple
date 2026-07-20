@@ -263,12 +263,25 @@ export function generalPrayerCreatorScope(
 
 /**
  * Can `actor` see a general (no-student) prayer created by someone with the
- * given creator scope (from `generalPrayerCreatorScope`)? admin/director/leader
+ * given creator scope (from `generalPrayerCreatorScope`)? admin/director
  * viewers always can. A grade/quad viewer can see it only if their own
  * grade+gender domain overlaps the creator's — e.g. a quad's general prayer is
  * visible to the grade logins within that quad's bracket+gender (and to other
  * quads/grades that happen to share both), but not to a different gender or a
  * non-overlapping grade bracket.
+ *
+ * A junior `leader` is deliberately NOT short-circuited to true here (H2,
+ * 2026-07-19 — it used to be, alongside admin/director, so a leader saw every
+ * general prayer ministry-wide). A leader has no grade/gender domain of their
+ * own, so falling through the normal logic below means they match ONLY the
+ * "no boundary" (createdByGrades==null && createdByGender==null) case — their
+ * own general prayers (a leader can only ever CREATE unscoped ones — see
+ * generalPrayerCreatorScope) plus admin/director's, and NOT another grade or
+ * quad's cohort-scoped ones. prayer.service.ts's loadInScope uses this same
+ * check for writes, so a leader can act on (edit/mark/delete) exactly the
+ * general prayers they can see this way — a stricter "only the ones THIS
+ * leader personally created" restriction isn't possible here, since
+ * PrayerRequest stores a creator SCOPE, not a creator id.
  */
 export function canAccessGeneralPrayer(
   actor: Actor,
@@ -276,10 +289,18 @@ export function canAccessGeneralPrayer(
   createdByGender: 'male' | 'female' | null,
   structure?: StructureScope,
 ): boolean {
-  if (actor.role === 'admin' || actor.role === 'director' || actor.role === 'leader') return true;
+  if (actor.role === 'admin' || actor.role === 'director') return true;
   if (createdByGrades == null && createdByGender == null) return true;
   const viewerGrades = actor.role === 'quad' ? quadGradesOf(actor.quad) : actorGrades(actor);
-  if (!(createdByGrades ?? []).some((g) => viewerGrades.includes(g))) return false;
+  // L2 (2026-07-19): only enforce grade overlap when createdByGrades is
+  // non-null — a null grades axis means "no boundary on grade", the same way
+  // the gender check below only compares when BOTH sides are non-null. The
+  // old `(createdByGrades ?? [])` treated a null grades axis as deny-all,
+  // asymmetric with the gender branch. This doesn't loosen any co-null or
+  // co-non-null case (those are unchanged — see the early return above and
+  // the test suite's dedicated coverage), only the otherwise-unreachable
+  // asymmetric case (grades null, gender set, or vice versa).
+  if (createdByGrades != null && !createdByGrades.some((g) => viewerGrades.includes(g))) return false;
   const viewerGender = genderScopeOf(actor, structure);
   if (createdByGender != null && viewerGender != null && createdByGender !== viewerGender) return false;
   return true;

@@ -92,7 +92,7 @@ export function buildRoutes(services: Services): Route[] {
     { method: 'POST',   path: '/prayers',              auth: true, handler: (r) => prayer.create(r) },
     { method: 'GET',    path: '/prayers/export',       auth: true, handler: (r) => prayer.exportCsv(r) },
     { method: 'POST',   path: '/prayers/import',       auth: true, handler: (r) => prayer.importCsv(r) },
-    { method: 'GET',    path: '/prayers/student/:id',  auth: true, handler: (r) => prayer.listByStudent(r) },
+    { method: 'GET',    path: '/prayers/student/:studentId',  auth: true, handler: (r) => prayer.listByStudent(r) },
     { method: 'PATCH',  path: '/prayers/:id',          auth: true, handler: (r) => prayer.update(r) },
     { method: 'PATCH',  path: '/prayers/:id/status',   auth: true, handler: (r) => prayer.setStatus(r) },
     { method: 'DELETE', path: '/prayers/:id',          auth: true, handler: (r) => prayer.remove(r) },

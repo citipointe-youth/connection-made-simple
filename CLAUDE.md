@@ -2018,6 +2018,11 @@ editor) reveals only ciphertext, while every service/export still sees plaintext
   holds the linked-project ref / pooler URL / tool versions and must stay out of git. Use explicit
   paths (not `git add -A`) when committing so untracked local dirs (`supabase/.temp/`, `_design/`)
   aren't swept in.
+- **Prayer-request text is stored plaintext at rest** — intentional decision, not an oversight.
+  Unlike `students.mobile` and `students.parent_phone` (which are AES-256-GCM encrypted), prayer
+  text is stored unencrypted in `prayer_requests.text` and appears as-is in CSV exports. No
+  audit trail of reads either. If requirements change in the future, revisit this decision
+  alongside the phone-field encryption pattern (`src/utils/field-crypto.ts`).
 - **Forced password change (2026-07-09).** `User.mustChangePassword` / `Actor.mustChangePassword`
   is embedded in the signed session token (`toActor()` in `auth.service.ts`) and enforced in
   `express-adapter.ts` right after `resolveContext`: any route without `allowMustChangePassword:

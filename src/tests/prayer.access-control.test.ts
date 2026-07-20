@@ -43,10 +43,15 @@ describe('canAccessGeneralPrayer', () => {
       expect(canAccessGeneralPrayer(viewer, null, null)).toBe(true);
     }
   });
-  it("admin/director/leader viewers see everything regardless of the creator's scope", () => {
-    for (const viewer of [A('admin'), A('director'), A('leader')]) {
+  it("admin/director viewers see everything regardless of the creator's scope", () => {
+    for (const viewer of [A('admin'), A('director')]) {
       expect(canAccessGeneralPrayer(viewer, [9], 'female')).toBe(true);
     }
+  });
+  it('H2 (2026-07-19): a leader viewer sees only unscoped (null/null) general prayers, not a grade/quad-scoped one', () => {
+    expect(canAccessGeneralPrayer(A('leader'), null, null)).toBe(true);
+    expect(canAccessGeneralPrayer(A('leader'), [9], 'female')).toBe(false);
+    expect(canAccessGeneralPrayer(A('leader'), [7, 8, 9], 'male')).toBe(false);
   });
   it('a grade-scoped prayer is visible only within the same grade+gender', () => {
     expect(canAccessGeneralPrayer(G9F, [9], 'female')).toBe(true);
@@ -59,5 +64,18 @@ describe('canAccessGeneralPrayer', () => {
     expect(canAccessGeneralPrayer(A('grade', { grade: 9, gender: 'female' }), [7, 8, 9], 'male')).toBe(false);
     expect(canAccessGeneralPrayer(A('grade', { grade: 10, gender: 'male' }), [7, 8, 9], 'male')).toBe(false);
     expect(canAccessGeneralPrayer(QB1012, [7, 8, 9], 'male')).toBe(false); // non-overlapping bracket
+  });
+
+  it('L2: a null grades axis imposes no grade boundary (symmetric with the gender branch)', () => {
+    // grades null, gender set — e.g. an ungendered grade login's general prayer
+    // (actorGrades non-empty, genderScopeOf null). Any grade may view it as
+    // long as gender matches (or the viewer is ungendered too).
+    expect(canAccessGeneralPrayer(A('grade', { grade: 9, gender: 'female' }), null, 'female')).toBe(true);
+    expect(canAccessGeneralPrayer(A('grade', { grade: 9, gender: 'male' }), null, 'female')).toBe(false);
+    // grades set, gender null — grade must still overlap; any gender passes.
+    expect(canAccessGeneralPrayer(A('grade', { grade: 9, gender: 'male' }), [9], null)).toBe(true);
+    expect(canAccessGeneralPrayer(A('grade', { grade: 8, gender: 'male' }), [9], null)).toBe(false);
+    // both null is still the pre-existing "wide open" shortcut.
+    expect(canAccessGeneralPrayer(A('grade', { grade: 9, gender: 'female' }), null, null)).toBe(true);
   });
 });

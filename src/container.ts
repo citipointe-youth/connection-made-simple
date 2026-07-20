@@ -199,7 +199,7 @@ export async function buildContainer(): Promise<Container> {
 
   // ----- Services -----
   const auth = makeAuthService(users);
-  const student = makeStudentService(students, settings, connections);
+  const student = makeStudentService(students, settings, connections, prayers);
   const leader = makeLeaderService(leaders);
   const prayer = makePrayerService(prayers, students, settings, connections);
   const connection = makeConnectionService(connections, students, leaders, settings);

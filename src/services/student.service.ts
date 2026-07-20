@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { generateId } from '../utils/id';
 import { assertCan, can, canAccessGender, canAccessStudent, type StructureScope } from './access-control';
-import type { IStudentRepository, ISettingsRepository, IConnectionRepository } from '../repositories/interfaces/entity-repositories';
+import type { IStudentRepository, ISettingsRepository, IConnectionRepository, IPrayerRepository } from '../repositories/interfaces/entity-repositories';
 import type { Student } from '../core/entities/student';
 import type { Actor } from '../core/entities/user';
 import type { AtRiskStatus } from '../core/types/enums';
@@ -36,7 +36,16 @@ function stripSensitive(s: Student): Student {
   return { ...s, mobile: null, parentPhone: null };
 }
 
-export function makeStudentService(repo: IStudentRepository, settingsRepo?: ISettingsRepository, connRepo?: IConnectionRepository): StudentService {
+export function makeStudentService(
+  repo: IStudentRepository,
+  settingsRepo?: ISettingsRepository,
+  connRepo?: IConnectionRepository,
+  // M1 (2026-07-19): optional so existing test constructors (makeStudentService(repo)
+  // / (repo, settingsRepo) / (repo, settingsRepo, connRepo)) keep working unchanged —
+  // the container always supplies it in production. When absent, remove() simply
+  // doesn't cascade-delete prayers (today's pre-M1 behaviour).
+  prayerRepo?: IPrayerRepository,
+): StudentService {
   // Structure config for scoping (cohortModel/genderPolicy, §5). Optional repo so
   // existing test harnesses constructing makeStudentService(repo) keep today's
   // all-defaults behaviour; the container always supplies it in production.
@@ -184,6 +193,11 @@ export function makeStudentService(repo: IStudentRepository, settingsRepo?: ISet
       assertCan(actor, 'student:write');
       const deleted = await repo.delete(id);
       if (!deleted) throw new NotFoundError('Student not found');
+      // M1: cascade-delete this student's prayers — otherwise they persist
+      // forever, invisible (list() skips an orphan) and undeletable (edit/
+      // delete throws NotFound for one). General (null-student) prayers are
+      // untouched — deleteByStudent's WHERE clause never matches them.
+      if (prayerRepo) await prayerRepo.deleteByStudent(id);
     },
 
     async search(actor, query) {
