@@ -3294,6 +3294,42 @@ function restoreArFilter() {
   } catch {}
 }
 
+// Same single-select grade/gender filter pattern as Health's _arFilter, applied
+// to the Prayers screen (item 3/4, 2026-07-23).
+let _prayerFilter = { grade: null, gender: null };
+function savePrayerFilter() {
+  try { sessionStorage.setItem('yap_prayer_filter', JSON.stringify(_prayerFilter)); } catch {}
+}
+function restorePrayerFilter() {
+  try {
+    const raw = sessionStorage.getItem('yap_prayer_filter');
+    if (raw) { const f = JSON.parse(raw); _prayerFilter.grade = f.grade || null; _prayerFilter.gender = f.gender || null; }
+  } catch {}
+}
+function setPrayerFilter(key, val) {
+  _prayerFilter[key] = val;
+  savePrayerFilter();
+  renderPrayers();
+}
+// A student-linked prayer passes if its student's grade/gender match the active
+// filter. A general (no-student) prayer passes if its createdByGrades/
+// createdByGender OVERLAP the filter (null on either axis = "no boundary",
+// always passes that axis) — mirrors canAccessGeneralPrayer's own "no boundary"
+// semantics (access-control.ts) so the filter behaves consistently with what's
+// already visible, it never re-derives visibility.
+function _prayerPassesFilter(p) {
+  const gr = _prayerFilter.grade, ge = _prayerFilter.gender;
+  if (!gr && !ge) return true;
+  if (p.studentId != null) {
+    if (gr && p.student.grade != gr) return false;
+    if (ge && p.student.gender !== ge) return false;
+    return true;
+  }
+  if (gr && Array.isArray(p.createdByGrades) && !p.createdByGrades.includes(gr)) return false;
+  if (ge && p.createdByGender && p.createdByGender !== ge) return false;
+  return true;
+}
+
 const ATRISK_PATHS = ['/students'];
 let _atRiskRevalidating = false;
 function _revalidateAtRisk() {
@@ -3405,11 +3441,25 @@ function _prayerSection(title, items) {
 }
 function _prayersHtml(list) {
   _prayerCache = list || [];
-  const open = _prayerCache.filter(p => p.status === 'open');
-  const answered = _prayerCache.filter(p => p.status === 'answered');
-  const archived = _prayerCache.filter(p => p.status === 'archived');
+  const u = S.user;
+  const inFilter = _prayerCache.filter(_prayerPassesFilter);
+  const open = inFilter.filter(p => p.status === 'open');
+  const answered = inFilter.filter(p => p.status === 'answered');
+  const archived = inFilter.filter(p => p.status === 'archived');
+
+  // Same chip set Health uses: grade role gets none (already single-scoped),
+  // quad gets its own 3 grades, director/admin get every configured grade +
+  // gender. See renderAtRisk() for the reference pattern.
+  const prGrades = u.role === 'grade' ? [] : u.role === 'quad' ? quadGrades(u.quad) : _gradeList();
+  const prGenders = ['director', 'admin'].includes(u.role) ? ['male', 'female'] : [];
+  const gChips = prGrades.map(g => `<button class="fc ${_prayerFilter.grade == g ? 'on' : ''}" onclick="setPrayerFilter('grade',${g})">${g}</button>`).join('');
+  const dChips = prGenders.map(g => `<button class="fc ${_prayerFilter.gender === g ? 'on' : ''}" onclick="setPrayerFilter('gender','${g}')">${g.charAt(0).toUpperCase() + g.slice(1)}</button>`).join('');
+  let filterHtml = '';
+  if (prGrades.length) filterHtml += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Grade:</span>${gChips}<button class="fc ${!_prayerFilter.grade ? 'on' : ''}" onclick="setPrayerFilter('grade',null)">All</button></div>`;
+  if (prGenders.length) filterHtml += `<div class="filter-row"><span style="font-size:11px;font-weight:700;color:var(--ink-mid)">Gender:</span>${dChips}<button class="fc ${!_prayerFilter.gender ? 'on' : ''}" onclick="setPrayerFilter('gender',null)">All</button></div>`;
+
   const body = _prayerCache.length
-    ? _prayerSection('Open', open) + _prayerSection('Answered', answered) +
+    ? filterHtml + _prayerSection('Open', open) + _prayerSection('Answered', answered) +
       (archived.length ? `<div class="drop" id="draw-arch">
         <div class="drop-head" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 0;border-top:1px solid var(--paper-dark)" onclick="_drop('draw-arch')">
           <span class="drop-chev">${icS('chevd')}</span>
@@ -7673,6 +7723,7 @@ async function boot() {
   }
   restoreConnectFilters();
   restoreArFilter();
+  restorePrayerFilter();
   // GET /settings is public (auth:false) so the login screen can be themed
   // pre-auth too — fetch it regardless of login state, not just once signed in.
   try { S.settings = await API.get('/settings'); } catch { S.settings = {}; }
