@@ -1687,6 +1687,7 @@ async function doLogout() {
   _msLeader = null; _trTab = 'svc';
   _arFilter = { grade: null, gender: null };
   _bdayFilter = { grade: null, gender: null };
+  _prayerFilter = { grade: null, gender: null };
   _previewStash = null;
   try { localStorage.removeItem('yap_preview_stash'); } catch (e) {}
   render();
